@@ -1,0 +1,7 @@
+Python is a high-level interpreted programming language.
+
+Python supports object-oriented programming.
+
+Python is widely used in AI, machine learning, automation and web development.
+
+Python uses indentation to define code blocks.

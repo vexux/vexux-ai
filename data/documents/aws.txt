@@ -1,0 +1,7 @@
+Amazon EC2 provides virtual machines in the cloud.
+
+Amazon S3 is an object storage service.
+
+AWS Lambda allows serverless computing.
+
+IAM manages permissions and authentication in AWS.

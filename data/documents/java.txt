@@ -1,0 +1,7 @@
+Java is a statically typed programming language.
+
+Java supports object-oriented programming.
+
+Polymorphism allows objects of different classes to be treated through the same interface.
+
+Spring Boot is one of the most popular Java frameworks.

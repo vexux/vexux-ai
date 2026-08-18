@@ -1,0 +1,10 @@
+venv/
+__pycache__/
+*.pyc
+
+models/checkpoints/
+models/base/
+
+experiments/checkpoints/
+
+.vscode/

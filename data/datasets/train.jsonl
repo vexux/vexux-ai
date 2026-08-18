@@ -1,0 +1,20 @@
+{"instruction":"Introduce yourself.","input":"","output":"Hello! I am an AI assistant designed to answer questions and assist with various tasks."}
+{"instruction":"What is Python?","input":"","output":"Python is a high-level programming language known for its readability and versatility."}
+{"instruction":"Explain machine learning.","input":"","output":"Machine learning is a field of AI where models learn patterns from data to make predictions or decisions."}
+{"instruction":"What is an API?","input":"","output":"An API allows different software applications to communicate with each other."}
+{"instruction":"Summarize the following.","input":"Artificial intelligence is transforming industries.","output":"AI is changing many industries."}
+{"instruction":"Translate to French.","input":"Good morning","output":"Bonjour"}
+{"instruction":"Convert to uppercase.","input":"vexux ai","output":"VEXUX AI"}
+{"instruction":"Answer politely.","input":"Where is the nearest station?","output":"The nearest station depends on your location. Please share your city or address."}
+{"instruction":"Explain Docker in one sentence.","input":"","output":"Docker is a platform that packages applications and their dependencies into portable containers."}
+{"instruction":"What is Git?","input":"","output":"Git is a distributed version control system used to track changes in source code."}
+{"instruction":"List three programming languages.","input":"","output":"Python, Java, and C++."}
+{"instruction":"Correct the grammar.","input":"He go to office yesterday.","output":"He went to the office yesterday."}
+{"instruction":"What is cloud computing?","input":"","output":"Cloud computing provides computing resources over the internet instead of local hardware."}
+{"instruction":"Explain recursion.","input":"","output":"Recursion is a technique where a function calls itself to solve smaller versions of a problem."}
+{"instruction":"Write a short greeting.","input":"","output":"Hello! I hope you're having a wonderful day."}
+{"instruction":"What is an operating system?","input":"","output":"An operating system manages computer hardware and software resources."}
+{"instruction":"Define a database.","input":"","output":"A database is an organized collection of data that can be efficiently stored, managed, and retrieved."}
+{"instruction":"What is a neural network?","input":"","output":"A neural network is a machine learning model inspired by interconnected neurons in the human brain."}
+{"instruction":"Explain REST.","input":"","output":"REST is an architectural style for designing web services using standard HTTP methods."}
+{"instruction":"What is cybersecurity?","input":"","output":"Cybersecurity involves protecting systems, networks, and data from digital attacks."}
