@@ -255,29 +255,31 @@ User: {query}
                     "tool"
                 )
 
-                expression = intent.entities.get(
-                    "math_expression"
-                )
-
-                if tool_name != "calculator":
+                if not tool_name:
 
                     raise ValueError(
-                        "Tool intent must specify calculator."
+                        "Tool intent must specify a tool name."
                     )
 
-                if not expression:
+                if tool_name == "calculator":
 
-                    raise ValueError(
-                        "Calculator intent is missing "
-                        "math_expression."
+                    expression = intent.entities.get(
+                        "math_expression"
                     )
 
-                if expression == "the mathematical expression":
+                    if not expression:
 
-                    raise ValueError(
-                        "Calculator intent contains a "
-                        "placeholder instead of an expression."
-                    )
+                        raise ValueError(
+                            "Calculator intent is missing "
+                            "math_expression."
+                        )
+
+                    if expression == "the mathematical expression":
+
+                        raise ValueError(
+                            "Calculator intent contains a "
+                            "placeholder instead of an expression."
+                        )
 
             return intent
 
@@ -394,7 +396,7 @@ User: {query}
                 "tool"
             )
 
-            if tool_name == "calculator":
+            if tool_name == "calculator" and "math_expression" in intent.entities:
 
                 arguments = {
                     "expression": intent.entities.get(
@@ -402,6 +404,10 @@ User: {query}
                         ""
                     )
                 }
+
+            elif "arguments" in intent.entities and isinstance(intent.entities["arguments"], dict):
+
+                arguments = intent.entities["arguments"]
 
             else:
 
@@ -639,29 +645,31 @@ Return ONLY valid JSON.
                     "tool"
                 )
 
-                expression = intent.entities.get(
-                    "math_expression"
-                )
-
-                if tool_name != "calculator":
+                if not tool_name:
 
                     raise ValueError(
-                        "Tool intent must specify calculator."
+                        "Tool intent must specify a tool name."
                     )
 
-                if not expression:
+                if tool_name == "calculator":
 
-                    raise ValueError(
-                        "Calculator intent is missing "
-                        "math_expression."
+                    expression = intent.entities.get(
+                        "math_expression"
                     )
 
-                if expression == "the mathematical expression":
+                    if not expression:
 
-                    raise ValueError(
-                        "Calculator intent contains "
-                        "a placeholder."
-                    )
+                        raise ValueError(
+                            "Calculator intent is missing "
+                            "math_expression."
+                        )
+
+                    if expression == "the mathematical expression":
+
+                        raise ValueError(
+                            "Calculator intent contains "
+                            "a placeholder."
+                        )
 
             return intent
 

@@ -12,7 +12,8 @@ This document outlines the mandatory rules, principles, and workflows that any A
    - **ExecutionManager**: Dispatches tasks to the appropriate capability implementations. It translates contract-compliant `Task` objects into execution calls and returns an `ExecutionResult`.
    - **Observer**: Inspects the raw `ExecutionResult` and produces a normalized `Observation` with status, output, errors, and summary.
    - **DecisionMaker**: Analyzes an `Observation` to determine the next control-flow transition (`DecisionType.DONE` vs. `DecisionType.REPLAN`).
-   - **ContextManager**: Owns the lifecycle and controlled mutation of execution state (`AgentContext`), recording active plans, current tasks, and chronological observation traces.
+   - **ResponseSynthesizer**: Synthesizes intermediate results and observations from multiple completed tasks into a unified, clean final user response using the `ModelGateway`.
+   - **ContextManager**: Owns the lifecycle and controlled mutation of execution state (`AgentContext`), recording active plans, current tasks, completed tasks, and chronological observation traces.
    - **ModelGateway**: Mediates all LLM/SLM generation behind the `ModelProviderContract`, isolating model access and provider-specific generation behavior from the rest of the system.
    - **ToolRegistry**: Manages tool registration and resolution, and provides access to registered tools conforming to the `ToolContract`.
    - **Capabilities (RAG, Tools, Models)**: Standalone implementations that conform to capability contracts and know nothing about the Agent or Planner.
@@ -71,12 +72,13 @@ When modifying or extending this codebase, any AI agent MUST:
 
 | Component | Location | Primary Contract / Interface | Responsibility |
 | :--- | :--- | :--- | :--- |
-| **Agent** | `agent/agent.py` | `AgentContext`, `AgentResponse` | Orchestrates the control loop (Plan -> Execute -> Observe -> Decide -> Replan). |
-| **Planner** | `agent/planner.py` | `Intent`, `Plan`, `Task` | Classifies query intent and builds executable plans using `ModelGateway`. |
+| **Agent** | `agent/agent.py` | `AgentContext`, `AgentResponse` | Orchestrates the control loop (Plan -> Execute -> Observe -> Decide -> Replan -> Synthesize). |
+| **Planner** | `agent/planner.py` | `Intent`, `Plan`, `Task` | Classifies query intent, builds multi-task plans, and generates scoped recovery plans on failure. |
 | **ExecutionManager** | `agent/execution_manager.py` | `Task`, `ExecutionResult` | Dispatches task execution to appropriate capability implementations. |
-| **Observer** | `agent/observer.py` | `ExecutionResult`, `Observation` | Evaluates task execution results and generates structured observations. |
+| **Observer** | `agent/observer.py` | `ExecutionResult`, `Observation` | Evaluates task execution results and generates structured observations linked to `task_id`. |
 | **DecisionMaker** | `agent/decision.py` | `Observation`, `DecisionType` | Determines whether the control loop should conclude or trigger replanning. |
-| **ContextManager** | `core/context/context_manager.py` | `AgentContext` | Creates and updates the stateful runtime context for an execution run. |
+| **ResponseSynthesizer** | `agent/response_synthesizer.py` | `ModelGateway` | Synthesizes intermediate results from multi-task observations into a coherent user response. |
+| **ContextManager** | `core/context/context_manager.py` | `AgentContext` | Creates and updates the stateful runtime context (active plans, completed tasks, observations). |
 | **ModelGateway** | `core/model_gateway/gateway.py` | `ModelProviderContract` | Provides a unified generation API wrapping model providers. |
 | **ToolRegistry** | `core/tools/registry.py` | `ToolContract` | Registers and resolves tools conforming to the tool contract. |
 | **Composition Root** | `core/composition.py` | `create_agent()` | Wires concrete dependencies together via dependency injection. |
@@ -108,4 +110,6 @@ Composition Root
        ├── ExecutionManager
        ├── Observer
        ├── DecisionMaker
+       ├── ResponseSynthesizer
        └── ContextManager
+```

@@ -5,6 +5,8 @@ from models.providers.qwen import QwenProvider
 
 from core.tools.registry import ToolRegistry
 from core.tools.calculator import CalculatorTool
+from core.tools.string_formatter import StringFormatterTool
+from core.tools.text_analyzer import TextAnalyzerTool
 from core.context.context_manager import ContextManager
 
 from agent.execution_manager import ExecutionManager
@@ -45,6 +47,14 @@ def create_agent():
 
     tool_registry.register(
         CalculatorTool()
+    )
+
+    tool_registry.register(
+        StringFormatterTool()
+    )
+
+    tool_registry.register(
+        TextAnalyzerTool()
     )
 
     # -------------------------

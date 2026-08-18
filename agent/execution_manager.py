@@ -106,20 +106,43 @@ class ExecutionManager:
             "tool"
         )
 
+        if not tool_name:
+
+            return ExecutionResult(
+                success=False,
+                error="Task input missing 'tool' field",
+            )
+
         arguments = task.input.get(
             "arguments",
             {}
         )
 
-        result = self.tool_registry.execute(
-            tool_name,
-            arguments,
-        )
+        try:
 
-        return ExecutionResult(
-            success=True,
-            output=result,
-        )
+            result = self.tool_registry.execute(
+                tool_name,
+                arguments,
+            )
+
+            return ExecutionResult(
+                success=True,
+                output=result,
+            )
+
+        except KeyError:
+
+            return ExecutionResult(
+                success=False,
+                error=f"Tool not found: {tool_name}",
+            )
+
+        except Exception as exc:
+
+            return ExecutionResult(
+                success=False,
+                error=str(exc),
+            )
 
     def _execute_model(
         self,

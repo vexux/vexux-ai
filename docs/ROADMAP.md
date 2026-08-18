@@ -11,12 +11,14 @@ This document outlines the current state, ongoing architectural refinements, and
 │      COMPLETED         │       IN PROGRESS       │        PLANNED         │
 ├────────────────────────┼─────────────────────────┼────────────────────────┤
 │ ✓ Core Agent Loop      │ ◐ Dynamic Tool Schemas  │ ○ Multi-Agent Systems  │
-│ ✓ Core Contracts       │ ◐ RAG-Gateway Decouple  │ ○ Multi-Step DAG Plans │
-│ ✓ Model Gateway & LoRA │ ◐ Formal Pytest Suite   │ ○ Memory Store Impl    │
-│ ✓ Tool Registry & Calc │ ◐ ExecutionManager Ref  │ ○ Tool Ecosystem       │
-│ ✓ Local RAG (FAISS)    │                         │ ○ Automated Evaluation │
-│ ✓ Intent Classifier    │                         │ ○ Async/Streaming Exec │
-│ ✓ QLoRA Fine-Tuning    │                         │ ○ vLLM / Ollama Providers│
+│ ✓ Multi-Task Planning  │ ◐ RAG-Gateway Decouple  │ ○ Multi-Step DAG Plans │
+│ ✓ Scoped Replanning    │ ◐ Formal Pytest Suite   │ ○ Memory Store Impl    │
+│ ✓ Response Synthesizer │ ◐ ExecutionManager Ref  │ ○ Tool Ecosystem       │
+│ ✓ Core Contracts       │                         │ ○ Automated Evaluation │
+│ ✓ Model Gateway & LoRA │                         │ ○ Async/Streaming Exec │
+│ ✓ Tool Registry & Calc │                         │ ○ vLLM / Ollama        │
+│ ✓ Local RAG (FAISS)    │                         │                        │
+│ ✓ QLoRA Fine-Tuning    │                         │                        │
 └────────────────────────┴─────────────────────────┴────────────────────────┘
 ```
 
@@ -25,10 +27,12 @@ This document outlines the current state, ongoing architectural refinements, and
 ## 2. Completed Capabilities
 
 ### 2.1 Core Agent Architecture
-- **Single-Agent Control Loop**: Sequential execution cycle (`Plan -> Execute -> Observe -> Decide -> Replan`) with configurable maximum retries (`agent/agent.py`).
+- **Multi-Task Agent Control Loop**: Sequential execution cycle (`Plan -> Execute -> Observe -> Decide -> Replan -> Synthesize`) with bounded retries (`agent/agent.py`).
+- **Scoped Failure Recovery & Replanning**: Isolates failures to the specific failed task, records `completed_tasks`, preserves unexecuted tasks, and prompts the SLM for targeted recovery plans without re-splitting or repeating already completed tasks (`agent/agent.py`, `agent/planner.py`).
+- **Response Synthesis**: Aggregates intermediate outputs from multi-task observations into a coherent, clean final answer (`agent/response_synthesizer.py`).
 - **Standardized Contracts**: Formal dataclass and protocol contracts in `core/contracts/` (`Task`, `Plan`, `AgentContext`, `ExecutionResult`, `Intent`, `Observation`, `AgentResponse`, `Capability`, `RetrievalContract`, `ToolContract`, `MemoryContract`, `ModelProviderContract`).
-- **Context Management**: Request-scoped runtime context tracking active plans, current task, and full observation histories (`core/context/context_manager.py`).
-- **Observer & Decision Maker**: Execution result normalization and binary `DONE`/`REPLAN` transition logic (`agent/observer.py`, `agent/decision.py`).
+- **Context Management**: Request-scoped runtime context tracking active plans, current task, completed tasks, and full observation histories (`core/context/context_manager.py`).
+- **Observer & Decision Maker**: Execution result normalization with `task_id` tracking and binary `DONE`/`REPLAN` transition logic (`agent/observer.py`, `agent/decision.py`).
 
 ### 2.2 Model Gateway & Inference
 - **Model Gateway**: Abstraction layer separating model consumers from underlying providers (`core/model_gateway/gateway.py`).
