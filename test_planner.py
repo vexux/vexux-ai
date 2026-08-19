@@ -1,6 +1,8 @@
 from core.model_gateway.gateway import ModelGateway
 from models.providers.qwen import QwenProvider
 from agent.planner import Planner
+from core.tools.registry import ToolRegistry
+from core.tools.calculator import CalculatorTool
 
 
 def main():
@@ -14,8 +16,12 @@ def main():
         provider=provider
     )
 
+    tool_registry = ToolRegistry()
+    tool_registry.register(CalculatorTool())
+
     planner = Planner(
-        model_gateway=gateway
+        model_gateway=gateway,
+        tool_registry=tool_registry,
     )
 
     intent = planner.understand_intent(

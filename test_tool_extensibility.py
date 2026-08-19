@@ -244,7 +244,10 @@ def test_agent_executes_new_tools_without_agent_modifications():
         tool_registry=registry,
         model_gateway=gateway,
     )
-    planner = Planner(model_gateway=gateway)
+    planner = Planner(
+        model_gateway=gateway,
+        tool_registry=registry,
+    )
     observer = Observer()
     decision_maker = DecisionMaker()
     context_manager = ContextManager()
@@ -267,6 +270,32 @@ def test_agent_executes_new_tools_without_agent_modifications():
     assert response.trace[0].success is True
     assert response.trace[0].output == "HELLO"
     assert response.trace[0].task_id == "task-1"
+
+
+def test_planner_prompt_uses_registered_tool_descriptions():
+    gateway = MockModelGateway()
+    gateway.set_response_for(
+        "User: Echo this message",
+        '{"intent": "tool", "confidence": 1.0, "entities": '
+        '{"tool": "custom_echo", "arguments": '
+        '{"message": "hello"}}}',
+    )
+
+    registry = ToolRegistry()
+    registry.register(CustomThirdPartyEchoTool())
+
+    planner = Planner(
+        model_gateway=gateway,
+        tool_registry=registry,
+    )
+
+    intent = planner.understand_intent(
+        "Echo this message"
+    )
+
+    assert intent.name == "tool"
+    assert "custom_echo" in gateway.recorded_prompts[0]
+    assert "Echoes the provided message with prefix." in gateway.recorded_prompts[0]
 
 
 # ==============================================================================

@@ -78,7 +78,10 @@ def build_test_agent(mock_gateway=None, mock_retrieval=None):
         model_gateway=mock_gateway,
     )
 
-    planner = Planner(model_gateway=mock_gateway)
+    planner = Planner(
+        model_gateway=mock_gateway,
+        tool_registry=tool_registry,
+    )
     observer = Observer()
     decision_maker = DecisionMaker()
     context_manager = ContextManager()
@@ -206,7 +209,10 @@ def test_replanning_receives_failed_task():
             return super().replan(query, observation, failed_task)
 
     agent, _, _, _, _ = build_test_agent(mock_gateway=gateway)
-    agent.planner = SpyPlanner(model_gateway=gateway)
+    agent.planner = SpyPlanner(
+        model_gateway=gateway,
+        tool_registry=agent.execution_manager.tool_registry,
+    )
 
     agent.run("What is EC2? and calculate abc")
 

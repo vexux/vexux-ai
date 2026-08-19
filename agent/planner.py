@@ -5,13 +5,28 @@ from core.contracts.execution import (
     Plan,
     Task,
 )
+from core.tools.registry import ToolRegistry
 
 
 class Planner:
 
-    def __init__(self, model_gateway):
+    def __init__(
+        self,
+        model_gateway,
+        tool_registry: ToolRegistry,
+    ):
 
         self.model_gateway = model_gateway
+
+        self.tool_registry = tool_registry
+
+    def _tool_descriptions(self) -> str:
+
+        return "\n".join(
+            f"- {tool.name}: {tool.description}"
+            for tool_name in self.tool_registry.list_tools()
+            for tool in [self.tool_registry.get(tool_name)]
+        ) or "- No tools are registered."
 
     def understand_intent(
         self,
@@ -74,14 +89,15 @@ of these intents:
    opinions, or requests that do not require retrieval
    or a tool.
 
+Available tools:
+{self._tool_descriptions()}
+
 IMPORTANT RULES:
 
 - "What is EC2?" -> retrieval
 - "Explain what Python is." -> retrieval
 - "What is AWS Lambda?" -> retrieval
-- "Calculate 24 * 7" -> tool
-- "Calculate 100 / 4" -> tool
-- "What is 25 + 30?" -> tool because it is an arithmetic operation.
+- Requests to perform a registered operation -> tool
 - "What is EC2?" -> retrieval because EC2 is a knowledge topic.
 - Never classify a normal knowledge question as tool.
 
@@ -91,11 +107,12 @@ For a retrieval intent, entities should contain:
     "topic": "the main topic"
 }}
 
-For a tool intent, entities MUST contain:
+For a tool intent, entities MUST contain the selected tool name and
+the arguments required by that tool:
 
 {{
-    "tool": "calculator",
-    "math_expression": "the mathematical expression"
+    "tool": "<registered tool name>",
+    "arguments": {{}}
 }}
 
 For a general intent, entities should be empty.
@@ -129,15 +146,15 @@ Output:
     }}
 }}
 
-User: Calculate 24 * 7
+User: Perform the registered tool operation
 
 Output:
 {{
     "intent": "tool",
     "confidence": 1.0,
     "entities": {{
-        "tool": "calculator",
-        "math_expression": "24 * 7"
+        "tool": "<registered tool name>",
+        "arguments": {{}}
     }}
 }}
 
@@ -261,26 +278,6 @@ User: {query}
                         "Tool intent must specify a tool name."
                     )
 
-                if tool_name == "calculator":
-
-                    expression = intent.entities.get(
-                        "math_expression"
-                    )
-
-                    if not expression:
-
-                        raise ValueError(
-                            "Calculator intent is missing "
-                            "math_expression."
-                        )
-
-                    if expression == "the mathematical expression":
-
-                        raise ValueError(
-                            "Calculator intent contains a "
-                            "placeholder instead of an expression."
-                        )
-
             return intent
 
         except (
@@ -363,49 +360,35 @@ User: {query}
         task_id: str = "task-1",
     ) -> Task:
 
-        # --------------------------------
-        # Retrieval
-        # --------------------------------
-
         if intent.name == "retrieval":
 
             return Task(
                 id=task_id,
-
                 description=(
                     "Retrieve relevant information "
                     "from the knowledge base."
                 ),
-
-                input={
-                    "query": query
-                },
-
-                metadata={
-                    "capability": "retrieval"
-                },
+                input={"query": query},
+                metadata={"capability": "retrieval"},
             )
-
-        # --------------------------------
-        # Tool
-        # --------------------------------
 
         if intent.name == "tool":
 
-            tool_name = intent.entities.get(
-                "tool"
-            )
+            tool_name = intent.entities.get("tool")
 
             if tool_name == "calculator" and "math_expression" in intent.entities:
 
                 arguments = {
                     "expression": intent.entities.get(
                         "math_expression",
-                        ""
+                        "",
                     )
                 }
 
-            elif "arguments" in intent.entities and isinstance(intent.entities["arguments"], dict):
+            elif (
+                "arguments" in intent.entities
+                and isinstance(intent.entities["arguments"], dict)
+            ):
 
                 arguments = intent.entities["arguments"]
 
@@ -419,39 +402,19 @@ User: {query}
 
             return Task(
                 id=task_id,
-
-                description=(
-                    f"Execute the {tool_name} tool."
-                ),
-
+                description=f"Execute the {tool_name} tool.",
                 input={
                     "tool": tool_name,
                     "arguments": arguments,
                 },
-
-                metadata={
-                    "capability": "tool"
-                },
+                metadata={"capability": "tool"},
             )
-
-        # --------------------------------
-        # General
-        # --------------------------------
 
         return Task(
             id=task_id,
-
-            description=(
-                "Generate a direct response."
-            ),
-
-            input={
-                "query": query
-            },
-
-            metadata={
-                "capability": "model"
-            },
+            description="Generate a direct response.",
+            input={"query": query},
+            metadata={"capability": "model"},
         )
 
 
@@ -462,12 +425,6 @@ User: {query}
         failed_task,
     ) -> Plan:
 
-        print("\n[Failed task]")
-        print("Description:", failed_task.description)
-        print("Input:", failed_task.input)
-        print("Metadata:", failed_task.metadata)
-        print("[End failed task]\n")
-
         prompt = f"""
 You are replanning an agent task.
 
@@ -477,34 +434,34 @@ Original user request:
 Failed task ID:
 {failed_task.id}
 
-Failed task description:
-{failed_task.description}
+    Failed task description:
+    {failed_task.description}
 
-Failed task input:
-{failed_task.input}
+    Failed task input:
+    {failed_task.input}
 
-Failed task metadata:
-{failed_task.metadata}
+    Failed task metadata:
+    {failed_task.metadata}
 
-Previous execution result:
+    Previous execution result:
 
-Success:
-{observation.success}
+    Success:
+    {observation.success}
 
-Summary:
-{observation.summary}
+    Summary:
+    {observation.summary}
 
-Error:
-{observation.error}
+    Error:
+    {observation.error}
 
-The previous task did not successfully complete.
+    The previous task did not successfully complete.
 
-Create a new single recovery task that addresses the failed task.
+    Available tools:
+    {self._tool_descriptions()}
 
-Do NOT recreate tasks that have already completed successfully.
+    Create a new single recovery task that addresses the failed task.
 
-Focus on recovering from the failed task using the previous
-execution result and error.
+    Do NOT recreate tasks that have already completed successfully.
 
 The "intent" field MUST be exactly one of:
 
@@ -518,11 +475,12 @@ Do NOT add markdown.
 
 The JSON must contain:
 
-For a calculator task, the entities MUST contain:
+For a tool task, the entities MUST contain the selected tool name
+and the arguments required by that tool:
 
 {{
-    "tool": "calculator",
-    "math_expression": "the actual expression"
+    "tool": "<registered tool name>",
+    "arguments": {{}}
 }}
 
 For a retrieval task:
@@ -533,25 +491,7 @@ For a retrieval task:
 
 For a general task:
 
-{{
-
-}}
-
-Example:
-
-Failed task input:
-{{"tool": "calculator", "arguments": {{"expression": "abc"}}}}
-
-Previous error:
-Invalid calculation
-
-A valid response is:
-
-{{
-    "intent": "general",
-    "confidence": 1.0,
-    "entities": {{}}
-}}
+{{}}
 
 Return ONLY valid JSON.
 """
@@ -565,7 +505,10 @@ Return ONLY valid JSON.
             response
         )
 
-        recovery_query = failed_task.input.get("query", query)
+        recovery_query = failed_task.input.get(
+            "query",
+            query,
+        )
 
         recovery_task = self._create_task_from_intent(
             query=recovery_query,
@@ -573,9 +516,7 @@ Return ONLY valid JSON.
             task_id=failed_task.id,
         )
 
-        return Plan(
-            tasks=[recovery_task]
-        )
+        return Plan(tasks=[recovery_task])
 
 
     def _parse_intent(
@@ -650,26 +591,6 @@ Return ONLY valid JSON.
                     raise ValueError(
                         "Tool intent must specify a tool name."
                     )
-
-                if tool_name == "calculator":
-
-                    expression = intent.entities.get(
-                        "math_expression"
-                    )
-
-                    if not expression:
-
-                        raise ValueError(
-                            "Calculator intent is missing "
-                            "math_expression."
-                        )
-
-                    if expression == "the mathematical expression":
-
-                        raise ValueError(
-                            "Calculator intent contains "
-                            "a placeholder."
-                        )
 
             return intent
 
