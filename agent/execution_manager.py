@@ -80,10 +80,52 @@ class ExecutionManager:
             )
 
         query = task.input["query"]
+        top_k = task.input.get("top_k")
 
-        result = self.retrieval.ask(
-            query
-        )
+        if top_k is not None and (
+            not isinstance(top_k, int)
+            or isinstance(top_k, bool)
+            or top_k <= 0
+        ):
+
+            return ExecutionResult(
+                success=False,
+                error="Retrieval top_k must be a positive integer",
+            )
+
+        if hasattr(self.retrieval, "retrieve"):
+
+            retrieved = self.retrieval.retrieve(
+                query,
+                k=top_k,
+            ) if top_k is not None else self.retrieval.retrieve(query)
+
+            if not retrieved:
+
+                return ExecutionResult(
+                    success=False,
+                    output={
+                        "query": query,
+                        "results": [],
+                        "context_found": False,
+                    },
+                    error="No sufficiently relevant retrieval context found",
+                    metadata={"capability": "retrieval"},
+                )
+
+            result = {
+                "query": query,
+                "results": retrieved,
+                "context_found": True,
+            }
+
+            return ExecutionResult(
+                success=True,
+                output=result,
+                metadata={"capability": "retrieval"},
+            )
+
+        result = self.retrieval.ask(query)
 
         return ExecutionResult(
             success=True,

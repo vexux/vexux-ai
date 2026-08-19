@@ -10,7 +10,14 @@ from training.inference import InferencePipeline
 
 class RAGPipeline:
 
-    def __init__(self):
+    def __init__(
+        self,
+        top_k=3,
+        relevance_threshold=None,
+    ):
+
+        self.top_k = top_k
+        self.relevance_threshold = relevance_threshold
 
         self.loader = DocumentLoader(
             "data/documents"
@@ -54,9 +61,35 @@ class RAGPipeline:
 
         self.inference = InferencePipeline()
 
+    def retrieve(
+        self,
+        query,
+        k=None,
+    ):
+
+        if k is None:
+            k = self.top_k
+
+        if not isinstance(k, int) or isinstance(k, bool) or k <= 0:
+            raise ValueError("Retrieval top_k must be a positive integer.")
+
+        results = self.retriever.retrieve(
+            query,
+            k=k,
+        )
+
+        if self.relevance_threshold is None:
+            return results
+
+        return [
+            result
+            for result in results
+            if result["score"] >= self.relevance_threshold
+        ]
+
     def ask(self, question):
 
-        retrieved = self.retriever.retrieve(
+        retrieved = self.retrieve(
             question
         )
 
