@@ -56,6 +56,10 @@ class AgentContext:
         default_factory=list
     )
 
+    conversation_history: list[Dict[str, Any]] = field(
+        default_factory=list
+    )
+
 
 @dataclass
 class ExecutionResult:

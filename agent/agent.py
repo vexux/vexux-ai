@@ -43,10 +43,12 @@ class Agent:
     def run(
         self,
         query: str,
+        session_id: str | None = None,
     ):
 
         context = self.context_manager.create(
-            request_id=str(uuid.uuid4())
+            request_id=str(uuid.uuid4()),
+            session_id=session_id,
         )
 
         retry_count = 0
@@ -58,16 +60,25 @@ class Agent:
                 if retry_count == 0:
 
                     plan = self.planner.create_plan(
-                        query
+                        query,
+                        conversation_context=context.conversation_history,
                     )
 
                 else:
 
-                    recovery_plan = self.planner.replan(
-                        query,
-                        context.observations[-1],
-                        context.current_task,
-                    )
+                    if context.session_id is None:
+                        recovery_plan = self.planner.replan(
+                            query,
+                            context.observations[-1],
+                            context.current_task,
+                        )
+                    else:
+                        recovery_plan = self.planner.replan(
+                            query,
+                            context.observations[-1],
+                            context.current_task,
+                            conversation_context=context.conversation_history,
+                        )
 
                     # Collect any remaining tasks from the previous plan that have not run yet
                     remaining_tasks = []
@@ -145,6 +156,13 @@ class Agent:
                 final_output = self.response_synthesizer.synthesize(
                     query,
                     context.observations,
+                    conversation_context=context.conversation_history,
+                )
+
+                self.context_manager.add_conversation_turn(
+                    context,
+                    query,
+                    final_output,
                 )
 
                 return AgentResponse(

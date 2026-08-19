@@ -10,7 +10,10 @@ class ResponseSynthesizer:
         self,
         query: str,
         observations: list,
+        conversation_context=None,
     ) -> str:
+
+        conversation_context = conversation_context or []
 
         successful_outputs = [
             observation.output
@@ -26,7 +29,7 @@ class ResponseSynthesizer:
 
         # No need to call the model when there is
         # only one result.
-        if len(successful_outputs) == 1:
+        if len(successful_outputs) == 1 and not conversation_context:
             return str(
                 successful_outputs[0]
             )
@@ -42,6 +45,9 @@ You are producing the final response for an AI agent.
 
 Original user request:
 {query}
+
+Previous conversation context:
+{conversation_context}
 
 The agent executed multiple tasks and produced these results:
 

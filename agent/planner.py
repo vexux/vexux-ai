@@ -297,7 +297,14 @@ User: {query}
         query: str,
         intent: Intent = None,
         observation=None,
+        conversation_context=None,
     ) -> Plan:
+
+        conversation_context = conversation_context or []
+        previous_conversation = "\n".join(
+            f"User: {turn['query']}\nAssistant: {turn['response']}"
+            for turn in conversation_context
+        ) or "No previous conversation context."
 
         prompt = f"""
 You are a planning component for an AI agent.
@@ -307,6 +314,9 @@ each independent operation. Do not create dependencies between tasks.
 
 User request:
 {query}
+
+Previous conversation context:
+{previous_conversation}
 
 Available tools:
 {self._tool_descriptions()}
@@ -441,13 +451,19 @@ Task rules:
         query: str,
         observation,
         failed_task,
+        conversation_context=None,
     ) -> Plan:
+
+        conversation_context = conversation_context or []
 
         prompt = f"""
 You are replanning an agent task.
 
 Original user request:
 {query}
+
+Previous conversation context:
+{conversation_context}
 
 Failed task ID:
 {failed_task.id}
