@@ -1,3 +1,5 @@
+import logging
+import time
 import uuid
 
 from agent.execution_manager import (
@@ -44,14 +46,17 @@ class Agent:
         self,
         query: str,
         session_id: str | None = None,
+        user_id: str | None = None,
     ):
 
         context = self.context_manager.create(
             request_id=str(uuid.uuid4()),
             session_id=session_id,
+            user_id=user_id,
         )
 
         retry_count = 0
+        logger = logging.getLogger(__name__)
 
         while retry_count <= self.max_retries:
 
@@ -101,6 +106,11 @@ class Agent:
                     output=None,
                     error=f"Planning failed: {exc}",
                     trace=context.observations,
+                    metadata={
+                        "request_id": context.request_id,
+                        "session_id": context.session_id,
+                        "user_id": context.user_id,
+                    },
                 )
 
             self.context_manager.set_plan(
@@ -117,9 +127,24 @@ class Agent:
                     task,
                 )
 
+                started_at = time.perf_counter()
                 result = self.execution_manager.execute(
                     task,
                     context,
+                )
+                duration_ms = (time.perf_counter() - started_at) * 1000
+
+                logger.info(
+                    "agent.task.execution",
+                    extra={
+                        "request_id": context.request_id,
+                        "session_id": context.session_id,
+                        "user_id": context.user_id,
+                        "task_id": task.id,
+                        "capability": task.metadata.get("capability"),
+                        "execution_success": result.success,
+                        "execution_duration_ms": round(duration_ms, 3),
+                    },
                 )
 
                 observation = self.observer.observe(
@@ -170,6 +195,10 @@ class Agent:
                     output=final_output,
                     error=None,
                     trace=context.observations,
+                    metadata={
+                        "request_id": context.request_id,
+                        "session_id": context.session_id,
+                    },
                 )
 
             retry_count += 1
@@ -179,4 +208,9 @@ class Agent:
             output=None,
             error="Agent could not complete the request.",
             trace=context.observations,
+            metadata={
+                "request_id": context.request_id,
+                "session_id": context.session_id,
+                "user_id": context.user_id,
+            },
         )

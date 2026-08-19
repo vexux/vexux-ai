@@ -1,5 +1,5 @@
-from dataclasses import dataclass
-from typing import Any, Optional
+from dataclasses import dataclass, field
+from typing import Any, Dict, Optional
 
 
 @dataclass
@@ -12,3 +12,7 @@ class AgentResponse:
     error: Optional[str] = None
 
     trace: Optional[list] = None
+
+    metadata: Dict[str, Any] = field(
+        default_factory=dict
+    )

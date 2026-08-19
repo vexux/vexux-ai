@@ -40,6 +40,7 @@ class ContextManager:
         self,
         request_id: str,
         session_id: str | None = None,
+        user_id: str | None = None,
     ) -> AgentContext:
 
         history = []
@@ -56,6 +57,7 @@ class ContextManager:
         return AgentContext(
             request_id=request_id,
             session_id=session_id,
+            user_id=user_id,
             conversation_history=history,
         )
 

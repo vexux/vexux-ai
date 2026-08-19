@@ -13,3 +13,4 @@ bitsandbytes==0.47.0
 sentencepiece==0.2.0
 huggingface_hub==0.34.4
 pyyaml==6.0.2
+fastapi==0.116.1
