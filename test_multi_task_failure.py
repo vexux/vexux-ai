@@ -51,6 +51,40 @@ class MockRetrieval:
         return f"Retrieved knowledge for: {query}"
 
 
+def plan_response(tasks):
+    return json.dumps({"tasks": tasks})
+
+
+def retrieval_task(task_id, query):
+    return {
+        "id": task_id,
+        "description": f"Retrieve {query}",
+        "capability": "retrieval",
+        "input": {"query": query},
+    }
+
+
+def calculator_task(task_id, expression):
+    return {
+        "id": task_id,
+        "description": f"Calculate {expression}",
+        "capability": "tool",
+        "input": {
+            "tool": "calculator",
+            "arguments": {"expression": expression},
+        },
+    }
+
+
+def model_task(task_id, query):
+    return {
+        "id": task_id,
+        "description": f"Answer {query}",
+        "capability": "model",
+        "input": {"query": query},
+    }
+
+
 class CountingExecutionManager(ExecutionManager):
     """ExecutionManager that counts task executions by task ID."""
 
@@ -105,7 +139,10 @@ def build_test_agent(mock_gateway=None, mock_retrieval=None):
 def test_single_successful_task():
     gateway = MockModelGateway()
     # Planner intent classification for EC2
-    gateway.set_response_for("What is EC2?", '{"intent": "retrieval", "confidence": 1.0, "entities": {"topic": "EC2"}}')
+    gateway.set_response_for(
+        "User request:\nWhat is EC2?",
+        plan_response([retrieval_task("task-1", "What is EC2?")]),
+    )
 
     agent, exec_mgr, _, _, _ = build_test_agent(mock_gateway=gateway)
     response = agent.run("What is EC2?")
@@ -124,7 +161,13 @@ def test_single_successful_task():
 # ==============================================================================
 def test_multiple_successful_tasks():
     gateway = MockModelGateway()
-    gateway.set_response_for("What is EC2?", '{"intent": "retrieval", "confidence": 1.0, "entities": {"topic": "EC2"}}')
+    gateway.set_response_for(
+        "User request:\nWhat is EC2? and calculate 24 * 7",
+        plan_response([
+            retrieval_task("task-1", "What is EC2?"),
+            calculator_task("task-2", "24 * 7"),
+        ]),
+    )
     gateway.set_response_for("The agent executed multiple tasks", "EC2 provides resizable compute capacity and 24 * 7 = 168.")
 
     agent, exec_mgr, _, _, _ = build_test_agent(mock_gateway=gateway)
@@ -146,12 +189,27 @@ def test_multiple_successful_tasks():
 # ==============================================================================
 def test_first_task_fails_and_recovers():
     gateway = MockModelGateway()
+    gateway.set_response_for(
+        "User request:\nfail_query and calculate 24 * 7",
+        plan_response([
+            retrieval_task("task-1", "fail_query"),
+            calculator_task("task-2", "24 * 7"),
+        ]),
+    )
     # Model capability execution for direct generation
     gateway.set_response_for("fail_query", "Recovered general answer.")
     # Replan for task-1: switch to general knowledge response
-    gateway.set_response_for("Failed task ID:\ntask-1", '{"intent": "general", "confidence": 1.0, "entities": {}}')
-    # First intent classification for fail_query
-    gateway.set_response_for("User: fail_query", '{"intent": "retrieval", "confidence": 1.0, "entities": {"topic": "fail_query"}}')
+    gateway.set_response_for(
+        "Failed task ID:\ntask-1",
+        plan_response([model_task("task-1", "fail_query")]),
+    )
+    gateway.set_response_for(
+        "User request:\nfail_query and calculate 24 * 7",
+        plan_response([
+            retrieval_task("task-1", "fail_query"),
+            calculator_task("task-2", "24 * 7"),
+        ]),
+    )
     # Synthesis response
     gateway.set_response_for("The agent executed multiple tasks", "Final answer: Recovered general answer and 168.")
 
@@ -175,9 +233,17 @@ def test_first_task_fails_and_recovers():
 # ==============================================================================
 def test_second_task_fails_after_first_succeeds():
     gateway = MockModelGateway()
-    gateway.set_response_for("What is EC2?", '{"intent": "retrieval", "confidence": 1.0, "entities": {"topic": "EC2"}}')
-    # Replan for task-2 recovery: switch from invalid calculator expression to general answer
-    gateway.set_response_for("Failed task ID:\ntask-2", '{"intent": "general", "confidence": 1.0, "entities": {}}')
+    gateway.set_response_for(
+        "User request:\nWhat is EC2? and calculate abc",
+        plan_response([
+            retrieval_task("task-1", "What is EC2?"),
+            calculator_task("task-2", "abc"),
+        ]),
+    )
+    gateway.set_response_for(
+        "Failed task ID:\ntask-2",
+        plan_response([model_task("task-2", "calculate abc")]),
+    )
     gateway.set_response_for("The agent executed multiple tasks", "EC2 provides compute capacity. 'abc' is not a valid arithmetic expression.")
 
     agent, exec_mgr, _, _, _ = build_test_agent(mock_gateway=gateway)
@@ -199,7 +265,13 @@ def test_second_task_fails_after_first_succeeds():
 # ==============================================================================
 def test_replanning_receives_failed_task():
     gateway = MockModelGateway()
-    gateway.set_response_for("What is EC2?", '{"intent": "retrieval", "confidence": 1.0, "entities": {"topic": "EC2"}}')
+    gateway.set_response_for(
+        "User request:\nWhat is EC2? and calculate abc",
+        plan_response([
+            retrieval_task("task-1", "What is EC2?"),
+            calculator_task("task-2", "abc"),
+        ]),
+    )
 
     received_failed_tasks = []
 
@@ -227,8 +299,17 @@ def test_replanning_receives_failed_task():
 # ==============================================================================
 def test_successful_tasks_are_not_unnecessarily_repeated():
     gateway = MockModelGateway()
-    gateway.set_response_for("What is EC2?", '{"intent": "retrieval", "confidence": 1.0, "entities": {"topic": "EC2"}}')
-    gateway.set_response_for("Failed task ID:\ntask-2", '{"intent": "general", "confidence": 1.0, "entities": {}}')
+    gateway.set_response_for(
+        "User request:\nWhat is EC2? and calculate abc",
+        plan_response([
+            retrieval_task("task-1", "What is EC2?"),
+            calculator_task("task-2", "abc"),
+        ]),
+    )
+    gateway.set_response_for(
+        "Failed task ID:\ntask-2",
+        plan_response([model_task("task-2", "calculate abc")]),
+    )
 
     agent, exec_mgr, _, _, _ = build_test_agent(mock_gateway=gateway)
     response = agent.run("What is EC2? and calculate abc")
@@ -245,9 +326,17 @@ def test_successful_tasks_are_not_unnecessarily_repeated():
 # ==============================================================================
 def test_replanning_stops_after_retry_limit():
     gateway = MockModelGateway()
-    gateway.set_response_for("What is EC2?", '{"intent": "retrieval", "confidence": 1.0, "entities": {"topic": "EC2"}}')
-    # Replan keeps returning an invalid tool expression, forcing failure across retries
-    gateway.set_response_for("Failed task ID:\ntask-2", '{"intent": "tool", "confidence": 1.0, "entities": {"tool": "calculator", "math_expression": "bad_math"}}')
+    gateway.set_response_for(
+        "User request:\nWhat is EC2? and calculate abc",
+        plan_response([
+            retrieval_task("task-1", "What is EC2?"),
+            calculator_task("task-2", "abc"),
+        ]),
+    )
+    gateway.set_response_for(
+        "Failed task ID:\ntask-2",
+        plan_response([calculator_task("task-2", "bad_math")]),
+    )
 
     agent, exec_mgr, _, _, _ = build_test_agent(mock_gateway=gateway)
     response = agent.run("What is EC2? and calculate abc")
@@ -267,8 +356,17 @@ def test_replanning_stops_after_retry_limit():
 # ==============================================================================
 def test_final_response_preserves_successful_results():
     gateway = MockModelGateway()
-    gateway.set_response_for("What is EC2?", '{"intent": "retrieval", "confidence": 1.0, "entities": {"topic": "EC2"}}')
-    gateway.set_response_for("Failed task ID:\ntask-2", '{"intent": "general", "confidence": 1.0, "entities": {}}')
+    gateway.set_response_for(
+        "User request:\nWhat is EC2? and calculate abc",
+        plan_response([
+            retrieval_task("task-1", "What is EC2?"),
+            calculator_task("task-2", "abc"),
+        ]),
+    )
+    gateway.set_response_for(
+        "Failed task ID:\ntask-2",
+        plan_response([model_task("task-2", "calculate abc")]),
+    )
     gateway.set_response_for("The agent executed multiple tasks", "Amazon EC2 provides virtual servers. Note: 'abc' cannot be calculated.")
 
     agent, _, _, _, _ = build_test_agent(mock_gateway=gateway)

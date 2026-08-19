@@ -1,0 +1,188 @@
+import json
+
+import pytest
+
+from agent.agent import Agent
+from agent.decision import DecisionMaker
+from agent.execution_manager import ExecutionManager
+from agent.observer import Observer
+from agent.planner import Planner
+from agent.response_synthesizer import ResponseSynthesizer
+from core.context.context_manager import ContextManager
+from core.contracts.execution import AgentContext, Task
+from core.tools.calculator import CalculatorTool
+from core.tools.registry import ToolRegistry
+
+
+class MockGateway:
+    def __init__(self, response):
+        self.response = response
+        self.prompts = []
+
+    def generate(self, prompt, **kwargs):
+        self.prompts.append(prompt)
+        return self.response
+
+
+def registry():
+    tools = ToolRegistry()
+    tools.register(CalculatorTool())
+    return tools
+
+
+def planner_for(response):
+    tools = registry()
+    return Planner(MockGateway(response), tools)
+
+
+def plan(*tasks):
+    return json.dumps({"tasks": list(tasks)})
+
+
+def task(task_id, capability, task_input):
+    return {
+        "id": task_id,
+        "description": f"Execute {task_id}",
+        "capability": capability,
+        "input": task_input,
+    }
+
+
+def test_single_retrieval_task():
+    result = planner_for(
+        plan(task("task-1", "retrieval", {"query": "EC2"}))
+    ).create_plan("What is EC2?")
+
+    assert len(result.tasks) == 1
+    assert result.tasks[0].metadata["capability"] == "retrieval"
+    assert result.tasks[0].input == {"query": "EC2"}
+
+
+def test_single_tool_task():
+    result = planner_for(
+        plan(task("task-1", "tool", {
+            "tool": "calculator",
+            "arguments": {"expression": "24 * 7"},
+        }))
+    ).create_plan("Calculate 24 * 7")
+
+    assert result.tasks[0].metadata["capability"] == "tool"
+    assert result.tasks[0].input["tool"] == "calculator"
+    assert result.tasks[0].input["arguments"] == {"expression": "24 * 7"}
+
+
+def test_single_general_task():
+    result = planner_for(
+        plan(task("task-1", "model", {"query": "Hello"}))
+    ).create_plan("Hello")
+
+    assert result.tasks[0].metadata["capability"] == "model"
+    assert result.tasks[0].input == {"query": "Hello"}
+
+
+def test_retrieval_and_tool_multi_task():
+    result = planner_for(
+        plan(
+            task("task-1", "retrieval", {"query": "EC2"}),
+            task("task-2", "tool", {
+                "tool": "calculator",
+                "arguments": {"expression": "24 * 7"},
+            }),
+        )
+    ).create_plan("What is EC2 and calculate 24 * 7")
+
+    assert [item.metadata["capability"] for item in result.tasks] == [
+        "retrieval",
+        "tool",
+    ]
+
+
+def test_multiple_tool_tasks():
+    result = planner_for(
+        plan(
+            task("task-1", "tool", {
+                "tool": "calculator",
+                "arguments": {"expression": "2 + 2"},
+            }),
+            task("task-2", "tool", {
+                "tool": "calculator",
+                "arguments": {"expression": "3 * 3"},
+            }),
+        )
+    ).create_plan("Calculate 2 + 2 and calculate 3 * 3")
+
+    assert len(result.tasks) == 2
+    assert all(item.metadata["capability"] == "tool" for item in result.tasks)
+
+
+def test_multiple_retrieval_tasks():
+    result = planner_for(
+        plan(
+            task("task-1", "retrieval", {"query": "EC2"}),
+            task("task-2", "retrieval", {"query": "Python"}),
+        )
+    ).create_plan("What is EC2 and what is Python?")
+
+    assert len(result.tasks) == 2
+    assert [item.input["query"] for item in result.tasks] == ["EC2", "Python"]
+
+
+def test_invalid_planner_json_is_rejected():
+    with pytest.raises(ValueError, match="Invalid structured plan response"):
+        planner_for("not json").create_plan("Hello")
+
+
+def test_missing_required_task_fields_are_rejected():
+    response = plan({
+        "id": "task-1",
+        "description": "Missing capability",
+        "input": {},
+    })
+
+    with pytest.raises(ValueError, match="unknown capability"):
+        planner_for(response).create_plan("Hello")
+
+
+def test_unknown_capability_is_rejected():
+    response = plan(task("task-1", "database", {"query": "x"}))
+
+    with pytest.raises(ValueError, match="unknown capability"):
+        planner_for(response).create_plan("Query the database")
+
+
+def test_execution_manager_unknown_capability_is_controlled():
+    manager = ExecutionManager(tool_registry=registry())
+
+    result = manager.execute(
+        Task(
+            id="task-1",
+            description="Unsupported operation",
+            input={},
+            metadata={"capability": "database"},
+        ),
+        AgentContext(request_id="test-request"),
+    )
+
+    assert result.success is False
+    assert result.error == "Unknown capability: database"
+
+
+def test_invalid_plan_returns_controlled_agent_failure():
+    tools = registry()
+    gateway = MockGateway("not json")
+    planner = Planner(gateway, tools)
+    agent = Agent(
+        execution_manager=ExecutionManager(tool_registry=tools),
+        planner=planner,
+        observer=Observer(),
+        decision_maker=DecisionMaker(),
+        context_manager=ContextManager(),
+        response_synthesizer=ResponseSynthesizer(gateway),
+    )
+
+    response = agent.run("Make a plan")
+
+    assert response.success is False
+    assert response.output is None
+    assert response.error.startswith("Planning failed:")
+    assert response.trace == []

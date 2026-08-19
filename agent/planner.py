@@ -295,127 +295,145 @@ User: {query}
     def create_plan(
         self,
         query: str,
-        intent: Intent,
+        intent: Intent = None,
         observation=None,
     ) -> Plan:
 
-        if observation is not None:
+        prompt = f"""
+You are a planning component for an AI agent.
 
-            print("\n[Planner previous observation]")
-            print(observation.summary)
-            print(observation.error)
-            print("[End previous observation]\n")
+Create a sequential plan for this user request. Create one task for
+each independent operation. Do not create dependencies between tasks.
 
+User request:
+{query}
 
-        # --------------------------------
-        # Multi-task request
-        # --------------------------------
+Available tools:
+{self._tool_descriptions()}
 
-        if " and " in query.lower():
+Return ONLY valid JSON in this exact shape:
 
-            parts = query.split(
-                " and ",
-                1,
-            )
+{{
+    "tasks": [
+        {{
+            "id": "task-1",
+            "description": "short task description",
+            "capability": "retrieval|tool|model",
+            "input": {{}}
+        }}
+    ]
+}}
+
+Task rules:
+- retrieval input MUST contain {{"query": "..."}}.
+- tool input MUST contain {{"tool": "registered tool name", "arguments": {{}}}}.
+- model input MUST contain {{"query": "..."}}.
+- Use only the registered tools listed above.
+- Preserve the order of independent operations from the request.
+"""
+
+        response = self.model_gateway.generate(
+            prompt,
+            max_new_tokens=300,
+            do_sample=False,
+        )
+
+        return self._parse_plan(response)
+
+    def _parse_plan(self, response: str) -> Plan:
+
+        response = response.strip()
+
+        if response.startswith("```"):
+
+            lines = response.splitlines()
+            lines = lines[1:]
+
+            if lines and lines[-1].strip() == "```":
+                lines = lines[:-1]
+
+            response = "\n".join(lines).strip()
+
+        try:
+
+            data = json.loads(response)
+
+            if not isinstance(data, dict):
+                raise ValueError("Plan response must be a JSON object.")
+
+            raw_tasks = data.get("tasks")
+
+            if not isinstance(raw_tasks, list) or not raw_tasks:
+                raise ValueError("Plan must contain a non-empty 'tasks' list.")
 
             tasks = []
 
-            for index, part in enumerate(parts):
+            for index, raw_task in enumerate(raw_tasks, start=1):
 
-                sub_intent = self.understand_intent(
-                    part.strip()
-                )
+                if not isinstance(raw_task, dict):
+                    raise ValueError(f"Task {index} must be a JSON object.")
 
-                sub_plan = self.create_plan(
-                    part.strip(),
-                    sub_intent,
-                )
+                task_id = raw_task.get("id")
+                description = raw_task.get("description")
+                capability = raw_task.get("capability")
+                task_input = raw_task.get("input")
 
-                for task in sub_plan.tasks:
+                if not task_id or not isinstance(task_id, str):
+                    raise ValueError(f"Task {index} is missing a valid 'id'.")
 
-                    task.id = (
-                        f"task-{index + 1}"
+                if not description or not isinstance(description, str):
+                    raise ValueError(
+                        f"Task {index} is missing a valid 'description'."
                     )
 
-                    tasks.append(task)
-
-            return Plan(
-                tasks=tasks
-            )    
-
-        task = self._create_task_from_intent(
-            query=query,
-            intent=intent,
-            task_id="task-1",
-        )
-
-        return Plan(
-            tasks=[task]
-        )
-
-    def _create_task_from_intent(
-        self,
-        query: str,
-        intent: Intent,
-        task_id: str = "task-1",
-    ) -> Task:
-
-        if intent.name == "retrieval":
-
-            return Task(
-                id=task_id,
-                description=(
-                    "Retrieve relevant information "
-                    "from the knowledge base."
-                ),
-                input={"query": query},
-                metadata={"capability": "retrieval"},
-            )
-
-        if intent.name == "tool":
-
-            tool_name = intent.entities.get("tool")
-
-            if tool_name == "calculator" and "math_expression" in intent.entities:
-
-                arguments = {
-                    "expression": intent.entities.get(
-                        "math_expression",
-                        "",
+                if capability not in {"retrieval", "tool", "model"}:
+                    raise ValueError(
+                        f"Task {index} has unknown capability: {capability}"
                     )
-                }
 
-            elif (
-                "arguments" in intent.entities
-                and isinstance(intent.entities["arguments"], dict)
-            ):
+                if not isinstance(task_input, dict):
+                    raise ValueError(
+                        f"Task {index} is missing a valid 'input' object."
+                    )
 
-                arguments = intent.entities["arguments"]
+                if capability == "retrieval" or capability == "model":
+                    if not isinstance(task_input.get("query"), str):
+                        raise ValueError(
+                            f"Task {index} requires a string 'query' input."
+                        )
 
-            else:
+                if capability == "tool":
+                    tool_name = task_input.get("tool")
+                    arguments = task_input.get("arguments")
 
-                arguments = {
-                    key: value
-                    for key, value in intent.entities.items()
-                    if key != "tool"
-                }
+                    if not isinstance(tool_name, str) or not tool_name:
+                        raise ValueError(
+                            f"Task {index} requires a valid tool name."
+                        )
 
-            return Task(
-                id=task_id,
-                description=f"Execute the {tool_name} tool.",
-                input={
-                    "tool": tool_name,
-                    "arguments": arguments,
-                },
-                metadata={"capability": "tool"},
-            )
+                    if tool_name not in self.tool_registry.list_tools():
+                        raise ValueError(
+                            f"Task {index} references unknown tool: {tool_name}"
+                        )
 
-        return Task(
-            id=task_id,
-            description="Generate a direct response.",
-            input={"query": query},
-            metadata={"capability": "model"},
-        )
+                    if not isinstance(arguments, dict):
+                        raise ValueError(
+                            f"Task {index} requires an 'arguments' object."
+                        )
+
+                tasks.append(
+                    Task(
+                        id=task_id,
+                        description=description,
+                        input=task_input,
+                        metadata={"capability": capability},
+                    )
+                )
+
+            return Plan(tasks=tasks)
+
+        except (json.JSONDecodeError, TypeError, ValueError) as exc:
+            raise ValueError(f"Invalid structured plan response: {exc}") from exc
 
 
     def replan(
@@ -469,31 +487,18 @@ The "intent" field MUST be exactly one of:
 "tool"
 "general"
 
-Return ONLY valid JSON.
-Do NOT add explanations.
-Do NOT add markdown.
-
-The JSON must contain:
-
-For a tool task, the entities MUST contain the selected tool name
-and the arguments required by that tool:
+Return ONLY valid JSON in this exact shape:
 
 {{
-    "tool": "<registered tool name>",
-    "arguments": {{}}
+    "tasks": [
+        {{
+            "id": "{failed_task.id}",
+            "description": "recovery task",
+            "capability": "retrieval|tool|model",
+            "input": {{}}
+        }}
+    ]
 }}
-
-For a retrieval task:
-
-{{
-    "topic": "the topic"
-}}
-
-For a general task:
-
-{{}}
-
-Return ONLY valid JSON.
 """
         response = self.model_gateway.generate(
             prompt,
@@ -501,22 +506,15 @@ Return ONLY valid JSON.
             do_sample=False,
         )
 
-        intent = self._parse_intent(
-            response
-        )
+        plan = self._parse_plan(response)
 
-        recovery_query = failed_task.input.get(
-            "query",
-            query,
-        )
+        if len(plan.tasks) != 1:
+            raise ValueError("Recovery plan must contain exactly one task.")
 
-        recovery_task = self._create_task_from_intent(
-            query=recovery_query,
-            intent=intent,
-            task_id=failed_task.id,
-        )
+        if plan.tasks[0].id != failed_task.id:
+            raise ValueError("Recovery task must preserve the failed task id.")
 
-        return Plan(tasks=[recovery_task])
+        return plan
 
 
     def _parse_intent(

@@ -230,8 +230,10 @@ def test_unknown_tool_controlled_failure():
 def test_agent_executes_new_tools_without_agent_modifications():
     gateway = MockModelGateway()
     gateway.set_response_for(
-        "User: Format text hello to uppercase",
-        '{"intent": "tool", "confidence": 1.0, "entities": {"tool": "string_formatter", "arguments": {"text": "hello", "operation": "uppercase"}}}'
+        "User request:\nFormat text hello to uppercase",
+        '{"tasks": [{"id": "task-1", "description": "Format text", '
+        '"capability": "tool", "input": {"tool": "string_formatter", '
+        '"arguments": {"text": "hello", "operation": "uppercase"}}}]}',
     )
 
     registry = ToolRegistry()

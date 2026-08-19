@@ -53,37 +53,43 @@ class Agent:
 
         while retry_count <= self.max_retries:
 
-            if retry_count == 0:
+            try:
 
-                intent = self.planner.understand_intent(
-                    query
-                )
+                if retry_count == 0:
 
-                plan = self.planner.create_plan(
-                    query,
-                    intent,
-                )
+                    plan = self.planner.create_plan(
+                        query
+                    )
 
-            else:
+                else:
 
-                recovery_plan = self.planner.replan(
-                    query,
-                    context.observations[-1],
-                    context.current_task,
-                )
+                    recovery_plan = self.planner.replan(
+                        query,
+                        context.observations[-1],
+                        context.current_task,
+                    )
 
-                # Collect any remaining tasks from the previous plan that have not run yet
-                remaining_tasks = []
-                if context.current_plan and context.current_task:
-                    found_current = False
-                    for t in context.current_plan.tasks:
-                        if found_current:
-                            remaining_tasks.append(t)
-                        elif t.id == context.current_task.id:
-                            found_current = True
+                    # Collect any remaining tasks from the previous plan that have not run yet
+                    remaining_tasks = []
+                    if context.current_plan and context.current_task:
+                        found_current = False
+                        for task in context.current_plan.tasks:
+                            if found_current:
+                                remaining_tasks.append(task)
+                            elif task.id == context.current_task.id:
+                                found_current = True
 
-                plan = Plan(
-                    tasks=recovery_plan.tasks + remaining_tasks
+                    plan = Plan(
+                        tasks=recovery_plan.tasks + remaining_tasks
+                    )
+
+            except ValueError as exc:
+
+                return AgentResponse(
+                    success=False,
+                    output=None,
+                    error=f"Planning failed: {exc}",
+                    trace=context.observations,
                 )
 
             self.context_manager.set_plan(
