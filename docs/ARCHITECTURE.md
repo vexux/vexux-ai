@@ -47,7 +47,7 @@ The core architecture is organized to keep the agent control flow completely dec
 ### Layer 1: Inner / Agent Layer
 Contains the cognitive and control-loop primitives. This layer is responsible for planning, executing tasks against context, evaluating outcomes, recovering from failures, and synthesizing final answers.
 - **Agent** (`agent/agent.py`): Coordinates the lifecycle loop across multiple tasks and manages replanning.
-- **Planner** (`agent/planner.py`): Performs zero-shot SLM intent classification, multi-task plan generation, and scoped recovery planning.
+  - **Planner** (`agent/planner.py`): Generates and validates structured sequential plans, including scoped recovery plans.
 - **Observer** (`agent/observer.py`): Normalizes raw execution outcomes into structured observations linked with `task_id`.
 - **DecisionMaker** (`agent/decision.py`): Determines whether an observation satisfies the goal (`DONE`) or requires a new plan (`REPLAN`).
 - **ResponseSynthesizer** (`agent/response_synthesizer.py`): Synthesizes multi-task observation outputs into a clear, unified final response.
@@ -60,6 +60,8 @@ Provides structural boundaries, data contracts, and dependency mediation.
 - **ToolRegistry** (`core/tools/registry.py`): In-memory registry for discovering and executing tools implementing `ToolContract`.
 - **ExecutionManager** (`agent/execution_manager.py`): Dispatches execution tasks to RAG, tools, or direct model calls.
 - **Composition Root** (`core/composition.py`): Factory module (`create_agent()`) that wires concrete instances and handles dependency injection.
+- **FastAPI API** (`api/main.py`): Thin HTTP boundary delegating requests to the composition-root Agent.
+- **Evaluation Suite** (`evaluation/`): Deterministic system-level evaluation runner with 44 scenarios.
 
 ### Layer 3: Data / Capability Layer
 Houses the domain-specific models, data processors, vector indices, training loops, and concrete tools.
@@ -75,21 +77,21 @@ Houses the domain-specific models, data processors, vector indices, training loo
 | Component | Status | Location / Details |
 | :--- | :--- | :--- |
 | **Agent Loop (Multi-Task & Recovery)** | **IMPLEMENTED** | `agent/agent.py` — supports sequential multi-task execution, scoped failure recovery, retry loop (up to 2 retries), and trace preservation. |
-| **Intent Classification & Planning** | **IMPLEMENTED** | `agent/planner.py` — classifies intents, constructs multi-task plans, and generates targeted recovery plans for failed tasks. |
+| **Structured Planning & Recovery** | **IMPLEMENTED** | `agent/planner.py` — generates validated sequential `Plan`/`Task` JSON and targeted recovery plans. |
 | **Observer & Decision Maker** | **IMPLEMENTED** | `agent/observer.py`, `agent/decision.py` — maps `ExecutionResult` to `Observation` (with `task_id`) and decides `DONE`/`REPLAN`. |
 | **Response Synthesizer** | **IMPLEMENTED** | `agent/response_synthesizer.py` — synthesizes multi-task observation outputs into unified final answers. |
-| **Context Management** | **IMPLEMENTED** | `core/context/context_manager.py` — manages `AgentContext`, records `completed_tasks`, and stores observation history. |
+| **Context Management & Sessions** | **IMPLEMENTED** | `core/context/context_manager.py` — manages request traces and bounded in-memory conversation history by `session_id`. |
 | **Model Gateway** | **IMPLEMENTED** | `core/model_gateway/gateway.py` — wraps `ModelProviderContract`. |
 | **Tool Registry & Calculator Tool** | **IMPLEMENTED** | `core/tools/registry.py`, `core/tools/calculator.py` — registered tool execution. |
-| **Local RAG Pipeline** | **IMPLEMENTED** | `rag/` — end-to-end RAG with FAISS vector store, BGE embeddings, and local inference. |
+| **Local RAG Pipeline** | **IMPLEMENTED** | `rag/` — scored retrieval through `RAGPipeline.retrieve()` with configurable top-k and relevance handling. |
 | **Qwen 2.5 SLM Provider (LoRA)** | **IMPLEMENTED** | `models/providers/qwen.py` — loads `Qwen/Qwen2.5-0.5B-Instruct` with PEFT adapter from `models/checkpoints`. |
 | **QLoRA Fine-Tuning Pipeline** | **IMPLEMENTED** | `training/train.py`, `training/factory.py`, `experiments/qlora_train.py`. |
 | **Contracts (`execution`, `observation`, `response`, `capabilities`)** | **IMPLEMENTED** | `core/contracts/` — dataclasses and protocols. |
 | **Multi-Agent Execution** | **PLANNED** | Not implemented. The current system is strictly single-agent. |
 | **Dynamic Multi-Step Graph / DAG Planning** | **PLANNED** | Not implemented. Dynamic DAG execution with complex dependency graphs is planned. |
-| **Dynamic Tool Schema Ingestion in Planner** | **PLANNED** | Not implemented. Tool prompts in `planner.py` currently use static tool schema templates. |
+| **Dynamic Tool Discovery** | **IMPLEMENTED** | `ToolRegistry` descriptions are injected into Planner prompts; argument schemas remain out of scope. |
 | **Persistent Memory (`MemoryContract`)** | **PLANNED** | Protocol defined in `core/contracts/capabilities.py`, but no concrete store exists. |
-| **Evaluation Suite (`training/evaluate.py`)** | **PLANNED** | File exists as a placeholder (empty, 0 bytes). |
+| **Evaluation Suite (`evaluation/`)** | **IMPLEMENTED** | 44 deterministic system-level scenarios with category and failure reporting. |
 | **Streaming / Asynchronous Execution** | **PLANNED** | All current execution and generation calls are synchronous. |
 
 ---
@@ -113,17 +115,15 @@ sequenceDiagram
     participant Synthesizer as ResponseSynthesizer
 
     Client->>Agent: run(query)
-    Agent->>ContextMgr: create(request_id)
+    Agent->>ContextMgr: create(request_id, session_id, user_id)
     ContextMgr-->>Agent: AgentContext
 
     loop Up to max_retries (default: 2)
         alt First Attempt (retry_count == 0)
-            Agent->>Planner: understand_intent(query)
-            Planner->>ModelGW: generate(prompt)
-            ModelGW-->>Planner: JSON response
-            Planner-->>Agent: Intent
-            Agent->>Planner: create_plan(query, intent)
-            Planner-->>Agent: Plan (List of Tasks)
+                Agent->>Planner: create_plan(query, conversation_context)
+                Planner->>ModelGW: generate(structured plan prompt)
+                ModelGW-->>Planner: validated JSON plan
+                Planner-->>Agent: Plan (List of Tasks)
         else Subsequent Retries (replan)
             Agent->>Planner: replan(query, last_observation, failed_task)
             Planner->>ModelGW: generate(prompt)
@@ -138,13 +138,13 @@ sequenceDiagram
             Agent->>ExecMgr: execute(task, context)
 
             alt capability == "retrieval"
-                ExecMgr->>Capability: RAGPipeline.ask(query)
+                ExecMgr->>Capability: RAGPipeline.retrieve(query, top_k)
             else capability == "tool"
                 ExecMgr->>Capability: ToolRegistry.execute(tool_name, arguments)
             else capability == "model"
                 ExecMgr->>Capability: ModelGateway.generate(prompt)
             end
-            Capability-->>ExecMgr: raw output
+              Capability-->>ExecMgr: structured retrieval/tool/model output
             ExecMgr-->>Agent: ExecutionResult(success, output, error)
 
             Agent->>Observer: observe(execution_result, task)
@@ -192,15 +192,15 @@ sequenceDiagram
 ### 5.2 Planner (`agent/planner.py`)
 - **Class**: `Planner`
 - **Responsibilities**:
-  - `understand_intent(query, previous_observation)`: Prompts the SLM via `ModelGateway` to classify the user's input into `retrieval`, `tool`, or `general`.
-  - `create_plan(query, intent, observation)`: Constructs a multi-task or single-task `Plan` consisting of `Task` objects using `_create_task_from_intent()`.
-  - `replan(query, observation, failed_task)`: Generates a targeted recovery plan scoped specifically to `failed_task` without re-splitting or re-executing already completed tasks.
+  - `create_plan(query, conversation_context)`: Prompts the SLM for a structured JSON plan and validates every task before creating `Plan` and `Task` objects.
+  - `replan(query, observation, failed_task, conversation_context)`: Generates and validates a single recovery task scoped specifically to `failed_task`.
+  - Tool descriptions are obtained dynamically from `ToolRegistry`; individual tool implementations are not embedded in the Planner.
 
 ### 5.3 Execution Manager (`agent/execution_manager.py`)
 - **Class**: `ExecutionManager`
 - **Responsibilities**:
   - Inspects `task.metadata["capability"]`.
-  - Routes `retrieval` to `RAGPipeline.ask()`.
+  - Routes `retrieval` to `RAGPipeline.retrieve()` and returns structured query/results/context output.
   - Routes `tool` to `ToolRegistry.execute()`.
   - Routes `model` to `ModelGateway.generate()`.
   - Wraps results and exceptions into an `ExecutionResult`.
@@ -227,10 +227,16 @@ sequenceDiagram
 - **Responsibilities**:
   - Instantiates and updates `AgentContext`.
   - Manages `observations`, `current_plan`, `current_task`, and `completed_tasks`.
+  - Maintains bounded in-memory conversation history isolated by `session_id`.
 
 ### 5.8 Model Gateway & Providers (`core/model_gateway/`, `models/providers/`)
 - **`ModelGateway`**: Dispatches generation prompts to any implementation of `ModelProviderContract`.
 - **`QwenProvider`**: Implements `ModelProviderContract` using Hugging Face's `AutoTokenizer` and `AutoModelForCausalLM` combined with a PEFT LoRA adapter loaded from `models/checkpoints`. Supports greedy decoding (`do_sample=False`) and sampling (`temperature`, `top_p`, `top_k`).
+
+### 5.12 API and Observability
+- **FastAPI** (`api/main.py`): Exposes `POST /api/v1/agent/run`, validates requests, delegates to `Agent.run()`, and serializes `AgentResponse`.
+- **Structured observability** (`agent/agent.py`): Logs request/session/task identifiers, capability, execution outcome, and duration for each task.
+- The API does not contain planning, execution, observation, or retry orchestration logic.
 
 ### 5.9 Tool Registry & Concrete Tools (`core/tools/`)
 - **`ToolRegistry`**: In-memory registry with `register()`, `get()`, `list_tools()`, and `execute()` methods.

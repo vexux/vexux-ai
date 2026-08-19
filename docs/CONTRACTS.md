@@ -63,6 +63,7 @@ class AgentContext:
     current_task: Optional[Task] = None
     observations: list[Observation] = field(default_factory=list)
     completed_tasks: list[Task] = field(default_factory=list)
+    conversation_history: list[Dict[str, Any]] = field(default_factory=list)
 ```
 
 - **Fields**:
@@ -75,6 +76,7 @@ class AgentContext:
   - `current_task` (`Optional[Task]`): The `Task` currently being processed. Default: `None`.
   - `observations` (`list[Observation]`): Chronological history of observations produced during this execution run. Default: `[]`.
   - `completed_tasks` (`list[Task]`): Chronological list of `Task` objects that completed execution with successful observations. Default: `[]`.
+  - `conversation_history` (`list[Dict[str, Any]]`): Bounded prior session turns copied into this request context. Default: `[]`.
 - **Producer**: `ContextManager` (`create`, `set_plan`, `set_task`, `add_observation`, `add_completed_task`).
 - **Consumer**: `Agent` (`run`), `ExecutionManager` (`execute`).
 - **Purpose**: Holds runtime state, active pointers, and execution traces for a single agent invocation.
@@ -119,9 +121,9 @@ class Intent:
   - `name` (`str`): The classification category name (`"retrieval"`, `"tool"`, or `"general"`).
   - `confidence` (`float`): Model confidence score between 0.0 and 1.0. Default: `0.0`.
   - `entities` (`Dict[str, Any]`): Extracted parameters (e.g., `{"topic": "EC2"}` or `{"tool": "calculator", "math_expression": "24 * 7"}`). Default: `{}`.
-- **Producer**: `Planner` (`understand_intent`, `_parse_intent`).
-- **Consumer**: `Planner` (`create_plan`).
-- **Purpose**: Structured representation of natural language intent to guide plan construction.
+- **Producer**: `Planner` (`understand_intent`, `_parse_intent`) for compatibility and focused intent tests.
+- **Consumer**: Intent-specific callers and tests; the active Agent path uses structured `create_plan()` directly.
+- **Purpose**: Retained intent representation; it is not the active multi-task planning contract.
 
 ---
 
@@ -164,6 +166,7 @@ class AgentResponse:
     output: Any = None
     error: Optional[str] = None
     trace: Optional[list] = None
+  metadata: Dict[str, Any] = field(default_factory=dict)
 ```
 
 - **Fields**:
@@ -171,6 +174,7 @@ class AgentResponse:
   - `output` (`Any`): Final output payload returned to the user/client. Default: `None`.
   - `error` (`Optional[str]`): Top-level failure description if the request could not be satisfied. Default: `None`.
   - `trace` (`Optional[list]`): Chronological list of `Observation` objects capturing every step taken during the run. Default: `None`.
+  - `metadata` (`Dict[str, Any]`): Request/session/user identifiers and other response metadata. Default: `{}`.
 - **Producer**: `Agent` (`run`).
 - **Consumer**: External caller, API client, or test scripts (`test_agent.py`).
 - **Purpose**: Unified response packet providing result data and full execution auditability.

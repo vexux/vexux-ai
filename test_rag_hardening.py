@@ -3,7 +3,9 @@ import pytest
 from agent.decision import DecisionMaker, DecisionType
 from agent.execution_manager import ExecutionManager
 from agent.observer import Observer
+from agent.response_synthesizer import ResponseSynthesizer
 from core.contracts.execution import AgentContext, Task
+from core.contracts.observation import Observation
 from rag.pipeline import RAGPipeline
 
 
@@ -137,3 +139,34 @@ def test_invalid_top_k_is_controlled_failure():
 
     assert result.success is False
     assert "top_k" in result.error
+
+
+def test_structured_single_retrieval_result_is_synthesized():
+    class Gateway:
+        def __init__(self):
+            self.prompts = []
+
+        def generate(self, prompt, **kwargs):
+            self.prompts.append(prompt)
+            return "Grounded EC2 answer"
+
+    gateway = Gateway()
+    result = ResponseSynthesizer(gateway).synthesize(
+        "What is EC2?",
+        [
+            Observation(
+                success=True,
+                output={
+                    "query": "What is EC2?",
+                    "results": [{
+                        "score": 0.9,
+                        "document": "EC2 provides compute capacity.",
+                    }],
+                    "context_found": True,
+                },
+            )
+        ],
+    )
+
+    assert result == "Grounded EC2 answer"
+    assert "retrieved context" in gateway.prompts[0]

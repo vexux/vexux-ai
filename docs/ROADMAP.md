@@ -1,104 +1,77 @@
 # Vexux-AI Technical Roadmap
 
-This document outlines the current state, ongoing architectural refinements, and planned future capabilities for the Vexux-AI platform.
-
----
+This document outlines the current state and planned future capabilities of the Vexux-AI platform.
 
 ## 1. Project Status Matrix
 
 ```text
-┌────────────────────────┬─────────────────────────┬────────────────────────┐
-│      COMPLETED         │       IN PROGRESS       │        PLANNED         │
-├────────────────────────┼─────────────────────────┼────────────────────────┤
-│ ✓ Core Agent Loop      │ ◐ Dynamic Tool Schemas  │ ○ Multi-Agent Systems  │
-│ ✓ Multi-Task Planning  │ ◐ RAG-Gateway Decouple  │ ○ Multi-Step DAG Plans │
-│ ✓ Scoped Replanning    │ ◐ Formal Pytest Suite   │ ○ Memory Store Impl    │
-│ ✓ Response Synthesizer │ ◐ ExecutionManager Ref  │ ○ Tool Ecosystem       │
-│ ✓ Core Contracts       │                         │ ○ Automated Evaluation │
-│ ✓ Model Gateway & LoRA │                         │ ○ Async/Streaming Exec │
-│ ✓ Tool Registry & Calc │                         │ ○ vLLM / Ollama        │
-│ ✓ Local RAG (FAISS)    │                         │                        │
-│ ✓ QLoRA Fine-Tuning    │                         │                        │
-└────────────────────────┴─────────────────────────┴────────────────────────┘
+COMPLETED                    IN PROGRESS               PLANNED
+Agent control loop           RAG-Gateway decoupling    Multi-Agent Systems
+Structured planning          Test organization         Multi-Step DAG Plans
+Scoped replanning            Capability dispatch      Persistent storage
+Tool extensibility                                      Expanded tool ecosystem
+Hardened local RAG                                      Async/streaming execution
+Session conversation                                     Multi-backend inference
+FastAPI and observability
+Evaluation suite
 ```
-
----
 
 ## 2. Completed Capabilities
 
 ### 2.1 Core Agent Architecture
-- **Multi-Task Agent Control Loop**: Sequential execution cycle (`Plan -> Execute -> Observe -> Decide -> Replan -> Synthesize`) with bounded retries (`agent/agent.py`).
-- **Scoped Failure Recovery & Replanning**: Isolates failures to the specific failed task, records `completed_tasks`, preserves unexecuted tasks, and prompts the SLM for targeted recovery plans without re-splitting or repeating already completed tasks (`agent/agent.py`, `agent/planner.py`).
-- **Response Synthesis**: Aggregates intermediate outputs from multi-task observations into a coherent, clean final answer (`agent/response_synthesizer.py`).
-- **Standardized Contracts**: Formal dataclass and protocol contracts in `core/contracts/` (`Task`, `Plan`, `AgentContext`, `ExecutionResult`, `Intent`, `Observation`, `AgentResponse`, `Capability`, `RetrievalContract`, `ToolContract`, `MemoryContract`, `ModelProviderContract`).
-- **Context Management**: Request-scoped runtime context tracking active plans, current task, completed tasks, and full observation histories (`core/context/context_manager.py`).
-- **Observer & Decision Maker**: Execution result normalization with `task_id` tracking and binary `DONE`/`REPLAN` transition logic (`agent/observer.py`, `agent/decision.py`).
+- Sequential control loop: `Plan -> Execute -> Observe -> Decide -> Replan -> Synthesize`.
+- Structured multi-task planning with validated `Plan` and `Task` objects.
+- Scoped failure recovery that preserves successful tasks and unexecuted remaining tasks.
+- Response synthesis for multi-task results.
+- Observer and DecisionMaker integration with bounded retries.
 
-### 2.2 Model Gateway & Inference
-- **Model Gateway**: Abstraction layer separating model consumers from underlying providers (`core/model_gateway/gateway.py`).
-- **Fine-Tuned Qwen 2.5 Provider**: Hugging Face causal LM provider with PEFT LoRA adapter support and chat templates (`models/providers/qwen.py`).
-- **Config-Driven Model Loader**: YAML-based 4-bit BitsAndBytes quantization and device configuration (`models/loader.py`, `configs/model.yaml`).
+### 2.2 Tools and Capabilities
+- Generic `ToolContract` and in-memory `ToolRegistry`.
+- Dynamic tool descriptions supplied to the Planner.
+- Calculator, string formatter, and text analyzer tools.
 
-### 2.3 Tools & Capabilities
-- **Tool Registry**: Dynamic registration and lookup for tools satisfying `ToolContract` (`core/tools/registry.py`).
-- **Calculator Tool**: Sandboxed arithmetic evaluation tool (`core/tools/calculator.py`).
+### 2.3 RAG
+- File loader, sliding-window chunking, normalized embeddings, and FAISS vector search.
+- `RAGPipeline.retrieve()` with configurable top-k and similarity threshold handling.
+- Controlled no-result and retrieval-exception behavior through `ExecutionManager`.
 
-### 2.4 Retrieval-Augmented Generation (RAG)
-- **Local RAG Pipeline**: File document loader, sliding-window chunker, `SentenceTransformer` embedder (`bge-small-en-v1.5`), FAISS `IndexFlatIP` vector index, and prompt builder (`rag/`).
+### 2.4 Sessions, API, and Observability
+- Bounded in-memory conversation history isolated by `session_id`.
+- FastAPI endpoint: `POST /api/v1/agent/run`.
+- Structured task logs containing request/session/task IDs, capability, outcome, and duration.
 
-### 2.5 Training & Experimentation
-- **QLoRA Fine-Tuning Pipeline**: SFTTrainer factory with LoRA parameter management and multi-epoch training (`training/train.py`, `training/factory.py`, `experiments/qlora_train.py`).
-- **Dataset Handling**: JSONL dataset loader and chat formatting utilities (`data/loader.py`, `data/formatter.py`).
+### 2.5 Evaluation and Training
+- Deterministic system evaluation: `python -m evaluation`, currently 44 scenarios.
+- QLoRA fine-tuning and dataset handling under `training/`, `lora/`, and `data/`.
 
----
+## 3. In-Progress Capabilities
 
-## 3. In-Progress Capabilities & Technical Refinements
+### 3.1 RAG and Model Gateway Decoupling
+- Route all answer generation through the central `ModelGateway`.
+- Keep retrieval and answer generation as distinct capability responsibilities.
 
-### 3.1 Dynamic Tool Schema Generation in Planner
-- **Objective**: Transition `agent/planner.py` from hardcoded prompt rules (e.g. static references to `"calculator"`) to dynamic prompt schemas derived at runtime from `ToolRegistry.list_tools()` and `tool.description`.
-- **Target**: Eliminate domain and tool coupling from the planner.
+### 3.2 Test Organization
+- Gradually consolidate root verification scripts into a structured test package while retaining deterministic coverage.
 
-### 3.2 RAG and Model Gateway Decoupling
-- **Objective**: Refactor `RAGPipeline` so that retrieval returns chunks conforming to `RetrievalContract` rather than running its own internal `InferencePipeline`.
-- **Target**: Route all SLM generation through the central `ModelGateway`.
+### 3.3 Polymorphic Capability Dispatch
+- Replace the current capability conditionals in `ExecutionManager` with a capability registry only when a concrete need justifies it.
 
-### 3.3 Formalizing Test Suite
-- **Objective**: Transition root verification scripts (`test_*.py`) into a structured `tests/` directory with pytest fixtures, mock model providers, and deterministic CI execution.
+## 4. Planned Capabilities
 
-### 3.4 Polymorphic Execution Dispatch
-- **Objective**: Replace hardcoded capability conditionals (`if capability == "retrieval": ...`) in `ExecutionManager` with a polymorphic capability registry implementing the `Capability` protocol.
-
----
-
-## 4. Planned Capabilities (Future Horizons)
-
-### 4.1 Multi-Step & DAG Planning
-- Extend `Planner` to generate dependency graphs (DAGs) of tasks where downstream tasks receive outputs from upstream tasks.
-- Add support for partial failure recovery and conditional branching during execution.
+### 4.1 Multi-Step and DAG Planning
+- Task dependencies, conditional branching, and partial DAG recovery.
 
 ### 4.2 Multi-Agent Orchestration
-- Introduce specialized subagents (e.g., Research Agent, Coding Agent, Review Agent).
-- Implement supervisor-worker coordination, inter-agent message passing, and capability delegation protocols.
+- Specialized agents and supervisor-worker coordination.
 
-### 4.3 Persistent Memory Subsystem
-- Implement concrete backends for `MemoryContract`:
-  - **Short-Term / Session Memory**: Multi-turn conversation buffer.
-  - **Episodic Memory**: Vector-indexed past agent trajectories and successful plans.
-  - **Entity Memory**: Key-value knowledge graph for user preferences and facts.
+### 4.3 Persistent Conversation and Memory Storage
+- Durable session state, episodic memory, and entity memory backends.
 
-### 4.4 Pluggable Tool Ecosystem
-- Add sandboxed code execution environment (Python interpreter sandbox).
-- Add web search / API query tool.
-- Add structured database / SQL querying tools.
+### 4.4 Expanded Tool Ecosystem
+- Sandboxed code execution, web/API tools, and structured database tools.
 
-### 4.5 Automated Evaluation Suite
-- Implement `training/evaluate.py` to benchmark:
-  - Intent classification precision/recall on unseen datasets.
-  - Plan validity and parameter extraction accuracy.
-  - End-to-end task completion rates and token efficiency.
+### 4.5 Streaming and Asynchronous Execution
+- Non-blocking generation, streaming responses, and asynchronous task scheduling.
 
-### 4.6 Streaming & Asynchronous Engine
-- Implement asynchronous agent execution (`async def run()`) supporting streaming token yields, concurrent tool execution, and non-blocking background tasks.
-
-### 4.7 Multi-Backend Model Gateway
-- Expand `ModelProviderContract` implementations to support local high-throughput inference engines (vLLM, Ollama, Llama.cpp) and remote API endpoints.
+### 4.6 Multi-Backend Model Gateway
+- Optional vLLM, Ollama, Llama.cpp, and remote provider implementations.

@@ -29,7 +29,17 @@ class ResponseSynthesizer:
 
         # No need to call the model when there is
         # only one result.
-        if len(successful_outputs) == 1 and not conversation_context:
+        has_structured_retrieval = (
+            len(successful_outputs) == 1
+            and isinstance(successful_outputs[0], dict)
+            and successful_outputs[0].get("context_found") is True
+        )
+
+        if (
+            len(successful_outputs) == 1
+            and not conversation_context
+            and not has_structured_retrieval
+        ):
             return str(
                 successful_outputs[0]
             )
@@ -58,6 +68,7 @@ user request using the task results.
 
 IMPORTANT:
 - Use the provided results.
+- For retrieval results, answer only from the provided retrieved context.
 - Do not invent additional facts.
 - Preserve numerical results exactly.
 - Do not mention internal tasks, observations, planning,
