@@ -80,6 +80,74 @@ def test_single_general_task():
     assert result.tasks[0].input == {"query": "Hello"}
 
 
+def test_missing_retrieval_query_is_rejected():
+    response = plan(task("task-1", "retrieval", {}))
+
+    with pytest.raises(ValueError, match="query"):
+        planner_for(response).create_plan("What is EC2?")
+
+
+def test_missing_model_query_is_rejected():
+    response = plan(task("task-1", "model", {}))
+
+    with pytest.raises(ValueError, match="query"):
+        planner_for(response).create_plan("Hello")
+
+
+def test_missing_tool_name_is_rejected():
+    response = plan(task(
+        "task-1",
+        "tool",
+        {"arguments": {}},
+    ))
+
+    with pytest.raises(ValueError, match="tool name"):
+        planner_for(response).create_plan("Calculate 2 + 2")
+
+
+def test_malformed_tool_arguments_are_rejected():
+    response = plan(task(
+        "task-1",
+        "tool",
+        {"tool": "calculator", "arguments": "abc"},
+    ))
+
+    with pytest.raises(ValueError, match="arguments"):
+        planner_for(response).create_plan("Calculate abc")
+
+
+def test_unknown_tool_is_rejected():
+    response = plan(task(
+        "task-1",
+        "tool",
+        {"tool": "unknown_tool", "arguments": {}},
+    ))
+
+    with pytest.raises(ValueError, match="unknown tool"):
+        planner_for(response).create_plan("Use unknown tool")
+
+
+def test_ec2_and_invalid_calculation_is_planned_without_interpreting_abc():
+    response = plan(
+        task("task_1", "retrieval", {"query": "What is EC2?"}),
+        task(
+            "task_2",
+            "tool",
+            {
+                "tool": "calculator",
+                "arguments": {"expression": "abc"},
+            },
+        ),
+    )
+
+    result = planner_for(response).create_plan(
+        "What is EC2 and calculate abc"
+    )
+
+    assert result.tasks[0].input["query"] == "What is EC2?"
+    assert result.tasks[1].input["arguments"]["expression"] == "abc"
+
+
 def test_retrieval_and_tool_multi_task():
     result = planner_for(
         plan(

@@ -1,61 +1,37 @@
 # Vexux-AI
 
-## 1. Overview
+Vexux-AI is a modular agent platform built around a small language model, structured planning, tools, retrieval-augmented generation, session context, and a bounded execution loop.
 
-Vexux-AI is a modular agent platform built around a small language model (SLM), structured planning, tools, retrieval-augmented generation (RAG), session context, and a bounded execution loop.
+The architecture separates model reasoning from capability execution, retrieval, tools, request state, failure handling, and response synthesis.
 
-It addresses a practical engineering problem: how to connect model reasoning to reliable capabilities without placing tool logic, retrieval logic, model-provider details, and request state inside one monolithic agent. The project demonstrates explicit contracts, dependency injection, controlled failures, sequential multi-task execution, and observable execution traces.
-
-## 2. Key Capabilities
-
-The current milestone includes:
-
-- Agent orchestration with bounded retries and replanning.
-- Structured multi-task plans validated before execution.
-- Sequential task execution.
-- Generic `ToolRegistry` and dynamic tool discovery in Planner prompts.
-- Calculator, string formatter, and text analyzer tools.
-- RAG retrieval with configurable top-k and similarity-threshold handling.
-- Controlled no-result and capability failure behavior.
-- Response synthesis for multi-task and grounded retrieval results.
-- Bounded in-memory session conversation state isolated by `session_id`.
-- FastAPI endpoint for agent requests.
-- Structured task observability.
-- 54 automated unit/integration tests.
-- A deterministic system evaluation suite with 44 scenarios.
-
-## 3. Architecture
-
-The runtime flow is:
+## Architecture
 
 ```text
 API or local caller
     -> Agent
-    -> ContextManager creates request/session context
-    -> Planner generates and validates Plan / Task objects
-    -> Agent executes tasks sequentially
+    -> ContextManager
+    -> Planner
+    -> validated Plan / Task objects
     -> ExecutionManager
         -> ToolRegistry / tools
         -> RAGPipeline.retrieve()
         -> ModelGateway
-    -> Observer creates an Observation
-    -> DecisionMaker returns DONE or REPLAN
-    -> Planner creates a scoped recovery plan when needed
+            -> MistralProvider (default)
+            -> QwenProvider (local fallback)
+    -> Observer
+    -> DecisionMaker
+    -> Replanner when necessary
     -> ResponseSynthesizer
     -> AgentResponse
 ```
 
-`Agent` owns orchestration only. `Planner` creates structured plans, `ExecutionManager` dispatches tasks, `Observer` normalizes outcomes, `DecisionMaker` controls the next transition, and `ResponseSynthesizer` creates the final response.
-
-`ContextManager` owns request-scoped state and bounded session history. Each request has its own `request_id`; requests sharing a `session_id` can access prior conversation turns. Different session IDs are isolated.
-
-## 4. Architecture Diagram
+The Agent owns orchestration only. The Planner creates structured plans, ExecutionManager dispatches tasks, Observer normalizes outcomes, DecisionMaker chooses `DONE` or `REPLAN`, and ResponseSynthesizer produces the final answer. ContextManager owns request state and bounded in-memory session history isolated by `session_id`.
 
 ```mermaid
 flowchart TD
     Client[Local caller or FastAPI client] --> Agent[Agent]
     Agent --> Context[ContextManager]
-    Context --> Session[Bounded session history by session_id]
+    Context --> Session[Bounded session history]
     Agent --> Planner[Planner]
     Planner --> Gateway[ModelGateway]
     Planner --> Plan[Validated Plan and Task objects]
@@ -74,89 +50,99 @@ flowchart TD
     Response --> Client
 ```
 
-## 5. Project Structure
+## Capabilities
+
+- Agent orchestration with bounded retries and scoped failure/replanning.
+- Structured multi-task plans validated before execution.
+- Sequential task execution.
+- Generic `ToolRegistry` with dynamic tool discovery.
+- Calculator, string formatter, and text analyzer tools.
+- RAG retrieval with configurable top-k and similarity-threshold handling.
+- Controlled no-result and capability failure behavior.
+- Grounded response synthesis for retrieval and multi-task results.
+- Bounded in-memory conversation state by `session_id`.
+- FastAPI API and structured task observability.
+- 54 automated tests and 44 deterministic evaluation cases.
+
+## Repository Structure
 
 ```text
-agent/                    Agent control loop and execution components
-  agent.py                Orchestration and retry/replanning loop
-  planner.py              Structured planning and recovery planning
-  execution_manager.py    Capability dispatch
-  observer.py             ExecutionResult to Observation normalization
-  decision.py             DONE/REPLAN decision
-  response_synthesizer.py Final response generation
-
-api/                      FastAPI application
-  main.py                 POST /api/v1/agent/run and API schemas
-
-core/
-  composition.py          Dependency-injection composition root
-  context/                Request and in-memory session state
-  contracts/              Task, Plan, context, result, observation, response, and protocols
-  model_gateway/          Model-provider gateway
-  tools/                  ToolRegistry and concrete tools
-
-rag/                      Document loading, chunking, embeddings, FAISS retrieval, prompting
-models/                   Qwen provider and local LoRA checkpoints
+agent/                    Agent orchestration, planning, dispatch, observation, decisions
+api/                      FastAPI application (`api/main.py`)
+core/                     Composition root, contracts, gateway, context, tools
+rag/                      Loading, chunking, embeddings, FAISS retrieval, prompting
+models/                   Mistral/Qwen providers and local Qwen adapter checkpoints
 training/                 Training and inference utilities
 lora/                     LoRA adapter management
 data/                     Training datasets and RAG documents
-configs/                  Model and training YAML configuration
+configs/                  Model and training configuration
 evaluation/               Standalone deterministic system evaluation suite
 docs/                     Architecture, contracts, and roadmap documentation
 test_*.py                 Pytest unit and integration tests
 ```
 
-Important domain documents are in `data/documents/`. The local adapter expected by the composition root is in `models/checkpoints/`.
+RAG documents are read from `data/documents/`. The Qwen fallback uses the local adapter at `models/checkpoints`.
 
-## 6. Installation
+## Installation
 
-The project is developed with Python 3.11 in the provided environment. Create or activate a virtual environment from the repository root:
+The project is developed with Python 3.11. From the repository root:
 
 ```powershell
 python -m venv venv
 .\venv\Scripts\Activate.ps1
-```
-
-Install runtime and development dependencies:
-
-```powershell
 python -m pip install -r requirements.txt
 python -m pip install -r requirements-dev.txt
 ```
 
-The model configuration uses `Qwen/Qwen2.5-0.5B-Instruct` and the local PEFT adapter at `models/checkpoints`. The first model or embedding use may download Hugging Face/Sentence Transformers assets. RAG initialization reads `.txt` files from `data/documents/`, embeds their chunks, and builds an in-memory FAISS index.
+Runtime dependencies include the official `mistralai` SDK, PyTorch, Transformers, PEFT, Sentence Transformers, FAISS, and FastAPI.
 
-GPU acceleration is supported when the installed PyTorch and CUDA environment support it. CPU execution is possible but model and embedding initialization can be slow and memory-intensive.
+The default model is `mistral-small-latest`, accessed through the Mistral API. The first RAG use may download embedding assets. The local Qwen path requires the checkpoint files under `models/checkpoints`.
 
-## 7. Running the Agent
+## Model Provider Configuration
 
-The repository includes a local Agent demonstration script:
+Mistral is the default provider:
+
+```powershell
+$env:MODEL_PROVIDER = "mistral"
+$env:MISTRAL_MODEL = "mistral-small-latest"
+$env:MISTRAL_API_KEY = "your-key-from-mistral"
+```
+
+The key is read only from `MISTRAL_API_KEY`. Never hardcode, log, or commit API keys. `.env` and `.env.*` files are ignored, but the project does not load dotenv files automatically.
+
+To use local Qwen instead:
+
+```powershell
+$env:MODEL_PROVIDER = "qwen"
+$env:QWEN_MODEL = "Qwen/Qwen2.5-0.5B-Instruct"
+```
+
+Qwen remains available through its existing local adapter path. The Mistral provider never uses `adapter_path` or the Qwen checkpoint.
+
+## Running the Agent
 
 ```powershell
 python test_agent.py
 ```
 
-The script constructs the production composition root and runs a sample multi-capability request. It loads the configured model, adapter, RAG pipeline, and tools, so it requires the model/checkpoint and RAG dependencies described above.
+This constructs the composition-root Agent and runs its sample request. It requires a configured Mistral key by default, or the Qwen environment configuration above.
 
-For a direct RAG pipeline demonstration:
+For the direct RAG demonstration:
 
 ```powershell
 python test.py
 ```
 
-## 8. Running the API
-
-Start the FastAPI application with Uvicorn:
+## Running the API
 
 ```powershell
 uvicorn api.main:app --reload
 ```
 
-Call the endpoint:
+Endpoint:
 
-```http
+```text
 POST /api/v1/agent/run
-Content-Type: application/json
 ```
 
 Example request:
@@ -191,57 +177,33 @@ Example response shape:
 }
 ```
 
-Generated model wording and the number of trace entries vary with the request and model output. The route delegates to the composition-root Agent and does not implement orchestration.
+The route delegates to `Agent.run()` and contains no orchestration logic.
 
-## 9. Running Tests
+## Example Scenarios
 
-Run the complete automated test suite:
-
-```powershell
-python -m pytest -q
-```
-
-Verified result: **54 passed**.
-
-The tests cover planning validation, tools, RAG hardening, failure/replanning, sessions, API behavior, observability, and contract-level behavior.
-
-## 10. Running Evaluation
-
-Run the standalone system evaluation suite:
-
-```powershell
-python -m evaluation
-```
-
-Verified result: **44/44 cases passed**, **100% pass rate**.
-
-The report includes total cases, passed/failed counts, pass rate, category results, and failure details. Evaluation cases use deterministic doubles so system behavior can be reproduced without relying on nondeterministic model wording.
-
-## 11. Example Scenarios
-
-### Simple retrieval
+### Retrieval
 
 ```text
 What is EC2?
 ```
 
-Planner creates a retrieval task. RAG returns scored context, and the response synthesizer generates a grounded answer.
+The Planner creates a retrieval task, RAG returns scored context, and the response is synthesized from that context.
 
-### Tool execution
+### Tool
 
 ```text
 Calculate 24 * 7
 ```
 
-Planner creates a calculator task. `ToolRegistry` dispatches to `CalculatorTool`, which returns `168`.
+CalculatorTool returns `168` through ToolRegistry.
 
-### Multi-task retrieval and calculator
+### Multi-task
 
 ```text
 What is EC2 and calculate 24 * 7
 ```
 
-Planner returns two sequential tasks: retrieval followed by calculator execution. Their observations are preserved in the final trace.
+The Planner creates sequential retrieval and calculator tasks. Their observations remain in the response trace.
 
 ### Failure and replanning
 
@@ -249,7 +211,7 @@ Planner returns two sequential tasks: retrieval followed by calculator execution
 Calculate abc
 ```
 
-The calculator returns a controlled failure. Observer emits a failed observation, DecisionMaker requests replanning, and the Agent retries within its bounded retry limit.
+The calculator fails in a controlled way; Observer and DecisionMaker route the request through bounded replanning.
 
 ### Session follow-up
 
@@ -261,7 +223,7 @@ Request 2, session_id = demo-session:
 What about its pricing?
 ```
 
-The second request receives bounded prior conversation context. A different `session_id` does not receive that context.
+The second request receives bounded prior context. A different session ID does not.
 
 ### API request
 
@@ -273,51 +235,62 @@ Invoke-RestMethod `
   -Body '{"query":"Calculate 24 * 7","session_id":"demo-session"}'
 ```
 
-## 12. Observability
+## Observability
 
-Task execution logs expose these structured fields:
+Task logs expose:
 
-- `request_id`: identifier for the current Agent request.
-- `session_id`: optional conversation identifier.
-- `task_id`: identifier of the task being executed.
-- `capability`: `retrieval`, `tool`, or `model`.
-- `execution_success`: whether capability execution succeeded.
-- `execution_duration_ms`: measured execution duration in milliseconds.
+- `request_id`
+- `session_id`
+- `task_id`
+- `capability`
+- `execution_success`
+- `execution_duration_ms`
 
-The AgentResponse also preserves the structured observation trace for the request. The API exposes that trace in serialized form.
+`AgentResponse.trace` preserves structured observations for the request, and the API serializes that trace.
 
-## 13. Testing and Evaluation Results
+## Tests
 
-| Area | Verified result |
-|---|---:|
-| Unit/integration tests | **54 passing** |
-| System evaluation | **44/44 passing** |
-| Evaluation pass rate | **100%** |
+Run the complete test suite:
 
-## 14. Production Limitations
+```powershell
+python -m pytest -q
+```
 
-The current milestone intentionally remains a local prototype in several areas:
+Verified result: **56 passed**.
 
-- Session state is in-memory and is lost on process restart.
-- Execution and model generation are synchronous.
-- The API has no authentication or authorization.
+Run the system evaluation suite:
+
+```powershell
+python -m evaluation
+```
+
+Verified result: **44/44 passed**, **100% pass rate**.
+
+The evaluation suite reports total, passed, failed, pass rate, category-level results, and failure details. It uses deterministic doubles and does not make real model API calls.
+
+## Production Limitations
+
+- Session state is in-memory and lost on process restart.
+- Execution and generation are synchronous.
+- No authentication or authorization is implemented.
 - The FAISS RAG index is built in memory and is not persistent.
-- There is no distributed tracing backend.
-- Evaluation results are not stored historically.
+- No distributed tracing backend is configured.
+- Evaluation history is not persisted.
 - Tools do not expose formal argument schemas.
 - Evaluation uses deterministic doubles rather than live production models.
 - Model and embedding initialization has significant startup cost.
-- The calculator is a prototype restricted-expression evaluator, not a production sandbox.
+- Mistral API availability, latency, quotas, and costs are external dependencies.
+- Qwen remains a local fallback but requires its adapter/checkpoint assets.
 
-## 15. Future Roadmap
-
-See [docs/ROADMAP.md](docs/ROADMAP.md) for the current roadmap. Future work includes persistent storage, DAG planning, multi-agent orchestration, expanded tools, asynchronous execution, and additional model backends. Those capabilities are not part of the current implementation.
-
-## 16. Design Principles
+## Design Principles
 
 - **Separation of concerns:** orchestration, planning, execution, observation, decision, and synthesis have distinct owners.
 - **Contract-first design:** components communicate through explicit dataclasses and protocols.
 - **Dependency injection:** concrete providers and capabilities are wired in `core/composition.py`.
 - **Domain-agnostic core:** domain knowledge belongs in documents, tools, or model/configuration layers rather than the Agent loop.
-- **Vertical-slice development:** capabilities are implemented and tested across their full path before moving to the next slice.
-- **Minimal abstractions:** new abstractions are introduced only when they solve a concrete architectural need.
+- **Vertical-slice development:** capabilities are implemented and tested across their full path.
+- **Minimal abstractions:** introduce abstractions only for concrete needs.
+
+## Future Roadmap
+
+See [docs/ROADMAP.md](docs/ROADMAP.md) for planned work such as persistent storage, DAG planning, multi-agent orchestration, expanded tools, asynchronous execution, and additional model backends. Those are not current capabilities.

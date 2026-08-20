@@ -1,6 +1,9 @@
+import os
+
 from rag.pipeline import RAGPipeline
 
 from core.model_gateway.gateway import ModelGateway
+from models.providers.mistral import MistralProvider
 from models.providers.qwen import QwenProvider
 
 from core.tools.registry import ToolRegistry
@@ -24,10 +27,35 @@ def create_agent():
     # Model
     # -------------------------
 
-    provider = QwenProvider(
-        model_name="Qwen/Qwen2.5-0.5B-Instruct",
-        adapter_path="models/checkpoints",
-    )
+    provider_name = os.getenv(
+        "MODEL_PROVIDER",
+        "mistral",
+    ).lower()
+
+    if provider_name == "mistral":
+
+        provider = MistralProvider(
+            model_name=os.getenv(
+                "MISTRAL_MODEL",
+                "mistral-small-latest",
+            )
+        )
+
+    elif provider_name == "qwen":
+
+        provider = QwenProvider(
+            model_name=os.getenv(
+                "QWEN_MODEL",
+                "Qwen/Qwen2.5-0.5B-Instruct",
+            ),
+            adapter_path="models/checkpoints",
+        )
+
+    else:
+
+        raise ValueError(
+            f"Unsupported MODEL_PROVIDER: {provider_name}"
+        )
 
     model_gateway = ModelGateway(
         provider=provider

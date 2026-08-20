@@ -94,7 +94,10 @@ class EvaluationGateway:
     def generate(self, prompt: str, **kwargs) -> str:
         self.prompts.append(prompt)
 
-        if "planning component for an AI agent" in prompt:
+        if (
+            "planning component for an AI agent" in prompt
+            or "top-level object MUST have this shape" in prompt
+        ):
             for query, structured_plan in self.plans.items():
                 if f"User request:\n{query}" in prompt:
                     return json.dumps(structured_plan)
