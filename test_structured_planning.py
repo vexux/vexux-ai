@@ -150,6 +150,26 @@ def test_unknown_capability_is_rejected():
         planner_for(response).create_plan("Query the database")
 
 
+def test_pipe_separated_capability_is_rejected():
+    response = plan(task(
+        "task-1",
+        "retrieval|tool|ec2",
+        {"query": "EC2"},
+    ))
+
+    with pytest.raises(ValueError, match="unknown capability"):
+        planner_for(response).create_plan("what is ec2")
+
+
+def test_planning_prompt_lists_capabilities_without_pipe_placeholder():
+    gateway = MockGateway(plan(task("task-1", "retrieval", {"query": "EC2"})))
+    Planner(gateway, registry()).create_plan("what is ec2")
+
+    prompt = gateway.prompts[0]
+    assert '"capability": "retrieval"' in prompt
+    assert 'retrieval|tool|model' not in prompt
+
+
 def test_execution_manager_unknown_capability_is_controlled():
     manager = ExecutionManager(tool_registry=registry())
 

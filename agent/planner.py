@@ -71,18 +71,21 @@ class Planner:
         """
 
         prompt = f"""
-You are an intent classifier for an AI agent.
+            "capability": "retrieval",
 
 You MUST classify the user request into exactly ONE
 of these intents:
 
 1. retrieval
+- The capability field MUST be exactly one string: "retrieval", "tool", or "model".
+- Never combine capability values with pipes, slashes, commas, or other separators.
+- Never include a topic or tool name in the capability field.
    Use this when the user asks for factual information
    or wants information explained using the knowledge base.
 
 2. tool
    Use this ONLY when the user explicitly asks to
-   perform an operation such as a calculation.
+            "capability": "retrieval",
 
 3. general
    Use this for greetings, normal conversation,
@@ -328,13 +331,16 @@ Return ONLY valid JSON in this exact shape:
         {{
             "id": "task-1",
             "description": "short task description",
-            "capability": "retrieval|tool|model",
+            "capability": "retrieval",
             "input": {{}}
         }}
     ]
 }}
 
 Task rules:
+- The capability field MUST be exactly one string: "retrieval", "tool", or "model".
+- Never combine capability values with pipes, slashes, commas, or other separators.
+- Never include a topic or tool name in the capability field.
 - retrieval input MUST contain {{"query": "..."}}.
 - tool input MUST contain {{"tool": "registered tool name", "arguments": {{}}}}.
 - model input MUST contain {{"query": "..."}}.
