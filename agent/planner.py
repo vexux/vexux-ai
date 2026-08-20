@@ -311,7 +311,9 @@ Field rules:
 You are a structured recovery-planning component for an AI agent.
 
 Create exactly one recovery task for the failed task below.
+CRITICAL: The recovered task MUST have the exact same task ID as the failed task.
 Do not recreate tasks that already completed successfully.
+Do not generate a new task ID.
 
 Original request:
 {query}
@@ -319,8 +321,10 @@ Original request:
 Previous conversation context:
 {previous_conversation}
 
-Failed task ID:
+Failed task ID (YOU MUST PRESERVE THIS EXACT ID):
 {failed_task.id}
+
+Failed task details:
 {failed_task.description}
 {failed_task.input}
 
@@ -344,10 +348,14 @@ Return ONLY valid JSON with exactly one task in this canonical shape:
   ]
 }}
 
-The capability MUST be exactly one of "retrieval", "tool", or "model".
-Never combine capability values. Retrieval/model tasks require input.query
-as a non-empty string. Tool tasks require a registered input.tool and an
-object input.arguments. Preserve user expressions exactly.
+CRITICAL REQUIREMENTS:
+- The task ID "{failed_task.id}" in the JSON output MUST be exactly this value.
+- Do not modify, replace, or regenerate the task ID.
+- The capability MUST be exactly one of "retrieval", "tool", or "model".
+- Never combine capability values.
+- Retrieval/model tasks require input.query as a non-empty string.
+- Tool tasks require a registered input.tool and an object input.arguments.
+- Preserve user expressions exactly.
 """.strip()
 
         response = self.model_gateway.generate(

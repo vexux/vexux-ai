@@ -95,7 +95,8 @@ class EvaluationGateway:
         self.prompts.append(prompt)
 
         if (
-            "planning component for an AI agent" in prompt
+            ("planning component for an AI agent" in prompt
+            and "recovery" not in prompt)
             or "top-level object MUST have this shape" in prompt
         ):
             for query, structured_plan in self.plans.items():
@@ -103,9 +104,9 @@ class EvaluationGateway:
                     return json.dumps(structured_plan)
             raise AssertionError("No deterministic plan registered for prompt")
 
-        if "You are replanning an agent task" in prompt:
+        if "structured recovery-planning component" in prompt:
             if self.replan_mode == "recover_to_model":
-                task_id = prompt.split("Failed task ID:\n", 1)[1].splitlines()[0]
+                task_id = prompt.split("Failed task ID (YOU MUST PRESERVE THIS EXACT ID):\n", 1)[1].splitlines()[0]
                 return json.dumps({
                     "tasks": [{
                         "id": task_id,
@@ -115,7 +116,7 @@ class EvaluationGateway:
                     }]
                 })
             if self.replan_mode == "repeat_failure":
-                task_id = prompt.split("Failed task ID:\n", 1)[1].splitlines()[0]
+                task_id = prompt.split("Failed task ID (YOU MUST PRESERVE THIS EXACT ID):\n", 1)[1].splitlines()[0]
                 return json.dumps({
                     "tasks": [{
                         "id": task_id,

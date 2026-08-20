@@ -200,7 +200,7 @@ def test_first_task_fails_and_recovers():
     gateway.set_response_for("fail_query", "Recovered general answer.")
     # Replan for task-1: switch to general knowledge response
     gateway.set_response_for(
-        "Failed task ID:\ntask-1",
+        "Failed task ID (YOU MUST PRESERVE THIS EXACT ID):\ntask-1",
         plan_response([model_task("task-1", "fail_query")]),
     )
     gateway.set_response_for(
@@ -241,7 +241,7 @@ def test_second_task_fails_after_first_succeeds():
         ]),
     )
     gateway.set_response_for(
-        "Failed task ID:\ntask-2",
+        "Failed task ID (YOU MUST PRESERVE THIS EXACT ID):\ntask-2",
         plan_response([model_task("task-2", "calculate abc")]),
     )
     gateway.set_response_for("The agent executed multiple tasks", "EC2 provides compute capacity. 'abc' is not a valid arithmetic expression.")
@@ -307,7 +307,7 @@ def test_successful_tasks_are_not_unnecessarily_repeated():
         ]),
     )
     gateway.set_response_for(
-        "Failed task ID:\ntask-2",
+        "Failed task ID (YOU MUST PRESERVE THIS EXACT ID):\ntask-2",
         plan_response([model_task("task-2", "calculate abc")]),
     )
 
@@ -334,7 +334,7 @@ def test_replanning_stops_after_retry_limit():
         ]),
     )
     gateway.set_response_for(
-        "Failed task ID:\ntask-2",
+        "Failed task ID (YOU MUST PRESERVE THIS EXACT ID):\ntask-2",
         plan_response([calculator_task("task-2", "bad_math")]),
     )
 
@@ -364,7 +364,7 @@ def test_final_response_preserves_successful_results():
         ]),
     )
     gateway.set_response_for(
-        "Failed task ID:\ntask-2",
+        "Failed task ID (YOU MUST PRESERVE THIS EXACT ID):\ntask-2",
         plan_response([model_task("task-2", "calculate abc")]),
     )
     gateway.set_response_for("The agent executed multiple tasks", "Amazon EC2 provides virtual servers. Note: 'abc' cannot be calculated.")

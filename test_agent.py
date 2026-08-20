@@ -6,7 +6,9 @@ def main():
     agent = create_agent()
 
     queries = [
-    
+        "What is EC2?",
+        "Calculate 24 * 7",
+        "What is EC2 and calculate 24 * 7",
         "What is EC2 and calculate abc",
     ]
 
@@ -36,6 +38,11 @@ def main():
         print(
             "Error:",
             result.error
+        )
+        
+        print(
+            "Trace length:",
+            len(result.trace)
         )
 
 
