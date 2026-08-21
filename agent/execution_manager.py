@@ -49,7 +49,8 @@ class ExecutionManager:
             if capability == "model":
 
                 return self._execute_model(
-                    task
+                    task,
+                    context.conversation_history,
                 )
 
             return ExecutionResult(
@@ -189,6 +190,7 @@ class ExecutionManager:
     def _execute_model(
         self,
         task: Task,
+        conversation_history=None,
     ) -> ExecutionResult:
 
         if self.model_gateway is None:
@@ -198,7 +200,20 @@ class ExecutionManager:
                 error="Model capability unavailable",
             )
 
-        prompt = task.input["query"]
+        query = task.input["query"]
+        conversation_history = conversation_history or []
+
+        previous_conversation = "\n".join(
+            f"User: {turn['query']}\nAssistant: {turn['response']}"
+            for turn in conversation_history
+        ) or "No previous conversation context."
+
+        prompt = f"""
+{query}
+
+Previous conversation context:
+{previous_conversation}
+""".strip()
 
         result = self.model_gateway.generate(
             prompt

@@ -4,46 +4,38 @@ from core.composition import create_agent
 def main():
 
     agent = create_agent()
+    session_id = "terminal-session"
 
-    queries = [
-        "What is EC2?",
-        "Calculate 24 * 7",
-        "What is EC2 and calculate 24 * 7",
-        "What is EC2 and calculate abc",
-    ]
+    print("=" * 60)
+    print("Vexux AI Interactive Terminal")
+    print("Type 'exit' or 'quit' to stop.")
+    print("=" * 60)
 
-    for query in queries:
+    while True:
 
-        print("=" * 60)
+        query = input("\nYou: ").strip()
 
-        print("User:")
-        print(query)
+        if query.lower() in {"exit", "quit"}:
+            print("Exiting...")
+            break
+
+        if not query:
+            continue
 
         result = agent.run(
-            query
+            query,
+            session_id=session_id
         )
 
-        print("\nResult:")
+        print("\nAgent:")
+        print(result.output)
 
-        print(
-            "Success:",
-            result.success
-        )
+        if result.error:
+            print("\nError:")
+            print(result.error)
 
-        print(
-            "Output:",
-            result.output
-        )
-
-        print(
-            "Error:",
-            result.error
-        )
-        
-        print(
-            "Trace length:",
-            len(result.trace)
-        )
+        print("\nSuccess:", result.success)
+        print("Trace length:", len(result.trace))
 
 
 if __name__ == "__main__":

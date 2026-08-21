@@ -170,3 +170,58 @@ def test_agent_stores_and_reuses_session_context():
     assert second.output == "Second final answer."
     assert "What is EC2?" in gateway.prompts[2]
     assert "EC2 is compute." in gateway.prompts[2]
+
+
+def test_agent_model_task_has_conversation_context():
+    """Regression test: Model tasks should have access to previous conversation context.
+
+    Turn 1: User says "My favorite language for this conversation is Python."
+    Turn 2: User asks "What language did I just say?"
+
+    Expected: The agent should answer "Python" because the model task should have
+    access to the conversation history.
+
+    This test verifies that the model task execution receives the conversation context.
+    """
+    gateway = Gateway([
+        plan("My favorite language for this conversation is Python."),
+        "Python is a great choice.",
+        plan("What language did I just say?"),
+        "Python",
+        "You said Python.",
+    ])
+    manager = ContextManager()
+    agent = build_agent(gateway, manager)
+
+    # Turn 1: User states their favorite language
+    first = agent.run(
+        "My favorite language for this conversation is Python.",
+        session_id="terminal-session"
+    )
+    assert first.success is True
+
+    # Turn 2: User asks what language they said
+    second = agent.run(
+        "What language did I just say?",
+        session_id="terminal-session"
+    )
+    assert second.success is True
+
+    # Find the model task prompt for turn 2
+    # We know turn 2 model task should reference previous conversation
+    model_turn2_prompt = None
+    for prompt in gateway.prompts:
+        if "What language did I just say?" in prompt and \
+           "You are producing the final response" not in prompt and \
+           "structured planning" not in prompt.lower():
+            # This should be the model task prompt for turn 2
+            model_turn2_prompt = prompt
+            break
+
+    assert model_turn2_prompt is not None, "Could not find model task prompt for turn 2"
+
+    # THE KEY TEST: The model task prompt should contain the previous conversation
+    # This is the bug - model tasks don't receive conversation context
+    assert "My favorite language" in model_turn2_prompt or \
+           "Python is a great choice" in model_turn2_prompt, \
+           f"Model task for turn 2 should have conversation context. Prompt: {model_turn2_prompt}"
