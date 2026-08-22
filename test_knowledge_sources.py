@@ -10,6 +10,7 @@ from agent.planner import Planner
 from agent.response_synthesizer import ResponseSynthesizer
 from core.context.context_manager import ContextManager
 from core.contracts.execution import AgentContext, Task
+from core.contracts.observation import Observation
 from core.knowledge.registry import KnowledgeSourceRegistry
 from core.tools.registry import ToolRegistry
 from rag.knowledge_source import RAGKnowledgeSource
@@ -88,7 +89,7 @@ def test_rag_knowledge_source_delegates_to_pipeline_retrieve():
     assert source.retrieve("Python", k=2) == [{"score": 0.9, "document": "Python"}]
     assert pipeline.calls == [("EC2", None), ("Python", 2)]
     assert source.name == "rag"
-    assert source.capabilities == ["retrieval"]
+    assert source.capabilities == ["semantic_search", "document_retrieval"]
 
 
 def test_execution_manager_uses_registered_knowledge_source():
@@ -107,6 +108,7 @@ def test_execution_manager_uses_registered_knowledge_source():
         "query": "What is EC2?",
         "results": [{"score": 0.9, "document": "EC2"}],
         "context_found": True,
+        "source": "fake",
     }
     assert source.calls == [("What is EC2?", 1)]
 
@@ -161,7 +163,8 @@ def test_agent_retrieval_task_uses_default_registered_source():
     response = agent.run("What is EC2?")
 
     assert response.success is True
-    assert response.output == "Grounded EC2 answer"
+    assert response.output.startswith("Grounded EC2 answer")
+    assert "- fake" in response.output
     assert source.calls == [("What is EC2?", None)]
 
 
@@ -182,3 +185,44 @@ def test_second_source_can_be_selected_without_core_source_logic():
     assert result.output["results"] == [{"document": "secondary"}]
     assert primary.calls == []
     assert secondary.calls == [("query", None)]
+
+
+def test_planner_validates_explicit_registered_knowledge_source():
+    source = FakeKnowledgeSource("secondary")
+    sources = KnowledgeSourceRegistry()
+    sources.register(source)
+
+    class Gateway:
+        def __init__(self, response):
+            self.response = response
+            self.prompts = []
+
+        def generate(self, prompt, **kwargs):
+            self.prompts.append(prompt)
+            return self.response
+
+    response = json.dumps({"tasks": [{
+        "id": "task-1", "description": "Retrieve", "capability": "retrieval",
+        "input": {"query": "query", "source": "secondary"},
+    }]})
+    gateway = Gateway(response)
+    plan = Planner(gateway, ToolRegistry(), sources).create_plan("query")
+
+    assert plan.tasks[0].input["source"] == "secondary"
+    assert '"name": "secondary"' in gateway.prompts[0]
+
+
+def test_grounded_retrieval_response_has_source_attribution():
+    class Gateway:
+        def generate(self, prompt, **kwargs):
+            return "Grounded answer"
+
+    response = ResponseSynthesizer(Gateway()).synthesize(
+        "What is EC2?",
+        [Observation(success=True, output={
+            "query": "What is EC2?", "results": [{"document": "EC2 context"}],
+            "context_found": True, "source": "rag",
+        })],
+    )
+
+    assert response == "Grounded answer\n\nSources:\n- rag"

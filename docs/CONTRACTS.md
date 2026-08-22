@@ -229,7 +229,7 @@ class KnowledgeSourceContract(Protocol):
   - `name -> str`: Stable source identifier.
   - `description -> str`: Human-readable source summary.
   - `capabilities -> List[str]`: Operations offered by the source.
-  - `retrieve(query, k)`: Retrieves source-specific knowledge for the existing retrieval capability.
+  - `retrieve(query, k)`: Retrieves source-specific knowledge for the existing retrieval capability; successful registry retrievals retain the existing structured result fields and add the selected `source` name.
 - **Implemented By**: `RAGKnowledgeSource` (`rag/knowledge_source.py`).
 - **Managed By**: `KnowledgeSourceRegistry` (`core/knowledge/registry.py`).
 - **Purpose**: Allows future knowledge implementations to be registered without changing the Agent control loop.

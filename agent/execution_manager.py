@@ -180,9 +180,10 @@ class ExecutionManager:
                     "query": query,
                     "results": [],
                     "context_found": False,
+                    "source": source.name,
                 },
                 error="No sufficiently relevant retrieval context found",
-                metadata={"capability": "retrieval"},
+                metadata={"capability": "retrieval", "source": source.name},
             )
 
         return ExecutionResult(
@@ -191,8 +192,9 @@ class ExecutionManager:
                 "query": query,
                 "results": retrieved,
                 "context_found": True,
+                "source": source.name,
             },
-            metadata={"capability": "retrieval"},
+            metadata={"capability": "retrieval", "source": source.name},
         )
 
     def _execute_tool(

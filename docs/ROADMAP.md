@@ -36,6 +36,7 @@ Evaluation suite
 - `RAGPipeline.retrieve()` with configurable top-k and similarity threshold handling.
 - Controlled no-result and retrieval-exception behavior through `ExecutionManager`.
 - `RAGKnowledgeSource` and `KnowledgeSourceRegistry` provide a domain-agnostic retrieval seam; only the RAG source is implemented.
+- Retrieval tasks can select registered sources and grounded responses attribute the actual selected source; advanced semantic routing remains future work.
 
 ### 2.4 Sessions, API, and Observability
 - Bounded in-memory conversation history isolated by `session_id`.

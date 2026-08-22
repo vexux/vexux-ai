@@ -110,6 +110,7 @@ def create_agent():
     planner = Planner(
         model_gateway=model_gateway,
         tool_registry=tool_registry,
+        knowledge_source_registry=knowledge_sources,
     )
 
     # -------------------------

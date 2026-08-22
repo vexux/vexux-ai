@@ -25,7 +25,7 @@ class RAGKnowledgeSource:
     @property
     def capabilities(self) -> List[str]:
 
-        return ["retrieval"]
+        return ["semantic_search", "document_retrieval"]
 
     def retrieve(
         self,

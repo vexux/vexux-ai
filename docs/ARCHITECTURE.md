@@ -84,7 +84,7 @@ Houses the domain-specific models, data processors, vector indices, training loo
 | **Model Gateway** | **IMPLEMENTED** | `core/model_gateway/gateway.py` — wraps `ModelProviderContract`. |
 | **Tool Registry & Calculator Tool** | **IMPLEMENTED** | `core/tools/registry.py`, `core/tools/calculator.py` — registered tool execution. |
 | **Local RAG Pipeline** | **IMPLEMENTED** | `rag/` — scored retrieval through `RAGPipeline.retrieve()` with configurable top-k and relevance handling. |
-| **Knowledge Source Abstraction** | **IMPLEMENTED** | `KnowledgeSourceRegistry` dispatches the current RAG source through `RAGKnowledgeSource`; multi-source planning is not implemented. |
+| **Knowledge Source Abstraction** | **IMPLEMENTED** | `KnowledgeSourceRegistry` dispatches the current RAG source through `RAGKnowledgeSource`; retrieval tasks may select registered sources and grounded responses attribute the selected source. |
 | **Qwen 2.5 SLM Provider (LoRA)** | **IMPLEMENTED** | `models/providers/qwen.py` — loads `Qwen/Qwen2.5-0.5B-Instruct` with PEFT adapter from `models/checkpoints`. |
 | **QLoRA Fine-Tuning Pipeline** | **IMPLEMENTED** | `training/train.py`, `training/factory.py`, `experiments/qlora_train.py`. |
 | **Contracts (`execution`, `observation`, `response`, `capabilities`)** | **IMPLEMENTED** | `core/contracts/` — dataclasses and protocols. |
@@ -195,7 +195,7 @@ sequenceDiagram
 - **Responsibilities**:
   - `create_plan(query, conversation_context)`: Prompts the SLM for a structured JSON plan and validates every task before creating `Plan` and `Task` objects.
   - `replan(query, observation, failed_task, conversation_context)`: Generates and validates a single recovery task scoped specifically to `failed_task`.
-  - Tool metadata and input schemas are obtained dynamically from `ToolRegistry`; individual tool implementations are not embedded in the Planner.
+  - Tool metadata and input schemas are obtained dynamically from `ToolRegistry`; registered knowledge-source metadata is included without embedding individual source implementations.
 
 ### 5.3 Execution Manager (`agent/execution_manager.py`)
 - **Class**: `ExecutionManager`

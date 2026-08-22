@@ -16,16 +16,28 @@ class Planner:
         self,
         model_gateway,
         tool_registry: ToolRegistry,
+        knowledge_source_registry=None,
     ):
 
         self.model_gateway = model_gateway
         self.tool_registry = tool_registry
+
+        self.knowledge_source_registry = knowledge_source_registry
 
     def _tool_descriptions(self) -> str:
 
         tool_metadata = self.tool_registry.describe_tools()
 
         return json.dumps(tool_metadata, indent=2) if tool_metadata else "No tools are registered."
+
+    def _knowledge_source_descriptions(self) -> str:
+
+        if self.knowledge_source_registry is None:
+            return "No knowledge sources are registered."
+
+        sources = self.knowledge_source_registry.describe_sources()
+
+        return json.dumps(sources, indent=2) if sources else "No knowledge sources are registered."
 
     def understand_intent(
         self,
@@ -104,6 +116,9 @@ Previous conversation context:
 Registered tools:
 {self._tool_descriptions()}
 
+Registered knowledge sources:
+{self._knowledge_source_descriptions()}
+
 Return ONLY valid JSON. The top-level object MUST have this shape:
 
 {{
@@ -168,6 +183,7 @@ Multi-task example:
 
 Field rules:
 - Retrieval input MUST contain a string field named "query".
+- Retrieval input may include "source" only when it exactly matches a registered knowledge source; omit it to use the default source.
 - Model input MUST contain a string field named "query".
 - Tool input MUST contain "tool" equal to a registered tool name and an object field named "arguments".
 - Put topics and user text in input.query, never in capability.
@@ -266,6 +282,24 @@ Field rules:
                 raise ValueError(
                     f"Task {index} requires a non-empty string 'query' input."
                 )
+
+        if capability == "retrieval" and "source" in task_input:
+            source_name = task_input["source"]
+
+            if not isinstance(source_name, str) or not source_name:
+                raise ValueError(
+                    f"Task {index} requires a valid knowledge source name."
+                )
+
+            if self.knowledge_source_registry is None:
+                raise ValueError("Knowledge source selection is unavailable.")
+
+            try:
+                self.knowledge_source_registry.get(source_name)
+            except KeyError as exc:
+                raise ValueError(
+                    f"Task {index} references unknown knowledge source: {source_name}"
+                ) from exc
 
         if capability == "tool":
             tool_name = task_input.get("tool")

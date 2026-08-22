@@ -59,6 +59,7 @@ flowchart TD
 - Calculator, string formatter, and text analyzer tools.
 - RAG retrieval with configurable top-k and similarity-threshold handling.
 - Domain-agnostic `KnowledgeSourceRegistry` with the existing RAG implementation registered through an adapter.
+- Retrieval tasks may explicitly select a registered knowledge source; grounded retrieval answers include deterministic source attribution.
 - Controlled no-result and capability failure behavior.
 - Grounded response synthesis for retrieval and multi-task results.
 - Bounded in-memory conversation state by `session_id`.

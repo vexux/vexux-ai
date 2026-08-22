@@ -50,6 +50,8 @@ class ResponseSynthesizer:
             in enumerate(successful_outputs)
         )
 
+        source_attribution = self._source_attribution(successful_outputs)
+
         prompt = f"""
 You are producing the final response for an AI agent.
 
@@ -69,6 +71,7 @@ user request using the task results.
 IMPORTANT:
 - Use the provided results.
 - For retrieval results, answer only from the provided retrieved context.
+- Treat each structured retrieval result as grounded context from its listed source.
 - Do not invent additional facts.
 - Preserve numerical results exactly.
 - Do not mention internal tasks, observations, planning,
@@ -78,8 +81,27 @@ IMPORTANT:
 Final answer:
 """
 
-        return self.model_gateway.generate(
+        answer = self.model_gateway.generate(
             prompt,
             max_new_tokens=300,
             do_sample=False,
         )
+
+        if not source_attribution:
+            return answer
+
+        return f"{answer}\n\nSources:\n{source_attribution}"
+
+    def _source_attribution(self, outputs: list) -> str:
+
+        sources = []
+
+        for output in outputs:
+            if not isinstance(output, dict) or not output.get("context_found"):
+                continue
+
+            source = output.get("source")
+            if isinstance(source, str) and source and source not in sources:
+                sources.append(source)
+
+        return "\n".join(f"- {source}" for source in sources)
