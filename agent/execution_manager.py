@@ -14,6 +14,7 @@ class ExecutionManager:
         retrieval=None,
         tool_registry=None,
         model_gateway=None,
+        knowledge_source_registry=None,
     ):
 
         self.retrieval = retrieval
@@ -21,6 +22,8 @@ class ExecutionManager:
         self.tool_registry = tool_registry
 
         self.model_gateway = model_gateway
+
+        self.knowledge_source_registry = knowledge_source_registry
 
     def execute(
         self,
@@ -72,6 +75,17 @@ class ExecutionManager:
         self,
         task: Task,
     ) -> ExecutionResult:
+
+        if self.knowledge_source_registry is not None:
+
+            source = self.knowledge_source_registry.get(
+                task.input.get("source")
+            )
+
+            return self._execute_retrieval_source(
+                source,
+                task,
+            )
 
         if self.retrieval is None:
 
@@ -131,6 +145,54 @@ class ExecutionManager:
         return ExecutionResult(
             success=True,
             output=result,
+        )
+
+    def _execute_retrieval_source(
+        self,
+        source,
+        task: Task,
+    ) -> ExecutionResult:
+
+        query = task.input["query"]
+        top_k = task.input.get("top_k")
+
+        if top_k is not None and (
+            not isinstance(top_k, int)
+            or isinstance(top_k, bool)
+            or top_k <= 0
+        ):
+
+            return ExecutionResult(
+                success=False,
+                error="Retrieval top_k must be a positive integer",
+            )
+
+        retrieved = (
+            source.retrieve(query, k=top_k)
+            if top_k is not None
+            else source.retrieve(query)
+        )
+
+        if not retrieved:
+            return ExecutionResult(
+                success=False,
+                output={
+                    "query": query,
+                    "results": [],
+                    "context_found": False,
+                },
+                error="No sufficiently relevant retrieval context found",
+                metadata={"capability": "retrieval"},
+            )
+
+        return ExecutionResult(
+            success=True,
+            output={
+                "query": query,
+                "results": retrieved,
+                "context_found": True,
+            },
+            metadata={"capability": "retrieval"},
         )
 
     def _execute_tool(

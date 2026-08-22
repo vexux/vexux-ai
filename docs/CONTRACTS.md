@@ -212,7 +212,31 @@ class RetrievalContract(Protocol):
 
 ---
 
-### 4.3 `ToolContract` (Protocol)
+### 4.3 `KnowledgeSourceContract` (Protocol)
+Domain-agnostic interface for registered knowledge providers.
+
+```python
+class KnowledgeSourceContract(Protocol):
+    @property
+    def name(self) -> str: ...
+    @property
+    def description(self) -> str: ...
+    @property
+    def capabilities(self) -> List[str]: ...
+    def retrieve(query: str, k: int | None = None) -> List[Dict[str, Any]]: ...
+```
+- **Members**:
+  - `name -> str`: Stable source identifier.
+  - `description -> str`: Human-readable source summary.
+  - `capabilities -> List[str]`: Operations offered by the source.
+  - `retrieve(query, k)`: Retrieves source-specific knowledge for the existing retrieval capability.
+- **Implemented By**: `RAGKnowledgeSource` (`rag/knowledge_source.py`).
+- **Managed By**: `KnowledgeSourceRegistry` (`core/knowledge/registry.py`).
+- **Purpose**: Allows future knowledge implementations to be registered without changing the Agent control loop.
+
+---
+
+### 4.4 `ToolContract` (Protocol)
 Structural interface for agent-invocable tools.
 
 ```python
@@ -236,7 +260,7 @@ class ToolContract(Protocol):
 
 ---
 
-### 4.4 `MemoryContract` (Protocol)
+### 4.5 `MemoryContract` (Protocol)
 Structural interface for memory stores.
 
 ```python

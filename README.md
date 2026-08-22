@@ -14,7 +14,7 @@ API or local caller
     -> validated Plan / Task objects
     -> ExecutionManager
         -> ToolRegistry / tools
-        -> RAGPipeline.retrieve()
+        -> KnowledgeSourceRegistry -> RAGKnowledgeSource -> RAGPipeline.retrieve()
         -> ModelGateway
             -> MistralProvider (default)
             -> QwenProvider (local fallback)
@@ -37,7 +37,7 @@ flowchart TD
     Planner --> Plan[Validated Plan and Task objects]
     Plan --> Executor[ExecutionManager]
     Executor --> Tools[ToolRegistry and tools]
-    Executor --> RAG[RAGPipeline.retrieve]
+    Executor --> RAG[KnowledgeSourceRegistry -> RAGKnowledgeSource -> RAGPipeline.retrieve]
     Executor --> Model[ModelGateway model execution]
     Tools --> Result[ExecutionResult]
     RAG --> Result
@@ -58,6 +58,7 @@ flowchart TD
 - Generic `ToolRegistry` with dynamic tool discovery.
 - Calculator, string formatter, and text analyzer tools.
 - RAG retrieval with configurable top-k and similarity-threshold handling.
+- Domain-agnostic `KnowledgeSourceRegistry` with the existing RAG implementation registered through an adapter.
 - Controlled no-result and capability failure behavior.
 - Grounded response synthesis for retrieval and multi-task results.
 - Bounded in-memory conversation state by `session_id`.
@@ -70,7 +71,7 @@ flowchart TD
 agent/                    Agent orchestration, planning, dispatch, observation, decisions
 api/                      FastAPI application (`api/main.py`)
 core/                     Composition root, contracts, gateway, context, tools
-rag/                      Loading, chunking, embeddings, FAISS retrieval, prompting
+rag/                      Loading, chunking, embeddings, FAISS retrieval, prompting, RAG knowledge adapter
 models/                   Mistral/Qwen providers and local Qwen adapter checkpoints
 training/                 Training and inference utilities
 lora/                     LoRA adapter management
@@ -187,7 +188,7 @@ The route delegates to `Agent.run()` and contains no orchestration logic.
 What is EC2?
 ```
 
-The Planner creates a retrieval task, RAG returns scored context, and the response is synthesized from that context.
+The Planner creates a retrieval task, the default registered RAG knowledge source returns scored context, and the response is synthesized from that context. SQL, graph, API-documentation, and external knowledge sources are not implemented yet.
 
 ### Tool
 

@@ -302,6 +302,7 @@ def make_cases() -> list[EvaluationCase]:
     second_query = "What about its pricing?"
     session_plan = {"tasks": [structured_task("task-1", "Answer", "model", {"query": first_query})]}
     followup_plan = {"tasks": [structured_task("task-1", "Answer follow-up", "model", {"query": second_query})]}
+    previous_turn = f"User: {first_query}\nAssistant: EC2 context"
     def session_case():
         agent, gateway, _ = build_agent({first_query: session_plan, second_query: followup_plan}, model_outputs={first_query: "EC2 context", second_query: "Pricing context"}, context_manager=context_manager)
         assert agent.run(first_query, session_id="session-a").success
@@ -311,7 +312,7 @@ def make_cases() -> list[EvaluationCase]:
             prompt for prompt in gateway.prompts
             if f"User request:\n{second_query}" in prompt
         )
-        assert first_query in followup_prompt
+        assert previous_turn in followup_prompt
     cases.append(EvaluationCase("session-follow-up", "session", session_case))
 
     def isolation_case():
@@ -322,7 +323,7 @@ def make_cases() -> list[EvaluationCase]:
             prompt for prompt in gateway.prompts
             if f"User request:\n{second_query}" in prompt
         )
-        assert first_query not in followup_prompt
+        assert previous_turn not in followup_prompt
     cases.append(EvaluationCase("session-isolation", "session", isolation_case))
 
     api_cases = [

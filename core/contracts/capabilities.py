@@ -24,6 +24,28 @@ class RetrievalContract(Protocol):
         ...
 
 
+class KnowledgeSourceContract(Protocol):
+
+    @property
+    def name(self) -> str:
+        ...
+
+    @property
+    def description(self) -> str:
+        ...
+
+    @property
+    def capabilities(self) -> List[str]:
+        ...
+
+    def retrieve(
+        self,
+        query: str,
+        k: int | None = None,
+    ) -> List[Dict[str, Any]]:
+        ...
+
+
 class ToolContract(Protocol):
 
     @property

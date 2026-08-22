@@ -11,6 +11,8 @@ from core.tools.calculator import CalculatorTool
 from core.tools.string_formatter import StringFormatterTool
 from core.tools.text_analyzer import TextAnalyzerTool
 from core.context.context_manager import ContextManager
+from core.knowledge.registry import KnowledgeSourceRegistry
+from rag.knowledge_source import RAGKnowledgeSource
 
 from agent.execution_manager import ExecutionManager
 from agent.planner import Planner
@@ -67,6 +69,12 @@ def create_agent():
 
     rag = RAGPipeline()
 
+    knowledge_sources = KnowledgeSourceRegistry()
+
+    knowledge_sources.register(
+        RAGKnowledgeSource(rag)
+    )
+
     # -------------------------
     # Tools
     # -------------------------
@@ -90,9 +98,9 @@ def create_agent():
     # -------------------------
 
     execution_manager = ExecutionManager(
-        retrieval=rag,
         tool_registry=tool_registry,
         model_gateway=model_gateway,
+        knowledge_source_registry=knowledge_sources,
     )
 
     # -------------------------

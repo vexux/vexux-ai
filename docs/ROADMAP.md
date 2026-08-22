@@ -11,6 +11,7 @@ Structured planning          Test organization         Multi-Step DAG Plans
 Scoped replanning            Capability dispatch      Persistent storage
 Tool extensibility                                      Expanded tool ecosystem
 Hardened local RAG                                      Async/streaming execution
+Knowledge source abstraction                            SQL/API/graph knowledge sources
 Session conversation                                     Multi-backend inference
 FastAPI and observability
 Evaluation suite
@@ -34,6 +35,7 @@ Evaluation suite
 - File loader, sliding-window chunking, normalized embeddings, and FAISS vector search.
 - `RAGPipeline.retrieve()` with configurable top-k and similarity threshold handling.
 - Controlled no-result and retrieval-exception behavior through `ExecutionManager`.
+- `RAGKnowledgeSource` and `KnowledgeSourceRegistry` provide a domain-agnostic retrieval seam; only the RAG source is implemented.
 
 ### 2.4 Sessions, API, and Observability
 - Bounded in-memory conversation history isolated by `session_id`.
@@ -70,7 +72,11 @@ Evaluation suite
 ### 4.4 Expanded Tool Ecosystem
 - Sandboxed code execution, web/API tools, and structured database tools.
 
-### 4.5 Streaming and Asynchronous Execution
+### 4.5 Additional Knowledge Sources
+- SQL, knowledge graph, API documentation, and external knowledge implementations behind `KnowledgeSourceContract`.
+- Planner-based selection among multiple knowledge sources remains future work.
+
+### 4.6 Streaming and Asynchronous Execution
 - Non-blocking generation, streaming responses, and asynchronous task scheduling.
 
 ### 4.6 Multi-Backend Model Gateway

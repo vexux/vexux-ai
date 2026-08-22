@@ -84,6 +84,7 @@ Houses the domain-specific models, data processors, vector indices, training loo
 | **Model Gateway** | **IMPLEMENTED** | `core/model_gateway/gateway.py` — wraps `ModelProviderContract`. |
 | **Tool Registry & Calculator Tool** | **IMPLEMENTED** | `core/tools/registry.py`, `core/tools/calculator.py` — registered tool execution. |
 | **Local RAG Pipeline** | **IMPLEMENTED** | `rag/` — scored retrieval through `RAGPipeline.retrieve()` with configurable top-k and relevance handling. |
+| **Knowledge Source Abstraction** | **IMPLEMENTED** | `KnowledgeSourceRegistry` dispatches the current RAG source through `RAGKnowledgeSource`; multi-source planning is not implemented. |
 | **Qwen 2.5 SLM Provider (LoRA)** | **IMPLEMENTED** | `models/providers/qwen.py` — loads `Qwen/Qwen2.5-0.5B-Instruct` with PEFT adapter from `models/checkpoints`. |
 | **QLoRA Fine-Tuning Pipeline** | **IMPLEMENTED** | `training/train.py`, `training/factory.py`, `experiments/qlora_train.py`. |
 | **Contracts (`execution`, `observation`, `response`, `capabilities`)** | **IMPLEMENTED** | `core/contracts/` — dataclasses and protocols. |
@@ -138,7 +139,7 @@ sequenceDiagram
             Agent->>ExecMgr: execute(task, context)
 
             alt capability == "retrieval"
-                ExecMgr->>Capability: RAGPipeline.retrieve(query, top_k)
+                ExecMgr->>Capability: KnowledgeSourceRegistry.get(source).retrieve(query, top_k)
             else capability == "tool"
                 ExecMgr->>Capability: ToolRegistry.execute(tool_name, arguments)
             else capability == "model"
@@ -200,7 +201,7 @@ sequenceDiagram
 - **Class**: `ExecutionManager`
 - **Responsibilities**:
   - Inspects `task.metadata["capability"]`.
-  - Routes `retrieval` to `RAGPipeline.retrieve()` and returns structured query/results/context output.
+  - Routes `retrieval` through `KnowledgeSourceRegistry` when configured and returns the existing structured query/results/context output.
   - Routes `tool` to `ToolRegistry.execute()`.
   - Routes `model` to `ModelGateway.generate()`.
   - Wraps results and exceptions into an `ExecutionResult`.
@@ -250,10 +251,15 @@ sequenceDiagram
 - **`Retriever`**: Takes raw text queries, encodes them via `Embedder`, and searches `VectorStore`.
 - **`PromptBuilder`**: Constructs context-augmented prompts for answer generation.
 - **`RAGPipeline`**: Orchestrates loading, indexing, retrieval, and invokes `InferencePipeline` to answer questions.
+- **`RAGKnowledgeSource`**: Adapts `RAGPipeline.retrieve()` to the generic `KnowledgeSourceContract` without changing RAG behavior.
 
-### 5.11 Composition Root (`core/composition.py`)
+### 5.11 Knowledge Sources (`core/knowledge/`)
+- **`KnowledgeSourceRegistry`**: Registers and describes domain-agnostic sources, with the first registered source serving existing retrieval tasks by default.
+- **Current source**: `RAGKnowledgeSource` only. SQL, knowledge graph, API documentation, and external knowledge sources are not implemented, and no planner-based source routing exists.
+
+### 5.12 Composition Root (`core/composition.py`)
 - **Function**: `create_agent()`
 - **Responsibilities**:
   - Wires all subsystems together via dependency injection.
-  - Instantiates `QwenProvider` -> `ModelGateway` -> `RAGPipeline` -> `ToolRegistry` -> `ExecutionManager` -> `Planner` -> `Observer` -> `DecisionMaker` -> `ContextManager` -> `ResponseSynthesizer` -> `Agent`.
+  - Instantiates `QwenProvider` -> `ModelGateway` -> `RAGPipeline` -> `RAGKnowledgeSource` -> `KnowledgeSourceRegistry` -> `ToolRegistry` -> `ExecutionManager` -> `Planner` -> `Observer` -> `DecisionMaker` -> `ContextManager` -> `ResponseSynthesizer` -> `Agent`.
 
