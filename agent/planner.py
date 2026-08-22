@@ -23,11 +23,9 @@ class Planner:
 
     def _tool_descriptions(self) -> str:
 
-        return "\n".join(
-            f"- {tool.name}: {tool.description}"
-            for tool_name in self.tool_registry.list_tools()
-            for tool in [self.tool_registry.get(tool_name)]
-        ) or "- No tools are registered."
+        tool_metadata = self.tool_registry.describe_tools()
+
+        return json.dumps(tool_metadata, indent=2) if tool_metadata else "No tools are registered."
 
     def understand_intent(
         self,
@@ -286,12 +284,47 @@ Field rules:
                     f"Task {index} requires an 'arguments' object."
                 )
 
+            self._validate_tool_arguments(
+                tool_name,
+                arguments,
+                index,
+            )
+
         return Task(
             id=task_id,
             description=description,
             input=task_input,
             metadata={"capability": capability},
         )
+
+    def _validate_tool_arguments(
+        self,
+        tool_name: str,
+        arguments: dict,
+        index: int,
+    ) -> None:
+
+        schema = self.tool_registry.get(tool_name).input_schema
+        required = schema.get("required", [])
+        properties = schema.get("properties", {})
+
+        for argument_name in required:
+            if argument_name not in arguments:
+                raise ValueError(
+                    f"Task {index} is missing required argument "
+                    f"'{argument_name}' for tool: {tool_name}"
+                )
+
+        for argument_name, specification in properties.items():
+            if argument_name not in arguments:
+                continue
+
+            expected_type = specification.get("type")
+            if expected_type == "string" and not isinstance(arguments[argument_name], str):
+                raise ValueError(
+                    f"Task {index} argument '{argument_name}' for tool "
+                    f"{tool_name} must be a string."
+                )
 
     def replan(
         self,

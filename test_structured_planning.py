@@ -127,6 +127,53 @@ def test_unknown_tool_is_rejected():
         planner_for(response).create_plan("Use unknown tool")
 
 
+def test_tool_schema_is_included_in_planner_prompt():
+    class EchoTool:
+        name = "echo"
+        description = "Returns the supplied message."
+        input_schema = {
+            "type": "object",
+            "properties": {"message": {"type": "string"}},
+            "required": ["message"],
+        }
+
+        def execute(self, arguments):
+            return arguments["message"]
+
+    tools = ToolRegistry()
+    tools.register(EchoTool())
+    gateway = MockGateway(plan(task(
+        "task-1",
+        "tool",
+        {"tool": "echo", "arguments": {"message": "hello"}},
+    )))
+
+    Planner(gateway, tools).create_plan("Echo hello")
+
+    assert '"name": "echo"' in gateway.prompts[0]
+    assert '"description": "Returns the supplied message."' in gateway.prompts[0]
+    assert '"required": [' in gateway.prompts[0]
+    assert '"message"' in gateway.prompts[0]
+
+
+def test_tool_arguments_are_validated_against_schema():
+    missing_expression = plan(task(
+        "task-1",
+        "tool",
+        {"tool": "calculator", "arguments": {}},
+    ))
+    with pytest.raises(ValueError, match="missing required argument 'expression'"):
+        planner_for(missing_expression).create_plan("Calculate")
+
+    non_string_expression = plan(task(
+        "task-1",
+        "tool",
+        {"tool": "calculator", "arguments": {"expression": 42}},
+    ))
+    with pytest.raises(ValueError, match="must be a string"):
+        planner_for(non_string_expression).create_plan("Calculate")
+
+
 def test_ec2_and_invalid_calculation_is_planned_without_interpreting_abc():
     response = plan(
         task("task_1", "retrieval", {"query": "What is EC2?"}),

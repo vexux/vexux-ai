@@ -89,7 +89,7 @@ Houses the domain-specific models, data processors, vector indices, training loo
 | **Contracts (`execution`, `observation`, `response`, `capabilities`)** | **IMPLEMENTED** | `core/contracts/` — dataclasses and protocols. |
 | **Multi-Agent Execution** | **PLANNED** | Not implemented. The current system is strictly single-agent. |
 | **Dynamic Multi-Step Graph / DAG Planning** | **PLANNED** | Not implemented. Dynamic DAG execution with complex dependency graphs is planned. |
-| **Dynamic Tool Discovery** | **IMPLEMENTED** | `ToolRegistry` descriptions are injected into Planner prompts; argument schemas remain out of scope. |
+| **Dynamic Tool Discovery** | **IMPLEMENTED** | `ToolRegistry` metadata, including lightweight input schemas, is injected into Planner prompts. |
 | **Persistent Memory (`MemoryContract`)** | **PLANNED** | Protocol defined in `core/contracts/capabilities.py`, but no concrete store exists. |
 | **Evaluation Suite (`evaluation/`)** | **IMPLEMENTED** | 44 deterministic system-level scenarios with category and failure reporting. |
 | **Streaming / Asynchronous Execution** | **PLANNED** | All current execution and generation calls are synchronous. |
@@ -194,7 +194,7 @@ sequenceDiagram
 - **Responsibilities**:
   - `create_plan(query, conversation_context)`: Prompts the SLM for a structured JSON plan and validates every task before creating `Plan` and `Task` objects.
   - `replan(query, observation, failed_task, conversation_context)`: Generates and validates a single recovery task scoped specifically to `failed_task`.
-  - Tool descriptions are obtained dynamically from `ToolRegistry`; individual tool implementations are not embedded in the Planner.
+  - Tool metadata and input schemas are obtained dynamically from `ToolRegistry`; individual tool implementations are not embedded in the Planner.
 
 ### 5.3 Execution Manager (`agent/execution_manager.py`)
 - **Class**: `ExecutionManager`
@@ -239,7 +239,7 @@ sequenceDiagram
 - The API does not contain planning, execution, observation, or retry orchestration logic.
 
 ### 5.9 Tool Registry & Concrete Tools (`core/tools/`)
-- **`ToolRegistry`**: In-memory registry with `register()`, `get()`, `list_tools()`, and `execute()` methods.
+- **`ToolRegistry`**: In-memory registry with `register()`, `get()`, `list_tools()`, `describe_tools()`, and `execute()` methods.
 - **`CalculatorTool`**: Implements `ToolContract`, executing arithmetic expressions using a restricted `eval` namespace (`__builtins__: {}`).
 
 ### 5.10 RAG Pipeline (`rag/`)

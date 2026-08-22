@@ -11,6 +11,20 @@ class StringFormatterTool:
     def description(self) -> str:
         return "Transforms text using operations: uppercase, lowercase, reverse, title."
 
+    @property
+    def input_schema(self) -> Dict[str, Any]:
+        return {
+            "type": "object",
+            "properties": {
+                "text": {"type": "string", "description": "Text to transform."},
+                "operation": {
+                    "type": "string",
+                    "description": "uppercase, lowercase, reverse, or title.",
+                },
+            },
+            "required": ["text"],
+        }
+
     def execute(self, arguments: Dict[str, Any]) -> str:
         if not isinstance(arguments, dict):
             raise ValueError("Arguments must be a dictionary.")

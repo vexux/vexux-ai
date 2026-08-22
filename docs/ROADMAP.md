@@ -27,7 +27,7 @@ Evaluation suite
 
 ### 2.2 Tools and Capabilities
 - Generic `ToolContract` and in-memory `ToolRegistry`.
-- Dynamic tool descriptions supplied to the Planner.
+- Dynamic tool metadata and lightweight input schemas supplied to the Planner.
 - Calculator, string formatter, and text analyzer tools.
 
 ### 2.3 RAG

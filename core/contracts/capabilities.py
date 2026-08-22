@@ -34,6 +34,10 @@ class ToolContract(Protocol):
     def description(self) -> str:
         ...
 
+    @property
+    def input_schema(self) -> Dict[str, Any]:
+        ...
+
     def execute(
         self,
         arguments: Dict[str, Any]

@@ -39,6 +39,17 @@ class ToolRegistry:
 
         return list(self._tools.keys())
 
+    def describe_tools(self) -> List[Dict[str, Any]]:
+
+        return [
+            {
+                "name": tool.name,
+                "description": tool.description,
+                "input_schema": tool.input_schema,
+            }
+            for tool in self._tools.values()
+        ]
+
     def execute(
         self,
         name: str,

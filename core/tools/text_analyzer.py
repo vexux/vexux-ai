@@ -11,6 +11,16 @@ class TextAnalyzerTool:
     def description(self) -> str:
         return "Analyzes text and returns character count, word count, and line count."
 
+    @property
+    def input_schema(self) -> Dict[str, Any]:
+        return {
+            "type": "object",
+            "properties": {
+                "text": {"type": "string", "description": "Text to analyze."},
+            },
+            "required": ["text"],
+        }
+
     def execute(self, arguments: Dict[str, Any]) -> Dict[str, int]:
         if not isinstance(arguments, dict):
             raise ValueError("Arguments must be a dictionary.")

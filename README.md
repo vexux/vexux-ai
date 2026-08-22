@@ -276,7 +276,7 @@ The evaluation suite reports total, passed, failed, pass rate, category-level re
 - The FAISS RAG index is built in memory and is not persistent.
 - No distributed tracing backend is configured.
 - Evaluation history is not persisted.
-- Tools do not expose formal argument schemas.
+- Tool input schemas are intentionally lightweight and validate required arguments and declared string fields during planning.
 - Evaluation uses deterministic doubles rather than live production models.
 - Model and embedding initialization has significant startup cost.
 - Mistral API availability, latency, quotas, and costs are external dependencies.

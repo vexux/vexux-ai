@@ -313,6 +313,14 @@ class CustomThirdPartyEchoTool:
     def description(self) -> str:
         return "Echoes the provided message with prefix."
 
+    @property
+    def input_schema(self) -> Dict[str, Any]:
+        return {
+            "type": "object",
+            "properties": {"message": {"type": "string"}},
+            "required": ["message"],
+        }
+
     def execute(self, arguments: Dict[str, Any]) -> str:
         msg = arguments.get("message", "")
         return f"[ECHO]: {msg}"

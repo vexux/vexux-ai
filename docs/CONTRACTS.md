@@ -221,11 +221,14 @@ class ToolContract(Protocol):
     def name(self) -> str: ...
     @property
     def description(self) -> str: ...
+    @property
+    def input_schema(self) -> Dict[str, Any]: ...
     def execute(self, arguments: Dict[str, Any]) -> Any: ...
 ```
 - **Members**:
   - `name -> str`: Identifier of the tool (e.g. `"calculator"`).
   - `description -> str`: Textual description of what the tool does.
+  - `input_schema -> Dict[str, Any]`: Lightweight object schema describing accepted arguments.
   - `execute(arguments: Dict[str, Any]) -> Any`: Performs tool computation using provided arguments dict.
 - **Implemented By**: `CalculatorTool` (`core/tools/calculator.py`).
 - **Managed By**: `ToolRegistry` (`core/tools/registry.py`).
