@@ -13,6 +13,7 @@ from core.tools.text_analyzer import TextAnalyzerTool
 from core.context.context_manager import ContextManager
 from core.knowledge.registry import KnowledgeSourceRegistry
 from rag.knowledge_source import RAGKnowledgeSource
+from core.policy.default import DefaultPolicy
 
 from agent.execution_manager import ExecutionManager
 from agent.planner import Planner
@@ -97,10 +98,13 @@ def create_agent():
     # Execution
     # -------------------------
 
+    policy = DefaultPolicy()
+
     execution_manager = ExecutionManager(
         tool_registry=tool_registry,
         model_gateway=model_gateway,
         knowledge_source_registry=knowledge_sources,
+        policy=policy,
     )
 
     # -------------------------
@@ -134,6 +138,7 @@ def create_agent():
         decision_maker=decision_maker,
         context_manager=context_manager,
         response_synthesizer=response_synthesizer,
+        policy=policy,
     )
 
     return agent

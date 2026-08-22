@@ -15,6 +15,7 @@ class ExecutionManager:
         tool_registry=None,
         model_gateway=None,
         knowledge_source_registry=None,
+        policy=None,
     ):
 
         self.retrieval = retrieval
@@ -24,6 +25,8 @@ class ExecutionManager:
         self.model_gateway = model_gateway
 
         self.knowledge_source_registry = knowledge_source_registry
+
+        self.policy = policy
 
     def execute(
         self,
@@ -36,6 +39,11 @@ class ExecutionManager:
         )
 
         try:
+
+            if self.policy is not None:
+                decision = self.policy.authorize_execution(task, context)
+                if not decision.allowed:
+                    return ExecutionResult(success=False, error=f"Policy denied execution: {decision.reason}", metadata={"policy": decision.policy_name, "reason": decision.reason})
 
             if capability == "retrieval":
 

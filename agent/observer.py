@@ -27,6 +27,7 @@ class Observer:
                 error=result.error,
                 summary=summary,
                 task_id=task_id,
+                metadata=result.metadata,
             )
 
         summary = (
@@ -41,4 +42,5 @@ class Observer:
             error=None,
             summary=summary,
             task_id=task_id,
+            metadata=result.metadata,
         )

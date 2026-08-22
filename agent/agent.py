@@ -24,6 +24,7 @@ class Agent:
         decision_maker: DecisionMaker,
         context_manager: ContextManager,
         response_synthesizer: ResponseSynthesizer,
+        policy=None,
     ):
 
         self.execution_manager = (
@@ -40,6 +41,8 @@ class Agent:
 
         self.response_synthesizer = response_synthesizer
 
+        self.policy = policy
+
         self.max_retries = 2
 
     def run(
@@ -54,6 +57,11 @@ class Agent:
             session_id=session_id,
             user_id=user_id,
         )
+
+        if self.policy is not None:
+            decision = self.policy.validate_input(query)
+            if not decision.allowed:
+                return AgentResponse(success=False, error=f"Policy denied input: {decision.reason}", trace=[], metadata={"request_id": context.request_id, "policy": decision.policy_name})
 
         retry_count = 0
         logger = logging.getLogger(__name__)
@@ -117,6 +125,11 @@ class Agent:
                 context,
                 plan,
             )
+
+            if self.policy is not None:
+                decision = self.policy.validate_plan(plan, context)
+                if not decision.allowed:
+                    return AgentResponse(success=False, error=f"Policy denied plan: {decision.reason}", trace=context.observations, metadata={"request_id": context.request_id, "policy": decision.policy_name})
 
             should_replan = False
 
@@ -183,6 +196,11 @@ class Agent:
                     context.observations,
                     conversation_context=context.conversation_history,
                 )
+
+                if self.policy is not None:
+                    decision = self.policy.validate_output(final_output, context)
+                    if not decision.allowed:
+                        return AgentResponse(success=False, error=f"Policy denied output: {decision.reason}", trace=context.observations, metadata={"request_id": context.request_id, "policy": decision.policy_name})
 
                 self.context_manager.add_conversation_turn(
                     context,
