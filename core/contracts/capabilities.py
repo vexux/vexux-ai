@@ -60,6 +60,10 @@ class ToolContract(Protocol):
     def input_schema(self) -> Dict[str, Any]:
         ...
 
+    @property
+    def security_metadata(self) -> Dict[str, Any]:
+        ...
+
     def execute(
         self,
         arguments: Dict[str, Any]

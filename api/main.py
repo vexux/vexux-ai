@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field
 
 from core.composition import create_agent
 from core.contracts.response import AgentResponse
+from core.security.redaction import redact_sensitive_data
 
 logger = logging.getLogger(__name__)
 
@@ -36,7 +37,7 @@ def get_agent():
 def _serialize_response(response: AgentResponse) -> AgentRunResponse:
     metadata = response.metadata or {}
     trace = [
-        asdict(item) if hasattr(item, "__dataclass_fields__") else item
+        redact_sensitive_data(asdict(item) if hasattr(item, "__dataclass_fields__") else item)
         for item in (response.trace or [])
     ]
 
@@ -45,8 +46,8 @@ def _serialize_response(response: AgentResponse) -> AgentRunResponse:
         session_id=metadata.get("session_id"),
         user_id=metadata.get("user_id"),
         success=response.success,
-        output=response.output,
-        error=response.error,
+        output=redact_sensitive_data(response.output),
+        error=redact_sensitive_data(response.error),
         trace=trace,
     )
 

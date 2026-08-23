@@ -21,6 +21,10 @@ class TextAnalyzerTool:
             "required": ["text"],
         }
 
+    @property
+    def security_metadata(self) -> Dict[str, Any]:
+        return {"requires_network": False, "requires_secret": False, "side_effects": False}
+
     def execute(self, arguments: Dict[str, Any]) -> Dict[str, int]:
         if not isinstance(arguments, dict):
             raise ValueError("Arguments must be a dictionary.")

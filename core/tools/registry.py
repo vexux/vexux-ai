@@ -46,6 +46,7 @@ class ToolRegistry:
                 "name": tool.name,
                 "description": tool.description,
                 "input_schema": tool.input_schema,
+                "security_metadata": getattr(tool, "security_metadata", {}),
             }
             for tool in self._tools.values()
         ]

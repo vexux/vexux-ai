@@ -26,6 +26,10 @@ class CalculatorTool:
             "required": ["expression"],
         }
 
+    @property
+    def security_metadata(self):
+        return {"requires_network": False, "requires_secret": False, "side_effects": False}
+
     def execute(self, arguments):
 
         expression = arguments["expression"]

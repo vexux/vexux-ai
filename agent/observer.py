@@ -1,6 +1,7 @@
 from typing import Optional
 from core.contracts.execution import ExecutionResult, Task
 from core.contracts.observation import Observation
+from core.security.redaction import redact_sensitive_data
 
 
 class Observer:
@@ -23,8 +24,8 @@ class Observer:
 
             return Observation(
                 success=False,
-                output=result.output,
-                error=result.error,
+                output=redact_sensitive_data(result.output),
+                error=redact_sensitive_data(result.error),
                 summary=summary,
                 task_id=task_id,
                 metadata=result.metadata,
@@ -38,7 +39,7 @@ class Observer:
 
         return Observation(
             success=True,
-            output=result.output,
+            output=redact_sensitive_data(result.output),
             error=None,
             summary=summary,
             task_id=task_id,
