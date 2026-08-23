@@ -115,6 +115,21 @@ def test_execution_manager_uses_registered_knowledge_source():
     assert source.calls == [("What is EC2?", 1)]
 
 
+def test_execution_manager_includes_evidence_only_when_source_normalizes():
+    class NormalizingSource(FakeKnowledgeSource):
+        def normalize(self, results):
+            return "normalized evidence"
+
+    registry = KnowledgeSourceRegistry()
+    registry.register(NormalizingSource(results=[{"document": "context"}]))
+    result = ExecutionManager(knowledge_source_registry=registry).execute(
+        retrieval_task("query"),
+        AgentContext(request_id="request-evidence"),
+    )
+
+    assert result.output["evidence"] == "normalized evidence"
+
+
 def test_unknown_or_failing_knowledge_source_is_controlled_failure():
     registry = KnowledgeSourceRegistry()
     registry.register(FakeKnowledgeSource(error=RuntimeError("source unavailable")))

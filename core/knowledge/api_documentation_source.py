@@ -8,3 +8,10 @@ class APIDocumentationKnowledgeSource:
 
     def retrieve(self, query, k=None):
         return self.provider.search(query, k=k) if k is not None else self.provider.search(query)
+
+    def normalize(self, records):
+        from core.contracts.evidence import Evidence, EvidenceSet
+        evidence = EvidenceSet()
+        for record in records:
+            evidence.add(Evidence(self.name, str(record.get("document", record)), "documentation"))
+        return evidence

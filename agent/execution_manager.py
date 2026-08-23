@@ -194,14 +194,19 @@ class ExecutionManager:
                 metadata={"capability": "retrieval", "source": source.name},
             )
 
+        output = {
+            "query": query,
+            "results": retrieved,
+            "context_found": True,
+            "source": source.name,
+        }
+
+        if hasattr(source, "normalize"):
+            output["evidence"] = source.normalize(retrieved)
+
         return ExecutionResult(
             success=True,
-            output={
-                "query": query,
-                "results": retrieved,
-                "context_found": True,
-                "source": source.name,
-            },
+            output=output,
             metadata={"capability": "retrieval", "source": source.name},
         )
 

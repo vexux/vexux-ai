@@ -1,6 +1,7 @@
 from typing import Any, Dict, List
 
 from rag.pipeline import RAGPipeline
+from core.contracts.evidence import Evidence, EvidenceSet
 
 
 class RAGKnowledgeSource:
@@ -37,3 +38,9 @@ class RAGKnowledgeSource:
             return self.pipeline.retrieve(query)
 
         return self.pipeline.retrieve(query, k=k)
+
+    def normalize(self, results):
+        evidence = EvidenceSet()
+        for result in results:
+            evidence.add(Evidence(self.name, str(result.get("document", "")), "document", {"score": result.get("score")}))
+        return evidence

@@ -1,4 +1,5 @@
 import re
+from core.contracts.evidence import Evidence, EvidenceSet
 
 
 class SQLKnowledgeSource:
@@ -18,3 +19,9 @@ class SQLKnowledgeSource:
 
     def schema_metadata(self):
         return self.backend.schema_metadata() if hasattr(self.backend, "schema_metadata") else {}
+
+    def normalize(self, rows):
+        evidence = EvidenceSet()
+        for row in rows:
+            evidence.add(Evidence(self.name, str(row), "structured_data"))
+        return evidence
