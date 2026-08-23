@@ -12,6 +12,8 @@ from core.context.context_manager import ContextManager
 from core.contracts.execution import AgentContext, Task
 from core.contracts.observation import Observation
 from core.knowledge.registry import KnowledgeSourceRegistry
+from core.knowledge.sql_source import SQLKnowledgeSource
+from core.knowledge.api_documentation_source import APIDocumentationKnowledgeSource
 from core.tools.registry import ToolRegistry
 from rag.knowledge_source import RAGKnowledgeSource
 
@@ -226,3 +228,37 @@ def test_grounded_retrieval_response_has_source_attribution():
     )
 
     assert response == "Grounded answer\n\nSources:\n- rag"
+
+
+def test_sql_and_api_documentation_sources_are_registry_discoverable():
+    class Backend:
+        def execute(self, query):
+            return [{"value": 1}]
+
+        def schema_metadata(self):
+            return {"tables": ["items"]}
+
+    class Documentation:
+        def search(self, query, k=None):
+            return [{"document": query}]
+
+    registry = KnowledgeSourceRegistry()
+    sql = SQLKnowledgeSource(Backend())
+    docs = APIDocumentationKnowledgeSource(Documentation())
+    registry.register(sql)
+    registry.register(docs)
+
+    assert sql.retrieve("SELECT value FROM items") == [{"value": 1}]
+    assert sql.schema_metadata() == {"tables": ["items"]}
+    assert docs.retrieve("authentication") == [{"document": "authentication"}]
+    assert [item["name"] for item in registry.describe_sources()] == ["sql", "api_docs"]
+
+
+@pytest.mark.parametrize("query", ["INSERT INTO items VALUES (1)", "UPDATE items SET value = 1", "DELETE FROM items", "DROP TABLE items", "SELECT 1; DELETE FROM items"])
+def test_sql_source_rejects_unsafe_queries(query):
+    class Backend:
+        def execute(self, query):
+            raise AssertionError("Unsafe query reached backend")
+
+    with pytest.raises(ValueError, match="read-only SELECT"):
+        SQLKnowledgeSource(Backend()).retrieve(query)
