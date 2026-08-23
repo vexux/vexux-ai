@@ -263,3 +263,12 @@ sequenceDiagram
   - Wires all subsystems together via dependency injection.
   - Instantiates `QwenProvider` -> `ModelGateway` -> `RAGPipeline` -> `RAGKnowledgeSource` -> `KnowledgeSourceRegistry` -> `ToolRegistry` -> `ExecutionManager` -> `Planner` -> `Observer` -> `DecisionMaker` -> `ContextManager` -> `ResponseSynthesizer` -> `Agent`.
 
+### Persistent Memory (Phase 9)
+- **Optional**: A minimal persistent-memory layer is available and is disabled by default. Enable by setting the environment variable `PERSISTENT_MEMORY_DB` to a filesystem path.
+- **Composition behavior**: When enabled the Composition Root will create a `MemoryRegistry` and register a local `SQLiteMemory` backend pointed at the configured file; the `Agent` receives the `memory_registry` as an optional dependency.
+- **Design constraints**:
+  - Scoped: memories are stored and queried by an explicit scope identifier (for example a user id or session id).
+  - Explicit: persistent memory is only read or written by explicit memory operations; normal agent runs do not automatically persist or retrieve persistent memory.
+  - Secure: the memory backend reuses the repository's redaction utilities and rejects obvious secret-like inputs.
+  - Minimal: Phase 9 provides store/retrieve/clear only — no embeddings, vector search, or automatic extraction.
+

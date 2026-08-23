@@ -24,6 +24,9 @@ from agent.agent import Agent
 from agent.observer import Observer
 from agent.decision import DecisionMaker
 from agent.response_synthesizer import ResponseSynthesizer
+from core.memory.registry import MemoryRegistry
+from core.memory.sqlite_memory import SQLiteMemory
+from pathlib import Path
 
 
 def create_agent():
@@ -137,6 +140,20 @@ def create_agent():
         model_gateway=model_gateway
     )
 
+    # Optional persistent memory: configure via PERSISTENT_MEMORY_DB environment variable.
+    memory_registry = None
+    persistent_db = os.getenv("PERSISTENT_MEMORY_DB")
+    if persistent_db:
+        memory_registry = MemoryRegistry()
+        db_path = Path(persistent_db)
+        # Ensure parent dirs exist
+        if not db_path.parent.exists():
+            try:
+                db_path.parent.mkdir(parents=True, exist_ok=True)
+            except Exception:
+                pass
+        memory_registry.register(SQLiteMemory(str(db_path)))
+
     agent = Agent(
         execution_manager=execution_manager,
         planner=planner,
@@ -146,6 +163,7 @@ def create_agent():
         response_synthesizer=response_synthesizer,
         policy=policy,
         workflow_registry=workflows,
+        memory_registry=memory_registry,
     )
 
     return agent

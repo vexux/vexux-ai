@@ -290,3 +290,29 @@ class ModelProviderContract(Protocol):
 - **Implemented By**: `QwenProvider` (`models/providers/qwen.py`).
 - **Used By**: `ModelGateway` (`core/model_gateway/gateway.py`).
 - **Purpose**: Decouples model inference details (tokenization, chat templates, quantization, sampling) from the rest of the application.
+
+---
+
+## MemoryContract (core/contracts/capabilities.py)
+
+The `MemoryContract` documents the minimal interface for persistent memory backends used in Phase 9.
+
+```python
+class MemoryContract(Protocol):
+    @property
+    def name(self) -> str: ...
+
+    def store(self, scope: str, content: str, memory_id: Optional[str] = None) -> str: ...
+
+    def retrieve(self, scope: str, query: Optional[str] = None, limit: int = 10) -> List[Dict[str, Any]]: ...
+
+    def clear(self, scope: str) -> None: ...
+```
+
+- **Behavioral guarantees**:
+  - `store` MUST return a stable `memory_id` for the persisted record.
+  - Implementations SHOULD reject obvious secret-like values and MAY apply repository redaction utilities.
+  - `retrieve` MUST only return records for the provided `scope` — scopes are isolated by design.
+  - `clear` MUST remove all records belonging to the given `scope`.
+
+- **Purpose**: Keep the contract domain-agnostic and small so different storage backends (SQLite, cloud DB) can be plugged in safely.
