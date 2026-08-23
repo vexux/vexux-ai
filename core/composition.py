@@ -17,6 +17,10 @@ from core.policy.default import DefaultPolicy
 from core.workflows.registry import WorkflowRegistry
 from core.workflows.knowledge_grounded_answer import KnowledgeGroundedAnswerWorkflow
 
+# Optional knowledge graph foundation (Phase 10)
+from core.knowledge.graph_registry import KnowledgeGraphRegistry
+from core.knowledge.inmemory_graph import InMemoryKnowledgeGraph
+
 from agent.execution_manager import ExecutionManager
 from agent.planner import Planner
 from agent.agent import Agent
@@ -154,6 +158,13 @@ def create_agent():
                 pass
         memory_registry.register(SQLiteMemory(str(db_path)))
 
+    # Optional knowledge graph: enable by setting ENABLE_KNOWLEDGE_GRAPH=1 (keeps agent backward compatible)
+    knowledge_graph_registry = None
+    if os.getenv("ENABLE_KNOWLEDGE_GRAPH", "").lower() in ("1", "true", "yes"):
+        knowledge_graph_registry = KnowledgeGraphRegistry()
+        # Register a default in-memory backend for Phase 10 foundation
+        knowledge_graph_registry.register(InMemoryKnowledgeGraph())
+
     agent = Agent(
         execution_manager=execution_manager,
         planner=planner,
@@ -164,6 +175,7 @@ def create_agent():
         policy=policy,
         workflow_registry=workflows,
         memory_registry=memory_registry,
+        knowledge_graph_registry=knowledge_graph_registry,
     )
 
     return agent

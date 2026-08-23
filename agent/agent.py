@@ -27,6 +27,7 @@ class Agent:
         policy=None,
         workflow_registry=None,
         memory_registry=None,
+        knowledge_graph_registry=None,
     ):
 
         self.execution_manager = (
@@ -48,6 +49,9 @@ class Agent:
         self.workflow_registry = workflow_registry
 
         self.memory_registry = memory_registry
+
+        # Optional knowledge graph registry (kept optional and backward compatible)
+        self.knowledge_graph_registry = knowledge_graph_registry
 
         self.max_retries = 2
 
