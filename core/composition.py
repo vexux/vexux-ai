@@ -14,6 +14,8 @@ from core.context.context_manager import ContextManager
 from core.knowledge.registry import KnowledgeSourceRegistry
 from rag.knowledge_source import RAGKnowledgeSource
 from core.policy.default import DefaultPolicy
+from core.workflows.registry import WorkflowRegistry
+from core.workflows.knowledge_grounded_answer import KnowledgeGroundedAnswerWorkflow
 
 from agent.execution_manager import ExecutionManager
 from agent.planner import Planner
@@ -100,6 +102,9 @@ def create_agent():
 
     policy = DefaultPolicy()
 
+    workflows = WorkflowRegistry()
+    workflows.register(KnowledgeGroundedAnswerWorkflow())
+
     execution_manager = ExecutionManager(
         tool_registry=tool_registry,
         model_gateway=model_gateway,
@@ -115,6 +120,7 @@ def create_agent():
         model_gateway=model_gateway,
         tool_registry=tool_registry,
         knowledge_source_registry=knowledge_sources,
+        workflow_registry=workflows,
     )
 
     # -------------------------
@@ -139,6 +145,7 @@ def create_agent():
         context_manager=context_manager,
         response_synthesizer=response_synthesizer,
         policy=policy,
+        workflow_registry=workflows,
     )
 
     return agent

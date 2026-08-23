@@ -10,6 +10,7 @@ class Planner:
         "retrieval",
         "tool",
         "model",
+        "workflow",
     }
 
     def __init__(
@@ -17,12 +18,14 @@ class Planner:
         model_gateway,
         tool_registry: ToolRegistry,
         knowledge_source_registry=None,
+        workflow_registry=None,
     ):
 
         self.model_gateway = model_gateway
         self.tool_registry = tool_registry
 
         self.knowledge_source_registry = knowledge_source_registry
+        self.workflow_registry = workflow_registry
 
     def _tool_descriptions(self) -> str:
 
@@ -38,6 +41,15 @@ class Planner:
         sources = self.knowledge_source_registry.describe_sources()
 
         return json.dumps(sources, indent=2) if sources else "No knowledge sources are registered."
+
+    def _workflow_descriptions(self) -> str:
+
+        if self.workflow_registry is None:
+            return "No workflows are registered."
+
+        workflows = self.workflow_registry.describe_workflows()
+
+        return json.dumps(workflows, indent=2) if workflows else "No workflows are registered."
 
     def understand_intent(
         self,
@@ -119,6 +131,9 @@ Registered tools:
 Registered knowledge sources:
 {self._knowledge_source_descriptions()}
 
+Registered workflows:
+{self._workflow_descriptions()}
+
 Return ONLY valid JSON. The top-level object MUST have this shape:
 
 {{
@@ -134,6 +149,7 @@ Return ONLY valid JSON. The top-level object MUST have this shape:
 
 Every task MUST have exactly one capability. The capability value MUST
 be exactly one of these strings: "retrieval", "tool", "model".
+or "workflow".
 Never use a pipe-separated, combined, topic-based, or tool-based
 capability value such as "retrieval|tool|ec2".
 
@@ -185,6 +201,7 @@ Field rules:
 - Retrieval input MUST contain a string field named "query".
 - Retrieval input may include "source" only when it exactly matches a registered knowledge source; omit it to use the default source.
 - Model input MUST contain a string field named "query".
+- Workflow input MUST contain a registered "workflow" name and satisfy its input schema.
 - Tool input MUST contain "tool" equal to a registered tool name and an object field named "arguments".
 - Put topics and user text in input.query, never in capability.
 - Preserve expressions exactly as provided. For example, use "abc" as the calculator expression; do not invent its meaning.
@@ -300,6 +317,25 @@ Field rules:
                 raise ValueError(
                     f"Task {index} references unknown knowledge source: {source_name}"
                 ) from exc
+
+        if capability == "workflow":
+            workflow_name = task_input.get("workflow")
+            if not isinstance(workflow_name, str) or self.workflow_registry is None:
+                raise ValueError(f"Task {index} requires a registered workflow.")
+            try:
+                workflow = self.workflow_registry.get(workflow_name)
+            except KeyError as exc:
+                raise ValueError(
+                    f"Task {index} references unknown workflow: {workflow_name}"
+                ) from exc
+
+            for field in workflow.input_schema.get("required", []):
+                if field not in task_input:
+                    raise ValueError(
+                        f"Task {index} is missing required workflow input: {field}"
+                    )
+            if not isinstance(task_input.get("query"), str) or not task_input["query"].strip():
+                raise ValueError(f"Task {index} requires a non-empty workflow query.")
 
         if capability == "tool":
             tool_name = task_input.get("tool")

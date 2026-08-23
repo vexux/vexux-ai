@@ -25,6 +25,7 @@ class Agent:
         context_manager: ContextManager,
         response_synthesizer: ResponseSynthesizer,
         policy=None,
+        workflow_registry=None,
     ):
 
         self.execution_manager = (
@@ -42,6 +43,8 @@ class Agent:
         self.response_synthesizer = response_synthesizer
 
         self.policy = policy
+
+        self.workflow_registry = workflow_registry
 
         self.max_retries = 2
 
@@ -125,6 +128,17 @@ class Agent:
                 context,
                 plan,
             )
+
+            if self.workflow_registry is not None:
+                expanded_tasks = []
+                for task in plan.tasks:
+                    if task.metadata.get("capability") != "workflow":
+                        expanded_tasks.append(task)
+                        continue
+                    workflow = self.workflow_registry.get(task.input["workflow"])
+                    expanded_tasks.extend(workflow.build_tasks(task.input))
+                plan = Plan(tasks=expanded_tasks)
+                self.context_manager.set_plan(context, plan)
 
             if self.policy is not None:
                 decision = self.policy.validate_plan(plan, context)
