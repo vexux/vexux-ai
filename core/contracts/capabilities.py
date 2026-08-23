@@ -73,17 +73,24 @@ class ToolContract(Protocol):
 
 class MemoryContract(Protocol):
 
+    @property
+    def name(self) -> str:
+        ...
+
     def store(
         self,
-        key: str,
-        value: Any
-    ) -> None:
+        scope: str,
+        content: str,
+        memory_id: str | None = None,
+    ) -> str:
         ...
 
     def retrieve(
         self,
-        key: str
-    ) -> Any:
+        scope: str,
+        query: str | None = None,
+        limit: int = 10,
+    ) -> List[Dict[str, Any]]:
         ...
 
 

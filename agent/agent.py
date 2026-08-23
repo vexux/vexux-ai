@@ -26,6 +26,7 @@ class Agent:
         response_synthesizer: ResponseSynthesizer,
         policy=None,
         workflow_registry=None,
+        memory_registry=None,
     ):
 
         self.execution_manager = (
@@ -45,6 +46,8 @@ class Agent:
         self.policy = policy
 
         self.workflow_registry = workflow_registry
+
+        self.memory_registry = memory_registry
 
         self.max_retries = 2
 
