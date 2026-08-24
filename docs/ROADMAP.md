@@ -75,7 +75,8 @@ Evaluation suite
 
 ### 4.5 Additional Knowledge Sources
 - SQL, knowledge graph, API documentation, and external knowledge implementations behind `KnowledgeSourceContract`.
-- Planner-based selection among multiple knowledge sources remains future work.
+- Phase 11: Introduce a small domain-agnostic KnowledgeDecision layer that normalizes and validates which knowledge capability (RAG, registered knowledge source, or knowledge graph) should be used for a request. This component does NOT execute retrievals and intentionally does not perform multi-source fusion or ranking.
+- Planner-based selection among multiple knowledge sources (multi-source routing and source fusion) remains future work.
 
 ### 4.6 Streaming and Asynchronous Execution
 - Non-blocking generation, streaming responses, and asynchronous task scheduling.

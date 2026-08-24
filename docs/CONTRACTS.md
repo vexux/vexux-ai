@@ -316,3 +316,24 @@ class MemoryContract(Protocol):
   - `clear` MUST remove all records belonging to the given `scope`.
 
 - **Purpose**: Keep the contract domain-agnostic and small so different storage backends (SQLite, cloud DB) can be plugged in safely.
+
+---
+
+## KnowledgeRequest (core/contracts/knowledge.py)
+
+A small, domain-agnostic dataclass used by the KnowledgeDecision component to express which knowledge capability should be used to satisfy a query.
+
+```python
+from dataclasses import dataclass
+from typing import Optional, Dict, Any
+
+@dataclass
+class KnowledgeRequest:
+    kind: str  # one of "rag", "knowledge_source", "graph"
+    query: str
+    source: Optional[str] = None
+    operation: Optional[str] = None
+    params: Dict[str, Any] = field(default_factory=dict)
+```
+
+- **Purpose**: Normalize and validate the intent to use a particular knowledge capability without executing retrievals. The contract is intentionally small and domain-agnostic so it can be used across the Planner, Decision, and Execution components.

@@ -256,6 +256,7 @@ sequenceDiagram
 ### 5.11 Knowledge Sources (`core/knowledge/`)
 - **`KnowledgeSourceRegistry`**: Registers and describes domain-agnostic sources, with the first registered source serving existing retrieval tasks by default.
 - **Current source**: `RAGKnowledgeSource` only. SQL, knowledge graph, API documentation, and external knowledge sources are not implemented, and no planner-based source routing exists.
+- **Knowledge Decision (Phase 11)**: A small, domain-agnostic decision/normalization layer (`core/knowledge/decision.py`) determines which knowledge capability should be used for a request (RAG, registered knowledge source, or knowledge graph). This component only expresses and validates the decision — it does not execute retrievals and does not perform multi-source fusion. It is intentionally conservative: explicit source requests are validated and will error if the source is unavailable; no silent fallback occurs when a user names a specific source.
 
 ### 5.12 Composition Root (`core/composition.py`)
 - **Function**: `create_agent()`
