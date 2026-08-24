@@ -15,6 +15,7 @@ class ExecutionManager:
         tool_registry=None,
         model_gateway=None,
         knowledge_source_registry=None,
+        knowledge_graph_registry=None,
         policy=None,
     ):
 
@@ -26,7 +27,22 @@ class ExecutionManager:
 
         self.knowledge_source_registry = knowledge_source_registry
 
+        # New: optional graph registry
+        self.knowledge_graph_registry = knowledge_graph_registry
+
         self.policy = policy
+
+        # Create a KnowledgeDecision helper to normalize retrieval requests.
+        try:
+            from core.knowledge.decision import KnowledgeDecision
+        except Exception:
+            KnowledgeDecision = None
+
+        self.knowledge_decision = KnowledgeDecision(
+            rag=self.retrieval,
+            knowledge_source_registry=self.knowledge_source_registry,
+            knowledge_graph_registry=self.knowledge_graph_registry,
+        ) if KnowledgeDecision is not None else None
 
     def execute(
         self,
@@ -84,76 +100,113 @@ class ExecutionManager:
         task: Task,
     ) -> ExecutionResult:
 
+        # Use the KnowledgeDecision component (if available) to normalize and
+        # validate what kind of knowledge operation the task requests.
+        query = task.input.get("query")
+        explicit_source = task.input.get("source")
+        top_k = task.input.get("top_k")
+
+        if not isinstance(query, str) or not query.strip():
+            return ExecutionResult(success=False, error="Retrieval task missing 'query' field")
+
+        # If an explicit source was provided and a KnowledgeSourceRegistry exists,
+        # attempt to use it directly. This preserves the original error message
+        # behavior when a named source is missing (tests rely on the exact
+        # KeyError text).
+        if explicit_source and self.knowledge_source_registry is not None:
+            try:
+                source = self.knowledge_source_registry.get(explicit_source)
+                return self._execute_retrieval_source(source, task)
+            except KeyError as exc:
+                # Preserve the original KeyError string representation
+                return ExecutionResult(success=False, error=str(exc))
+
+        if self.knowledge_decision is not None:
+            try:
+                kr = self.knowledge_decision.create_request(
+                    query=query,
+                    explicit_source=explicit_source,
+                    operation=None,
+                    params={"top_k": top_k} if top_k is not None else {},
+                )
+            except Exception as exc:
+                # Controlled failure: explicit unknown source or unavailable capability
+                return ExecutionResult(success=False, error=str(exc))
+
+            # Route based on the KnowledgeRequest kind without performing any
+            # cross-source fusion or multi-source retrieval.
+            if kr.kind == "knowledge_source":
+                try:
+                    source = self.knowledge_source_registry.get(kr.source)
+                except Exception as exc:
+                    return ExecutionResult(success=False, error=str(exc))
+
+                # Reuse existing source-based retrieval executor
+                return self._execute_retrieval_source(source, task)
+
+            if kr.kind == "rag":
+                # Route to the RAG retrieval pipeline (self.retrieval). Keep the
+                # historical behavior: do NOT inject a 'source' field for the
+                # raw RAG pipeline path to preserve existing test expectations.
+                if self.retrieval is None:
+                    return ExecutionResult(success=False, error="Retrieval (RAG) capability unavailable")
+
+                if top_k is not None and (
+                    not isinstance(top_k, int)
+                    or isinstance(top_k, bool)
+                    or top_k <= 0
+                ):
+                    return ExecutionResult(success=False, error="Retrieval top_k must be a positive integer")
+
+                if hasattr(self.retrieval, "retrieve"):
+                    retrieved = self.retrieval.retrieve(query, k=top_k) if top_k is not None else self.retrieval.retrieve(query)
+
+                    if not retrieved:
+                        return ExecutionResult(
+                            success=False,
+                            output={"query": query, "results": [], "context_found": False},
+                            error="No sufficiently relevant retrieval context found",
+                            metadata={"capability": "retrieval"},
+                        )
+
+                    return ExecutionResult(success=True, output={"query": query, "results": retrieved, "context_found": True}, metadata={"capability": "retrieval"})
+
+                result = self.retrieval.ask(query)
+                return ExecutionResult(success=True, output=result, metadata={"capability": "retrieval"})
+
+            if kr.kind == "graph":
+                # Knowledge graph execution is out-of-scope for Phase 11. Return a
+                # controlled failure indicating the decision is valid but execution
+                # is not yet implemented.
+                return ExecutionResult(success=False, error=f"Knowledge graph execution not implemented for graph: {kr.source}")
+
+            # Fallback safety
+            return ExecutionResult(success=False, error=f"Unsupported knowledge request kind: {kr.kind}")
+
+        # If KnowledgeDecision is not present, preserve existing behavior.
         if self.knowledge_source_registry is not None:
-
-            source = self.knowledge_source_registry.get(
-                task.input.get("source")
-            )
-
-            return self._execute_retrieval_source(
-                source,
-                task,
-            )
+            source = self.knowledge_source_registry.get(task.input.get("source"))
+            return self._execute_retrieval_source(source, task)
 
         if self.retrieval is None:
-
-            return ExecutionResult(
-                success=False,
-                error="Retrieval capability unavailable",
-            )
-
-        query = task.input["query"]
-        top_k = task.input.get("top_k")
+            return ExecutionResult(success=False, error="Retrieval capability unavailable")
 
         if top_k is not None and (
             not isinstance(top_k, int)
             or isinstance(top_k, bool)
             or top_k <= 0
         ):
-
-            return ExecutionResult(
-                success=False,
-                error="Retrieval top_k must be a positive integer",
-            )
+            return ExecutionResult(success=False, error="Retrieval top_k must be a positive integer")
 
         if hasattr(self.retrieval, "retrieve"):
-
-            retrieved = self.retrieval.retrieve(
-                query,
-                k=top_k,
-            ) if top_k is not None else self.retrieval.retrieve(query)
-
+            retrieved = self.retrieval.retrieve(query, k=top_k) if top_k is not None else self.retrieval.retrieve(query)
             if not retrieved:
-
-                return ExecutionResult(
-                    success=False,
-                    output={
-                        "query": query,
-                        "results": [],
-                        "context_found": False,
-                    },
-                    error="No sufficiently relevant retrieval context found",
-                    metadata={"capability": "retrieval"},
-                )
-
-            result = {
-                "query": query,
-                "results": retrieved,
-                "context_found": True,
-            }
-
-            return ExecutionResult(
-                success=True,
-                output=result,
-                metadata={"capability": "retrieval"},
-            )
+                return ExecutionResult(success=False, output={"query": query, "results": [], "context_found": False}, error="No sufficiently relevant retrieval context found", metadata={"capability": "retrieval"})
+            result = {"query": query, "results": retrieved, "context_found": True}
+            return ExecutionResult(success=True, output=result, metadata={"capability": "retrieval"})
 
         result = self.retrieval.ask(query)
-
-        return ExecutionResult(
-            success=True,
-            output=result,
-        )
+        return ExecutionResult(success=True, output=result)
 
     def _execute_retrieval_source(
         self,
