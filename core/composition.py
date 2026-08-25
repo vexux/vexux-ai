@@ -112,12 +112,8 @@ def create_agent():
     workflows = WorkflowRegistry()
     workflows.register(KnowledgeGroundedAnswerWorkflow())
 
-    execution_manager = ExecutionManager(
-        tool_registry=tool_registry,
-        model_gateway=model_gateway,
-        knowledge_source_registry=knowledge_sources,
-        policy=policy,
-    )
+    # execution_manager is created later after optional components (e.g., knowledge graph) are configured
+    # so that optional registries can be injected into it at construction time.
 
     # -------------------------
     # Planner
@@ -164,6 +160,15 @@ def create_agent():
         knowledge_graph_registry = KnowledgeGraphRegistry()
         # Register a default in-memory backend for Phase 10 foundation
         knowledge_graph_registry.register(InMemoryKnowledgeGraph())
+
+    # Create the ExecutionManager after optional components have been configured
+    execution_manager = ExecutionManager(
+        tool_registry=tool_registry,
+        model_gateway=model_gateway,
+        knowledge_source_registry=knowledge_sources,
+        knowledge_graph_registry=knowledge_graph_registry,
+        policy=policy,
+    )
 
     agent = Agent(
         execution_manager=execution_manager,

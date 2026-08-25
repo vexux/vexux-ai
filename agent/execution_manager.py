@@ -1,5 +1,7 @@
 from typing import Any
 
+from core.contracts.evidence import Evidence, EvidenceSet
+
 from core.contracts.execution import (
     AgentContext,
     ExecutionResult,
@@ -123,12 +125,18 @@ class ExecutionManager:
 
         if self.knowledge_decision is not None:
             try:
-                kr = self.knowledge_decision.create_request(
-                    query=query,
-                    explicit_source=explicit_source,
-                    operation=None,
-                    params={"top_k": top_k} if top_k is not None else {},
-                )
+                # Allow callers to specify a high-level operation and structured params in the task input.
+                                operation = task.input.get("operation")
+                                params = dict(task.input.get("params", {})) if isinstance(task.input.get("params"), dict) else {}
+                                if top_k is not None:
+                                    params.setdefault("top_k", top_k)
+
+                                kr = self.knowledge_decision.create_request(
+                                    query=query,
+                                    explicit_source=explicit_source,
+                                    operation=operation,
+                                    params=params,
+                                )
             except Exception as exc:
                 # Controlled failure: explicit unknown source or unavailable capability
                 return ExecutionResult(success=False, error=str(exc))
@@ -175,10 +183,58 @@ class ExecutionManager:
                 return ExecutionResult(success=True, output=result, metadata={"capability": "retrieval"})
 
             if kr.kind == "graph":
-                # Knowledge graph execution is out-of-scope for Phase 11. Return a
-                # controlled failure indicating the decision is valid but execution
-                # is not yet implemented.
-                return ExecutionResult(success=False, error=f"Knowledge graph execution not implemented for graph: {kr.source}")
+                # Execute graph operations using the configured KnowledgeGraphRegistry.
+                if self.knowledge_graph_registry is None:
+                    return ExecutionResult(success=False, error="Knowledge graph capability unavailable")
+
+                try:
+                    graph = self.knowledge_graph_registry.get(kr.source)
+                except Exception as exc:
+                    return ExecutionResult(success=False, error=str(exc))
+
+                operation = kr.operation or kr.params.get("operation") if hasattr(kr, "params") else kr.operation
+                params = kr.params if hasattr(kr, "params") else {}
+
+                try:
+                    # Node lookup
+                    if operation in ("get_node", "node_lookup", "node"):
+                        node_id = params.get("node_id") or params.get("id")
+                        if not node_id:
+                            return ExecutionResult(success=False, error="Graph operation 'get_node' requires 'node_id' parameter")
+                        node = graph.get_node(node_id)
+                        evidence = EvidenceSet()
+                        evidence.add(Evidence(graph.name, str(node), "graph_node", metadata={"id": node_id}))
+                        output = {"query": query, "result": node, "context_found": True, "source": graph.name, "evidence": evidence}
+                        return ExecutionResult(success=True, output=output, metadata={"capability": "retrieval", "source": graph.name})
+
+                    # Relationship lookup
+                    if operation in ("get_relationship", "relationship_lookup", "relationship"):
+                        rel_id = params.get("rel_id") or params.get("id")
+                        if not rel_id:
+                            return ExecutionResult(success=False, error="Graph operation 'get_relationship' requires 'rel_id' parameter")
+                        rel = graph.get_relationship(rel_id)
+                        evidence = EvidenceSet()
+                        evidence.add(Evidence(graph.name, str(rel), "graph_relationship", metadata={"id": rel_id}))
+                        output = {"query": query, "result": rel, "context_found": True, "source": graph.name, "evidence": evidence}
+                        return ExecutionResult(success=True, output=output, metadata={"capability": "retrieval", "source": graph.name})
+
+                    # Neighbor traversal
+                    if operation in ("get_neighbors", "neighbors", "neighbor_traversal"):
+                        node_id = params.get("node_id") or params.get("id")
+                        direction = params.get("direction", "outgoing")
+                        if not node_id:
+                            return ExecutionResult(success=False, error="Graph operation 'get_neighbors' requires 'node_id' parameter")
+                        neighbors = graph.get_neighbors(node_id, direction=direction)
+                        evidence = EvidenceSet()
+                        for item in neighbors:
+                            evidence.add(Evidence(graph.name, str(item), "graph_neighbor", metadata={"node_id": node_id, "direction": item.get("direction")}))
+                        output = {"query": query, "results": neighbors, "context_found": bool(neighbors), "source": graph.name, "evidence": evidence}
+                        return ExecutionResult(success=True, output=output, metadata={"capability": "retrieval", "source": graph.name})
+
+                    return ExecutionResult(success=False, error=f"Unsupported graph operation: {operation}")
+
+                except Exception as exc:
+                    return ExecutionResult(success=False, error=str(exc))
 
             # Fallback safety
             return ExecutionResult(success=False, error=f"Unsupported knowledge request kind: {kr.kind}")
