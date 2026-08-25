@@ -9,7 +9,7 @@ from agent.execution_manager import (
 from agent.planner import Planner
 from agent.observer import Observer
 from agent.decision import DecisionMaker, DecisionType
-from core.contracts.execution import Plan
+from core.contracts.execution import Plan, Task
 from core.contracts.response import AgentResponse
 from core.context.context_manager import ContextManager
 from agent.response_synthesizer import ResponseSynthesizer
@@ -670,5 +670,62 @@ class Agent:
                 "request_id": context.request_id,
                 "session_id": context.session_id,
                 "user_id": context.user_id,
+            },
+        )
+
+    def run_workflow(
+        self,
+        workflow_name: str,
+        workflow_input: dict | None = None,
+        session_id: str | None = None,
+        user_id: str | None = None,
+    ):
+        if self.workflow_registry is None:
+            return AgentResponse(
+                success=False,
+                error=f"Workflow '{workflow_name}' is unavailable.",
+                trace=[],
+                metadata={"selected_mode": "workflow", "workflow_name": workflow_name},
+            )
+
+        try:
+            self.workflow_registry.get(workflow_name)
+        except KeyError:
+            return AgentResponse(
+                success=False,
+                error=f"Unknown workflow: {workflow_name}",
+                trace=[],
+                metadata={"selected_mode": "workflow", "workflow_name": workflow_name},
+            )
+
+        context = self.context_manager.create(
+            request_id=str(uuid.uuid4()),
+            session_id=session_id,
+            user_id=user_id,
+        )
+        plan = Plan(tasks=[
+            Task(
+                id=f"workflow:{workflow_name}",
+                description=f"Execute workflow '{workflow_name}'",
+                input={"workflow": workflow_name, **(workflow_input or {})},
+                metadata={"capability": "workflow", "workflow": workflow_name},
+            )
+        ])
+
+        _, response = self._execute_plan(context, f"Workflow execution: {workflow_name}", plan)
+        if response is not None:
+            return response
+
+        return AgentResponse(
+            success=False,
+            output=None,
+            error="Workflow execution could not complete.",
+            trace=context.observations,
+            metadata={
+                "request_id": context.request_id,
+                "session_id": context.session_id,
+                "user_id": context.user_id,
+                "selected_mode": "workflow",
+                "workflow_name": workflow_name,
             },
         )
