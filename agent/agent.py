@@ -189,6 +189,51 @@ class Agent:
                 for did in desc:
                     blocked.add(did)
 
+            # Small helper to resolve structured references in task input using context.observations
+            def resolve_references(obj):
+                # recursively walk obj and replace dicts of form {"from_task":"<id>", "path":"a.b"} with the referenced value
+                from core.contracts.execution import ExecutionResult
+
+                def _resolve(value):
+                    # primitive
+                    if isinstance(value, dict):
+                        # detect reference
+                        if "from_task" in value:
+                            from_task = value.get("from_task")
+                            path = value.get("path")
+                            # find the latest observation for the referenced task
+                            ref_obs = None
+                            for o in reversed(context.observations):
+                                if o.task_id == from_task:
+                                    ref_obs = o
+                                    break
+                            if ref_obs is None:
+                                # synthesize resolution failure
+                                raise KeyError(f"Referenced task not found: {from_task}")
+                            if not ref_obs.success:
+                                raise ValueError(f"Referenced task did not complete successfully: {from_task}")
+                            out = ref_obs.output
+                            # resolve optional simple dot-path
+                            if path:
+                                parts = path.split(".")
+                                for p in parts:
+                                    if isinstance(out, dict) and p in out:
+                                        out = out[p]
+                                    else:
+                                        raise KeyError(f"Path '{path}' not found in output of task {from_task}")
+                            return out
+                        # else recurse into dict
+                        newd = {}
+                        for k, v in value.items():
+                            newd[k] = _resolve(v)
+                        return newd
+                    elif isinstance(value, list):
+                        return [_resolve(v) for v in value]
+                    else:
+                        return value
+
+                return _resolve(obj)
+
             # Execute ready tasks deterministically: preserve original plan order among ready tasks
             remaining = set(id_map.keys())
             while remaining:
@@ -208,10 +253,64 @@ class Agent:
                 if self.max_parallel_tasks <= 1 or len(to_submit) == 1:
                     for task_id in to_submit:
                         task = id_map[task_id]
-                        # Run synchronously on main thread
+                        # resolve references in task.input using observations in context
+                        try:
+                            resolved_input = resolve_references(task.input)
+                        except KeyError as kerr:
+                            from core.contracts.execution import ExecutionResult
+
+                            # create a failed ExecutionResult due to reference resolution error
+                            err_msg = f"Reference resolution error: {kerr}"
+                            failed_result = ExecutionResult(success=False, output=None, error=err_msg, metadata={"reference_error": True})
+                            observation = self.observer.observe(failed_result, task)
+                            self.context_manager.add_observation(context, observation)
+                            # mark descendants blocked and synthesize blocked observations
+                            failed.add(task.id)
+                            mark_descendants_blocked(task.id)
+                            for desc_id in list(blocked):
+                                if desc_id in remaining:
+                                    desc_task = id_map[desc_id]
+                                    blocked_exec = ExecutionResult(success=False, output=None, error=f"Blocked due to failed dependency: {task.id}", metadata={"blocked": True})
+                                    blocked_obs = self.observer.observe(blocked_exec, desc_task)
+                                    self.context_manager.add_observation(context, blocked_obs)
+                                    remaining.discard(desc_id)
+                            # Decision: replan because resolution failure is a real failure
+                            decision = self.decision_maker.decide(observation)
+                            if decision == DecisionType.REPLAN:
+                                should_replan = True
+                                break
+                            else:
+                                continue
+                        except ValueError as verr:
+                            from core.contracts.execution import ExecutionResult
+
+                            err_msg = f"Reference resolution error: {verr}"
+                            failed_result = ExecutionResult(success=False, output=None, error=err_msg, metadata={"reference_error": True})
+                            observation = self.observer.observe(failed_result, task)
+                            self.context_manager.add_observation(context, observation)
+                            failed.add(task.id)
+                            mark_descendants_blocked(task.id)
+                            for desc_id in list(blocked):
+                                if desc_id in remaining:
+                                    desc_task = id_map[desc_id]
+                                    blocked_exec = ExecutionResult(success=False, output=None, error=f"Blocked due to failed dependency: {task.id}", metadata={"blocked": True})
+                                    blocked_obs = self.observer.observe(blocked_exec, desc_task)
+                                    self.context_manager.add_observation(context, blocked_obs)
+                                    remaining.discard(desc_id)
+                            decision = self.decision_maker.decide(observation)
+                            if decision == DecisionType.REPLAN:
+                                should_replan = True
+                                break
+                            else:
+                                continue
+
+                        # Run synchronously on main thread using a shallow copy of the task with resolved input
+                        exec_task = type(task)(**{k: getattr(task, k) for k in ("id", "description", "input", "metadata", "depends_on")})
+                        exec_task.input = resolved_input
+
                         self.context_manager.set_task(context, task)
                         started_at = time.perf_counter()
-                        result = self.execution_manager.execute(task, context)
+                        result = self.execution_manager.execute(exec_task, context)
                         duration_ms = (time.perf_counter() - started_at) * 1000
                         logger.info(
                             "agent.task.execution",
@@ -285,6 +384,7 @@ class Agent:
                     # batch done; continue to next scheduling loop
                     continue
 
+
                 # Else: submit multiple tasks concurrently using ThreadPoolExecutor
                 from concurrent.futures import ThreadPoolExecutor, as_completed
 
@@ -301,8 +401,43 @@ class Agent:
                 with ThreadPoolExecutor(max_workers=self.max_parallel_tasks) as pool:
                     for tid in to_submit:
                         task = id_map[tid]
+                        # resolve references in task.input using observations in context before submitting
+                        try:
+                            resolved_input = resolve_references(task.input)
+                        except Exception as e:
+                            # resolution failed before submission: synthesize a failed ExecutionResult and process it in main thread
+                            from core.contracts.execution import ExecutionResult
+
+                            err_msg = f"Reference resolution error before execution: {e}"
+                            failed_result = ExecutionResult(success=False, output=None, error=err_msg, metadata={"reference_error": True})
+                            observation = self.observer.observe(failed_result, task)
+                            self.context_manager.add_observation(context, observation)
+                            failed.add(task.id)
+                            mark_descendants_blocked(task.id)
+                            for desc_id in list(blocked):
+                                if desc_id in remaining:
+                                    desc_task = id_map[desc_id]
+                                    blocked_exec = ExecutionResult(success=False, output=None, error=f"Blocked due to failed dependency: {task.id}", metadata={"blocked": True})
+                                    blocked_obs = self.observer.observe(blocked_exec, desc_task)
+                                    self.context_manager.add_observation(context, blocked_obs)
+                                    remaining.discard(desc_id)
+                            # Since this task failed pre-submission, treat as decision to replan if needed
+                            decision = self.decision_maker.decide(observation)
+                            if decision == DecisionType.REPLAN:
+                                should_replan = True
+                                break
+                            else:
+                                continue
+
                         # Submit worker; worker must not mutate shared AgentContext
-                        futures[pool.submit(_exec_task, task)] = task.id
+                        exec_task = type(task)(**{k: getattr(task, k) for k in ("id", "description", "input", "metadata", "depends_on")})
+                        exec_task.input = resolved_input
+                        futures[pool.submit(_exec_task, exec_task)] = task.id
+
+                    if should_replan:
+                        # skip waiting on remaining futures if replanning triggered during resolution
+                        # let the context manager handle already recorded observations; break main loop
+                        break
 
                     # Collect all completed futures
                     completed_batch = []
