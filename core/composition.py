@@ -30,6 +30,8 @@ from agent.decision import DecisionMaker
 from agent.response_synthesizer import ResponseSynthesizer
 from core.memory.registry import MemoryRegistry
 from core.memory.sqlite_memory import SQLiteMemory
+from core.orchestrator import Orchestrator
+from core.specialized_agents import ResearchAgent, SpecializedAgentRegistry
 from pathlib import Path
 
 
@@ -191,3 +193,33 @@ def create_agent():
     )
 
     return agent
+
+
+def create_orchestrator(
+    agent=None,
+    workflow_registry=None,
+    specialized_agent_registry=None,
+):
+    """Optional composition helper for the thin orchestrator boundary.
+
+    Existing callers can still use create_agent() directly without any specialized
+    agent configuration. If a registry is not supplied, the orchestrator remains
+    backward compatible and continues to route only regular Agent and workflow
+    requests.
+    """
+    if agent is None:
+        agent = create_agent()
+
+    registry = specialized_agent_registry
+    if registry is None:
+        registry = SpecializedAgentRegistry()
+        try:
+            registry.register(ResearchAgent(agent))
+        except ValueError:
+            pass
+
+    return Orchestrator(
+        agent=agent,
+        workflow_registry=workflow_registry,
+        specialized_agent_registry=registry,
+    )

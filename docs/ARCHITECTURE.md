@@ -51,6 +51,7 @@ Contains the cognitive and control-loop primitives. This layer is responsible fo
 - **Observer** (`agent/observer.py`): Normalizes raw execution outcomes into structured observations linked with `task_id`.
 - **DecisionMaker** (`agent/decision.py`): Determines whether an observation satisfies the goal (`DONE`) or requires a new plan (`REPLAN`).
 - **ResponseSynthesizer** (`agent/response_synthesizer.py`): Synthesizes multi-task observation outputs into a clear, unified final response.
+- **Specialized Agents** (`core/specialized_agents/`): Optional role adapters around the existing Agent. The current reference implementation is `ResearchAgent`, a narrow adapter that reuses the agent's normal execution pipeline instead of creating a second planner or scheduler.
 
 ### Layer 2: Middle / Architecture Layer
 Provides structural boundaries, data contracts, and dependency mediation.
@@ -59,7 +60,9 @@ Provides structural boundaries, data contracts, and dependency mediation.
 - **ModelGateway** (`core/model_gateway/gateway.py`): Mediates LLM/SLM generation behind a standardized interface (`ModelProviderContract`).
 - **ToolRegistry** (`core/tools/registry.py`): In-memory registry for discovering and executing tools implementing `ToolContract`.
 - **ExecutionManager** (`agent/execution_manager.py`): Dispatches execution tasks to RAG, tools, or direct model calls.
-- **Composition Root** (`core/composition.py`): Factory module (`create_agent()`) that wires concrete instances and handles dependency injection.
+- **Orchestrator** (`core/orchestrator.py`): Selects the execution owner; it delegates to the direct Agent, workflows, or an explicitly selected specialized agent without redesigning the underlying execution stack.
+- **Specialized Agent Registry** (`core/specialized_agents/`): Optional discovery/lookup registry for role-specific adapters. The current reference implementation is a thin `ResearchAgent` wrapper around the existing Agent.
+- **Composition Root** (`core/composition.py`): Factory module (`create_agent()`) that wires concrete instances and handles dependency injection; optional orchestrator helpers can register specialized agents without changing the default Agent path.
 - **FastAPI API** (`api/main.py`): Thin HTTP boundary delegating requests to the composition-root Agent.
 - **Evaluation Suite** (`evaluation/`): Deterministic system-level evaluation runner with 44 scenarios.
 

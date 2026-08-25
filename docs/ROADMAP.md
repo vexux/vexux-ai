@@ -74,8 +74,11 @@ Evaluation suite
 - If multiple tasks fail in the same batch, a deterministic selection rule (earliest by original plan order) selects which failed task drives replanning.
 - Recovery plan merging remains based on the existing replanning model and preserves task IDs for recovery tasks.
 
-### 4.2 Multi-Agent Orchestration
-- Specialized agents and supervisor-worker coordination.
+### 4.2 Specialized Agent Delegation
+- Explicit, deterministic specialization via an orchestrator-level selection mechanism.
+- Reference implementation: `ResearchAgent`, a thin adapter around the existing Agent that reuses the current planning, DAG, workflow, and execution stack instead of creating a second planner or scheduler.
+- Old behavior remains the default when no specialized agent is explicitly requested.
+- Multi-agent collaboration, automatic agent selection, and shared multi-agent memory remain future work.
 
 ### 4.3 Persistent Conversation and Memory Storage
 - Durable session state, episodic memory, and entity memory backends.

@@ -1,5 +1,6 @@
 from core.contracts.response import AgentResponse
 from core.orchestrator import Orchestrator
+from core.specialized_agents import ResearchAgent, SpecializedAgentRegistry
 
 
 class DummyAgent:
@@ -111,3 +112,74 @@ def test_orchestrator_preserves_legacy_agent_run_compatibility():
     assert result.success is True
     assert result.output == "agent:legacy query"
     assert agent.calls == [("run", "legacy query", "legacy-session", "legacy-user")]
+
+
+class DummySpecializedAgent:
+    name = "dummy"
+    description = "Dummy specialized agent for contract tests."
+
+    def __init__(self, *, result=None):
+        self.result = result
+
+    def run(self, request, session_id=None, user_id=None):
+        if self.result is not None:
+            return self.result
+        return AgentResponse(
+            success=True,
+            output=f"dummy:{request.get('query') if isinstance(request, dict) else request}",
+            metadata={"selected_mode": "specialized_agent", "selected_agent": self.name},
+        )
+
+
+def test_specialized_agent_registry_supports_register_and_lookup():
+    registry = SpecializedAgentRegistry()
+    agent = DummyAgent()
+    research_agent = ResearchAgent(agent)
+
+    registry.register(research_agent)
+
+    assert registry.list_agents() == ["research"]
+    assert registry.get("research") is research_agent
+    assert registry.describe_agents() == [{"name": "research", "description": research_agent.description}]
+
+
+def test_orchestrator_routes_explicit_specialized_agent():
+    base_agent = DummyAgent()
+    registry = SpecializedAgentRegistry()
+    registry.register(ResearchAgent(base_agent))
+    orchestrator = Orchestrator(base_agent, specialized_agent_registry=registry)
+
+    result = orchestrator.run(
+        {"agent": "research", "query": "find papers about retrieval"},
+        session_id="s3",
+        user_id="u3",
+    )
+
+    assert result.success is True
+    assert result.output == "agent:find papers about retrieval"
+    assert base_agent.calls == [("run", "find papers about retrieval", "s3", "u3")]
+
+
+def test_orchestrator_rejects_unknown_specialized_agent():
+    base_agent = DummyAgent()
+    registry = SpecializedAgentRegistry()
+    orchestrator = Orchestrator(base_agent, specialized_agent_registry=registry)
+
+    result = orchestrator.run({"agent": "missing", "query": "hello"})
+
+    assert result.success is False
+    assert result.error == "Unknown specialized agent: missing"
+    assert result.metadata == {"selected_mode": "specialized_agent", "selected_agent": "missing"}
+    assert base_agent.calls == []
+
+
+def test_research_agent_requires_query_in_structured_request():
+    base_agent = DummyAgent()
+    research_agent = ResearchAgent(base_agent)
+
+    result = research_agent.run({"agent": "research"})
+
+    assert result.success is False
+    assert result.error == "Research request must include a query."
+    assert result.metadata == {"selected_mode": "specialized_agent", "selected_agent": "research"}
+    assert base_agent.calls == []

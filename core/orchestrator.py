@@ -8,13 +8,15 @@ from core.contracts.response import AgentResponse
 class Orchestrator:
     """Minimal orchestration boundary.
 
-    It chooses the execution mode and delegates to the existing Agent execution stack.
-    It never executes tools, retrievals, or DAG tasks directly.
+    It chooses the execution owner and delegates to the existing Agent or a
+    registered specialized agent. It never executes tools, retrievals, or DAG
+    tasks directly.
     """
 
-    def __init__(self, agent, workflow_registry=None):
+    def __init__(self, agent, workflow_registry=None, specialized_agent_registry=None):
         self.agent = agent
         self.workflow_registry = workflow_registry
+        self.specialized_agent_registry = specialized_agent_registry
 
     def run(
         self,
@@ -23,12 +25,37 @@ class Orchestrator:
         user_id: str | None = None,
     ) -> AgentResponse:
         if isinstance(request, dict):
-            # explicit workflow selection is a structured request; otherwise default to direct agent mode
+            selected_agent = request.get("agent")
             workflow_name = request.get("workflow")
             workflow_input = {
-                k: v for k, v in request.items() if k not in {"workflow", "query", "session_id", "user_id"}
+                k: v for k, v in request.items() if k not in {"agent", "workflow", "query", "session_id", "user_id"}
             }
             query = request.get("query")
+
+            if selected_agent is not None:
+                if self.specialized_agent_registry is None:
+                    return AgentResponse(
+                        success=False,
+                        error=f"Specialized agent '{selected_agent}' is unavailable.",
+                        trace=[],
+                        metadata={"selected_mode": "specialized_agent", "selected_agent": selected_agent},
+                    )
+                try:
+                    specialized_agent = self.specialized_agent_registry.get(selected_agent)
+                except KeyError:
+                    return AgentResponse(
+                        success=False,
+                        error=f"Unknown specialized agent: {selected_agent}",
+                        trace=[],
+                        metadata={"selected_mode": "specialized_agent", "selected_agent": selected_agent},
+                    )
+                result = specialized_agent.run(request, session_id=session_id, user_id=user_id)
+                if result.metadata is None:
+                    result.metadata = {}
+                result.metadata["selected_mode"] = "specialized_agent"
+                result.metadata["selected_agent"] = selected_agent
+                return result
+
             if workflow_name is not None:
                 if self.workflow_registry is None:
                     return AgentResponse(

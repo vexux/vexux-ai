@@ -139,6 +139,32 @@ class Intent:
 
 ---
 
+### 1.6 Specialized Agent Contract (`core/contracts/orchestrator.py`)
+A thin protocol for role-specific adapters that can be selected by the orchestrator.
+
+```python
+class SpecializedAgentContract(Protocol):
+    @property
+    def name(self) -> str: ...
+
+    @property
+    def description(self) -> str: ...
+
+    def run(self, request: Any, session_id: str | None = None, user_id: str | None = None) -> AgentResponse:
+        ...
+```
+
+- **Fields**:
+  - `name` (`str`): Stable identifier used for deterministic explicit selection, e.g. `"research"`.
+  - `description` (`str`): Short capability description for discovery and metadata.
+- **Producer**: Any specialized adapter implementing a role-specific entrypoint.
+- **Consumer**: `Orchestrator` when an explicit `agent` key is present in the request.
+- **Purpose**: Keeps role-specific execution opt-in and domain-agnostic without duplicating the base `Agent` control loop.
+
+> Explicit deterministic specialization is currently the only supported model. Automatic agent selection and multi-agent coordination remain future work.
+
+---
+
 ## 2. Observation Contract (`core/contracts/observation.py`)
 
 ### 2.1 `Observation`
