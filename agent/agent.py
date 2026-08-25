@@ -143,15 +143,100 @@ class Agent:
             )
 
             if self.workflow_registry is not None:
-                expanded_tasks = []
-                for task in plan.tasks:
-                    if task.metadata.get("capability") != "workflow":
-                        expanded_tasks.append(task)
-                        continue
-                    workflow = self.workflow_registry.get(task.input["workflow"])
-                    expanded_tasks.extend(workflow.build_tasks(task.input))
-                plan = Plan(tasks=expanded_tasks)
-                self.context_manager.set_plan(context, plan)
+                try:
+                    # Expand workflows into concrete tasks, validating workflow inputs and generated tasks
+                    expanded_tasks = []
+
+                    def _collect_from_task_inputs(obj, refs):
+                        # recursively collect any {'from_task': id} references
+                        if isinstance(obj, dict):
+                            if "from_task" in obj:
+                                refs.add(obj.get("from_task"))
+                            else:
+                                for v in obj.values():
+                                    _collect_from_task_inputs(v, refs)
+                        elif isinstance(obj, list):
+                            for v in obj:
+                                _collect_from_task_inputs(v, refs)
+
+                    for task in plan.tasks:
+                        if task.metadata.get("capability") != "workflow":
+                            expanded_tasks.append(task)
+                            continue
+
+                        # Validate workflow input contract minimally (supports 'required' key)
+                        workflow_name = task.input.get("workflow")
+                        workflow = self.workflow_registry.get(workflow_name)
+                        schema = getattr(workflow, "input_schema", None) or {}
+                        required = schema.get("required", [])
+                        missing = [r for r in required if r not in task.input]
+                        if missing:
+                            raise ValueError(f"Workflow '{workflow_name}' missing required inputs: {missing}")
+
+                        # Build tasks from workflow
+                        wf_tasks = workflow.build_tasks(task.input)
+
+                        # Validate uniqueness of IDs within workflow tasks
+                        ids = [t.id for t in wf_tasks]
+                        if len(ids) != len(set(ids)):
+                            raise ValueError(f"Workflow '{workflow_name}' produced duplicate task IDs")
+
+                        # Build id map for validation
+                        id_map_wf = {t.id: t for t in wf_tasks}
+
+                        # Validate depends_on references exist and no self-deps
+                        for t in wf_tasks:
+                            for dep in getattr(t, "depends_on", []) or []:
+                                if dep not in id_map_wf:
+                                    raise ValueError(f"Workflow '{workflow_name}' task '{t.id}' has unknown dependency: {dep}")
+                                if dep == t.id:
+                                    raise ValueError(f"Workflow '{workflow_name}' task '{t.id}' has self-dependency")
+
+                        # Detect cycles using Kahn's algorithm on workflow task graph
+                        adj_wf = {tid: [] for tid in ids}
+                        indeg_wf = {tid: 0 for tid in ids}
+                        for t in wf_tasks:
+                            for dep in getattr(t, "depends_on", []) or []:
+                                adj_wf[dep].append(t.id)
+                                indeg_wf[t.id] += 1
+                        # Kahn
+                        q = [n for n, d in indeg_wf.items() if d == 0]
+                        seen = 0
+                        while q:
+                            n = q.pop(0)
+                            seen += 1
+                            for c in adj_wf.get(n, []):
+                                indeg_wf[c] -= 1
+                                if indeg_wf[c] == 0:
+                                    q.append(c)
+                        if seen != len(ids):
+                            raise ValueError(f"Workflow '{workflow_name}' task graph contains cycles")
+
+                        # Validate that any from_task references in task inputs are declared as dependencies
+                        for t in wf_tasks:
+                            refs = set()
+                            _collect_from_task_inputs(t.input, refs)
+                            for refid in refs:
+                                if refid not in getattr(t, "depends_on", []) and refid in id_map_wf:
+                                    raise ValueError(f"Workflow '{workflow_name}' task '{t.id}' references output from '{refid}' but does not declare it in depends_on")
+
+                        # All validations passed for this workflow - append its tasks to expanded list
+                        expanded_tasks.extend(wf_tasks)
+
+                    plan = Plan(tasks=expanded_tasks)
+                    self.context_manager.set_plan(context, plan)
+                except ValueError as exc:
+                    return AgentResponse(
+                        success=False,
+                        output=None,
+                        error=f"Workflow validation failed: {exc}",
+                        trace=context.observations,
+                        metadata={
+                            "request_id": context.request_id,
+                            "session_id": context.session_id,
+                            "user_id": context.user_id,
+                        },
+                    )
 
             if self.policy is not None:
                 decision = self.policy.validate_plan(plan, context)
