@@ -46,7 +46,7 @@ The repository includes targeted verification scripts at the root level:
 ### 2.1 End-to-End Agent Verification
 Tests the complete loop: intent classification, plan creation, execution against capabilities (RAG, Tool, Model), observation, and response generation.
 ```bash
-python test_agent.py
+python scripts/manual/run_agent.py
 ```
 
 ### 2.2 Component Verification Scripts

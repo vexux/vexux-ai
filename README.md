@@ -124,7 +124,7 @@ Qwen remains available through its existing local adapter path. The Mistral prov
 ## Running the Agent
 
 ```powershell
-python test_agent.py
+python scripts/manual/run_agent.py
 ```
 
 This constructs the composition-root Agent and runs its sample request. It requires a configured Mistral key by default, or the Qwen environment configuration above.
