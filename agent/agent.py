@@ -28,6 +28,8 @@ class Agent:
         workflow_registry=None,
         memory_registry=None,
         knowledge_graph_registry=None,
+        # Maximum number of tasks to run in parallel. Default 1 preserves sequential behavior.
+        max_parallel_tasks: int = 1,
     ):
 
         self.execution_manager = (
@@ -54,6 +56,10 @@ class Agent:
         self.knowledge_graph_registry = knowledge_graph_registry
 
         self.max_retries = 2
+
+        # concurrency: maximum number of concurrently executing ready tasks
+        # default is 1 to preserve previous sequential behavior unless configured
+        self.max_parallel_tasks = max(1, int(max_parallel_tasks or 1))
 
     def run(
         self,
@@ -188,24 +194,139 @@ class Agent:
             while remaining:
                 # find ready tasks: indegree 0, not executed, not blocked
                 ready = [nid for nid in plan.tasks if indegree.get(nid.id, 0) == 0 and nid.id in remaining and nid.id not in blocked]
-                # 'ready' uses task objects; preserve original order by sorting using original_index
+                # 'ready' uses task objects; preserve original order by mapping to their ids
                 ready_ids = [t.id for t in ready]
 
                 if not ready_ids:
                     # No ready tasks found — should not happen due to prior validation (cycles handled there)
                     break
 
-                # Process ready tasks in the deterministic order of their appearance
-                for task_id in ready_ids:
-                    task = id_map[task_id]
+                # Determine which tasks to submit this batch (preserve original plan order)
+                to_submit = ready_ids[: self.max_parallel_tasks]
 
-                    # set current task in context
-                    self.context_manager.set_task(context, task)
+                # If only one worker configured, keep legacy sequential behavior by executing directly
+                if self.max_parallel_tasks <= 1 or len(to_submit) == 1:
+                    for task_id in to_submit:
+                        task = id_map[task_id]
+                        # Run synchronously on main thread
+                        self.context_manager.set_task(context, task)
+                        started_at = time.perf_counter()
+                        result = self.execution_manager.execute(task, context)
+                        duration_ms = (time.perf_counter() - started_at) * 1000
+                        logger.info(
+                            "agent.task.execution",
+                            extra={
+                                "request_id": context.request_id,
+                                "session_id": context.session_id,
+                                "user_id": context.user_id,
+                                "task_id": task.id,
+                                "capability": task.metadata.get("capability"),
+                                "execution_success": result.success,
+                                "execution_duration_ms": round(duration_ms, 3),
+                            },
+                        )
 
-                    started_at = time.perf_counter()
-                    result = self.execution_manager.execute(task, context)
-                    duration_ms = (time.perf_counter() - started_at) * 1000
+                        observation = self.observer.observe(result, task)
+                        self.context_manager.add_observation(context, observation)
 
+                        if observation.success:
+                            executed.add(task.id)
+                            self.context_manager.add_completed_task(context, task)
+                            # decrement indegree of children
+                            for child in adj.get(task.id, []):
+                                indegree[child] -= 1
+                                if indegree[child] < 0:
+                                    indegree[child] = 0
+
+                            # remove from remaining
+                            remaining.discard(task.id)
+
+                            # Decision: continue
+                            decision = self.decision_maker.decide(observation)
+                            if decision == DecisionType.REPLAN:
+                                should_replan = True
+                                break
+
+                            # else continue to next ready task
+                            continue
+
+                        # If observation indicates a blocked/skipped task (due to dependency), treat as non-replanning
+                        if observation.metadata and observation.metadata.get("blocked"):
+                            # record and don't execute it
+                            blocked.add(task.id)
+                            remaining.discard(task.id)
+                            continue
+
+                        # If task failed (not a blocked skip), mark failed and block descendants
+                        failed.add(task.id)
+                        # mark descendants as blocked so they won't be executed
+                        mark_descendants_blocked(task.id)
+
+                        # create blocked observations for descendants
+                        for desc_id in list(blocked):
+                            if desc_id in remaining:
+                                desc_task = id_map[desc_id]
+                                from core.contracts.execution import ExecutionResult
+
+                                blocked_exec = ExecutionResult(success=False, output=None, error=f"Blocked due to failed dependency: {task.id}", metadata={"blocked": True})
+                                blocked_obs = self.observer.observe(blocked_exec, desc_task)
+                                self.context_manager.add_observation(context, blocked_obs)
+                                remaining.discard(desc_id)
+
+                        # Decision: replan for the failure
+                        decision = self.decision_maker.decide(observation)
+                        if decision == DecisionType.REPLAN:
+                            should_replan = True
+                            break
+
+                    if should_replan:
+                        break
+
+                    # batch done; continue to next scheduling loop
+                    continue
+
+                # Else: submit multiple tasks concurrently using ThreadPoolExecutor
+                from concurrent.futures import ThreadPoolExecutor, as_completed
+
+                futures = {}
+                results = {}
+
+                def _exec_task(t):
+                    # Worker runs execution_manager.execute and returns tuple
+                    start = time.perf_counter()
+                    res = self.execution_manager.execute(t, context)
+                    duration = (time.perf_counter() - start) * 1000
+                    return (t.id, res, duration, t)
+
+                with ThreadPoolExecutor(max_workers=self.max_parallel_tasks) as pool:
+                    for tid in to_submit:
+                        task = id_map[tid]
+                        # Submit worker; worker must not mutate shared AgentContext
+                        futures[pool.submit(_exec_task, task)] = task.id
+
+                    # Collect all completed futures
+                    completed_batch = []
+                    for fut in as_completed(futures):
+                        try:
+                            tid, res, duration_ms, task = fut.result()
+                        except Exception as e:
+                            # If worker raised, synthesize a failure ExecutionResult
+                            from core.contracts.execution import ExecutionResult
+
+                            tid = futures.get(fut)
+                            task = id_map[tid]
+                            res = ExecutionResult(success=False, output=None, error=f"Worker exception: {e}")
+                            duration_ms = 0.0
+                        completed_batch.append((tid, res, duration_ms, task))
+
+                # Process completed_batch in deterministic plan order
+                completed_batch.sort(key=lambda item: original_index[item[0]])
+
+                # Track observations for possible replanning selection
+                obs_map = {}
+                failed_replan_ids = []
+
+                for tid, res, duration_ms, task in completed_batch:
                     logger.info(
                         "agent.task.execution",
                         extra={
@@ -214,68 +335,79 @@ class Agent:
                             "user_id": context.user_id,
                             "task_id": task.id,
                             "capability": task.metadata.get("capability"),
-                            "execution_success": result.success,
+                            "execution_success": res.success,
                             "execution_duration_ms": round(duration_ms, 3),
                         },
                     )
 
-                    observation = self.observer.observe(result, task)
+                    # Set current task to the completed task before observing
+                    self.context_manager.set_task(context, task)
+
+                    observation = self.observer.observe(res, task)
                     self.context_manager.add_observation(context, observation)
+                    obs_map[tid] = observation
 
                     if observation.success:
-                        executed.add(task.id)
+                        executed.add(tid)
                         self.context_manager.add_completed_task(context, task)
                         # decrement indegree of children
-                        for child in adj.get(task.id, []):
+                        for child in adj.get(tid, []):
                             indegree[child] -= 1
                             if indegree[child] < 0:
                                 indegree[child] = 0
 
                         # remove from remaining
-                        remaining.discard(task.id)
+                        remaining.discard(tid)
 
-                        # Decision: continue
+                        # record decision for successful task
                         decision = self.decision_maker.decide(observation)
                         if decision == DecisionType.REPLAN:
-                            should_replan = True
-                            break
+                            # schedule replanning - select this as candidate
+                            failed_replan_ids.append(tid)
 
-                        # else continue to next ready task
                         continue
 
                     # If observation indicates a blocked/skipped task (due to dependency), treat as non-replanning
                     if observation.metadata and observation.metadata.get("blocked"):
-                        # record and don't execute it
-                        blocked.add(task.id)
-                        remaining.discard(task.id)
+                        blocked.add(tid)
+                        remaining.discard(tid)
                         continue
 
-                    # If task failed (not a blocked skip), mark failed and block descendants
-                    failed.add(task.id)
-                    # mark descendants as blocked so they won't be executed
-                    mark_descendants_blocked(task.id)
+                    # If this task failed (not blocked), mark failed and block descendants
+                    failed.add(tid)
+                    mark_descendants_blocked(tid)
 
                     # create blocked observations for descendants
                     for desc_id in list(blocked):
                         if desc_id in remaining:
                             desc_task = id_map[desc_id]
-                            blocked_result = self.execution_manager.execute if False else None
-                            # synthesize a blocked ExecutionResult
                             from core.contracts.execution import ExecutionResult
 
-                            blocked_exec = ExecutionResult(success=False, output=None, error=f"Blocked due to failed dependency: {task.id}", metadata={"blocked": True})
+                            blocked_exec = ExecutionResult(success=False, output=None, error=f"Blocked due to failed dependency: {tid}", metadata={"blocked": True})
                             blocked_obs = self.observer.observe(blocked_exec, desc_task)
                             self.context_manager.add_observation(context, blocked_obs)
                             remaining.discard(desc_id)
 
-                    # Decision: replan for the failure
+                    # decision for failed task
                     decision = self.decision_maker.decide(observation)
                     if decision == DecisionType.REPLAN:
-                        should_replan = True
-                        break
+                        failed_replan_ids.append(tid)
 
-                if should_replan:
+                # After processing batch, if replanning is required pick deterministic failed task
+                if failed_replan_ids:
+                    # pick earliest in original plan order
+                    selected = min(failed_replan_ids, key=lambda x: original_index[x])
+                    # ensure the corresponding observation is the last one in context.observations
+                    sel_obs = obs_map.get(selected)
+                    if sel_obs is not None:
+                        self.context_manager.add_observation(context, sel_obs)
+                    # set current task to the selected failed task for Planner.replan
+                    self.context_manager.set_task(context, id_map[selected])
+                    should_replan = True
                     break
+
+                # else continue main scheduling loop
+                continue
 
             if not should_replan:
 

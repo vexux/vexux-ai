@@ -55,6 +55,9 @@ class Plan:
 - **Consumer**: `Agent` (`run`), `ContextManager` (`set_plan`).
 - **Purpose**: Represents the full execution plan devised by the planner.
 
+
+> Configuration note: Bounded local concurrency is exposed via the environment variable `AGENT_MAX_PARALLEL_TASKS` (integer). By default this is `1` to preserve legacy sequential behavior. When set to a value >1 the Agent may execute independent ready tasks concurrently (bounded ThreadPoolExecutor). This configuration does not change the Task/Plan contracts themselves; it only affects the Agent's scheduling behavior.
+
 ---
 
 ### 1.3 `AgentContext`

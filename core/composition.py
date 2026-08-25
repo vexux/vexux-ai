@@ -170,6 +170,12 @@ def create_agent():
         policy=policy,
     )
 
+    # Read max parallel tasks configuration from environment; default 1 keeps legacy sequential behavior
+    try:
+        max_parallel = int(os.getenv("AGENT_MAX_PARALLEL_TASKS", "1"))
+    except Exception:
+        max_parallel = 1
+
     agent = Agent(
         execution_manager=execution_manager,
         planner=planner,
@@ -181,6 +187,7 @@ def create_agent():
         workflow_registry=workflows,
         memory_registry=memory_registry,
         knowledge_graph_registry=knowledge_graph_registry,
+        max_parallel_tasks=max_parallel,
     )
 
     return agent
