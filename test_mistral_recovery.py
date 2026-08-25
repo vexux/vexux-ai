@@ -2,14 +2,15 @@
 
 import os
 import sys
+import pytest
 
-# Check if MISTRAL_API_KEY is set
+# Skip this live Mistral test at import time when the API key is not set.
+# Using pytest.skip keeps pytest collection stable while preserving the
+# original behavior (the test is only executed when MISTRAL_API_KEY is set).
 MISTRAL_API_KEY = os.environ.get("MISTRAL_API_KEY")
 
 if not MISTRAL_API_KEY:
-    print("MISTRAL_API_KEY not set. Skipping live Mistral test.")
-    print("To test with Mistral, set the MISTRAL_API_KEY environment variable.")
-    sys.exit(0)
+    pytest.skip("MISTRAL_API_KEY not set. Skipping live Mistral test.", allow_module_level=True)
 
 try:
     from models.providers.mistral import MistralProvider
