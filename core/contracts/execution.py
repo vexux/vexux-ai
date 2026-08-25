@@ -1,6 +1,6 @@
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, List
 from core.contracts.observation import Observation
 
 @dataclass
@@ -17,6 +17,10 @@ class Task:
     metadata: Dict[str, Any] = field(
         default_factory=dict
     )
+
+    # List of task IDs this task depends on. Backward compatible: absent in
+    # older plans means no dependencies.
+    depends_on: List[str] = field(default_factory=list)
 
 
 @dataclass

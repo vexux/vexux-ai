@@ -62,7 +62,15 @@ Evaluation suite
 ## 4. Planned Capabilities
 
 ### 4.1 Multi-Step and DAG Planning
-- Task dependencies, conditional branching, and partial DAG recovery.
+- Task dependencies (Phase 13 implemented): Planner supports Task.depends_on, the Agent performs dependency-aware deterministic scheduling. See limitations below.
+- Future work: conditional branching, richer dataflow (output substitution), parallel DAG execution and advanced recovery strategies.
+
+
+### Notes on Phase 13 (current limitations)
+- Execution is currently sequential and deterministic: ready tasks are executed in a stable plan-order when multiple tasks become ready simultaneously.
+- No parallel/async scheduling yet — parallel execution, worker pools, or distributed scheduling remain future work.
+- No general output substitution or complex dataflow between tasks in Phase 13; that belongs to a subsequent phase.
+- Recovery plan merging remains based on the existing replanning model and preserves task IDs for recovery tasks.
 
 ### 4.2 Multi-Agent Orchestration
 - Specialized agents and supervisor-worker coordination.

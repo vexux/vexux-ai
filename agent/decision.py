@@ -17,6 +17,11 @@ class DecisionMaker:
         observation: Observation,
     ) -> DecisionType:
 
+        # Observations created for blocked/skipped tasks carry metadata{"blocked": True}
+        # Treat blocked tasks as non-replanning outcomes: they are controlled skips.
+        if observation.metadata and observation.metadata.get("blocked"):
+            return DecisionType.DONE
+
         if observation.success:
             return DecisionType.DONE
 

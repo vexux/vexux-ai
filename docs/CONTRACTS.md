@@ -18,6 +18,15 @@ class Task:
     description: str
     input: Dict[str, Any] = field(default_factory=dict)
     metadata: Dict[str, Any] = field(default_factory=dict)
+    # Optional dependency list: other task IDs that must complete successfully
+    # before this task becomes ready. Backward compatible: omit or empty means
+    # no dependencies.
+    depends_on: list[str] = field(default_factory=list)
+
+```
+
+- **Fields (added behavior):**
+  - `depends_on` (`list[str]`): Optional list of task IDs this task depends on. When present, the Planner and Agent will validate that the referenced IDs exist, that no self-dependencies or cycles are present, and that execution follows dependency semantics (ready tasks only execute when all predecessors succeeded). Default: `[]`.
 ```
 
 - **Fields**:

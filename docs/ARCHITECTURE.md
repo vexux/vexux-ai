@@ -46,8 +46,8 @@ The core architecture is organized to keep the agent control flow completely dec
 
 ### Layer 1: Inner / Agent Layer
 Contains the cognitive and control-loop primitives. This layer is responsible for planning, executing tasks against context, evaluating outcomes, recovering from failures, and synthesizing final answers.
-- **Agent** (`agent/agent.py`): Coordinates the lifecycle loop across multiple tasks and manages replanning.
-  - **Planner** (`agent/planner.py`): Generates and validates structured sequential plans, including scoped recovery plans.
+- **Agent** (`agent/agent.py`): Coordinates the lifecycle loop across multiple tasks and manages replanning. As of Phase 13 the Agent also supports dependency-aware scheduling for Plan tasks (see "DAG / Dependency-aware execution" below).
+  - **Planner** (`agent/planner.py`): Generates and validates structured plans. Planner now accepts an optional `depends_on` field on each Task and validates dependency correctness (duplicate IDs, unknown deps, self-deps, cycles). Planner continues to generate recovery plans that preserve task IDs for replanning.
 - **Observer** (`agent/observer.py`): Normalizes raw execution outcomes into structured observations linked with `task_id`.
 - **DecisionMaker** (`agent/decision.py`): Determines whether an observation satisfies the goal (`DONE`) or requires a new plan (`REPLAN`).
 - **ResponseSynthesizer** (`agent/response_synthesizer.py`): Synthesizes multi-task observation outputs into a clear, unified final response.
@@ -89,7 +89,7 @@ Houses the domain-specific models, data processors, vector indices, training loo
 | **QLoRA Fine-Tuning Pipeline** | **IMPLEMENTED** | `training/train.py`, `training/factory.py`, `experiments/qlora_train.py`. |
 | **Contracts (`execution`, `observation`, `response`, `capabilities`)** | **IMPLEMENTED** | `core/contracts/` — dataclasses and protocols. |
 | **Multi-Agent Execution** | **PLANNED** | Not implemented. The current system is strictly single-agent. |
-| **Dynamic Multi-Step Graph / DAG Planning** | **PLANNED** | Not implemented. Dynamic DAG execution with complex dependency graphs is planned. |
+| **Dynamic Multi-Step Graph / DAG Planning** | **IMPLEMENTED (Phase 13)** | `agent/planner.py` & `agent/agent.py` — Planner accepts optional `depends_on` on Tasks; Agent executes dependency-aware, deterministic, sequential scheduling. Limitations: execution is still sequential (no parallel workers), no dataflow/output-substitution, and cycles are rejected. |
 | **Dynamic Tool Discovery** | **IMPLEMENTED** | `ToolRegistry` metadata, including lightweight input schemas, is injected into Planner prompts. |
 | **Persistent Memory (`MemoryContract`)** | **PLANNED** | Protocol defined in `core/contracts/capabilities.py`, but no concrete store exists. |
 | **Evaluation Suite (`evaluation/`)** | **IMPLEMENTED** | 44 deterministic system-level scenarios with category and failure reporting. |

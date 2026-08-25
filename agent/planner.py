@@ -255,6 +255,40 @@ Field rules:
             for index, raw_task in enumerate(raw_tasks, start=1):
                 tasks.append(self._parse_task(raw_task, index, task_ids))
 
+            # Validate dependencies after all tasks are parsed
+            id_map = {t.id: t for t in tasks}
+
+            # Validate dependency values: existence, no self-dependency
+            for t in tasks:
+                if not isinstance(t.depends_on, list):
+                    raise ValueError(f"Task '{t.id}' has malformed 'depends_on' value; must be a list of task ids.")
+                for dep in t.depends_on:
+                    if dep == t.id:
+                        raise ValueError(f"Task '{t.id}' has a self-dependency.")
+                    if dep not in id_map:
+                        raise ValueError(f"Task '{t.id}' depends on unknown task id: {dep}")
+
+            # Detect cycles using Kahn's algorithm
+            indegree = {t.id: 0 for t in tasks}
+            adj = {t.id: [] for t in tasks}
+            for t in tasks:
+                for dep in t.depends_on:
+                    adj[dep].append(t.id)
+                    indegree[t.id] += 1
+
+            queue = [nid for nid, deg in indegree.items() if deg == 0]
+            seen = 0
+            while queue:
+                nid = queue.pop(0)
+                seen += 1
+                for nbr in adj.get(nid, []):
+                    indegree[nbr] -= 1
+                    if indegree[nbr] == 0:
+                        queue.append(nbr)
+
+            if seen != len(tasks):
+                raise ValueError("Plan contains a cycle in task dependencies.")
+
             return Plan(tasks=tasks)
 
         except (json.JSONDecodeError, TypeError, ValueError) as exc:
@@ -360,11 +394,14 @@ Field rules:
                 index,
             )
 
+        depends_on = raw_task.get("depends_on") if isinstance(raw_task.get("depends_on"), list) else []
+
         return Task(
             id=task_id,
             description=description,
             input=task_input,
             metadata={"capability": capability},
+            depends_on=depends_on,
         )
 
     def _validate_tool_arguments(

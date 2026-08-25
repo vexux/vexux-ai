@@ -154,60 +154,127 @@ class Agent:
 
             should_replan = False
 
-            for task in plan.tasks:
+            # Build dependency graph structures from the plan tasks
+            id_map = {t.id: t for t in plan.tasks}
+            adj = {t.id: [] for t in plan.tasks}
+            indegree = {t.id: 0 for t in plan.tasks}
+            original_index = {t.id: idx for idx, t in enumerate(plan.tasks)}
 
-                self.context_manager.set_task(
-                    context,
-                    task,
-                )
+            for t in plan.tasks:
+                for dep in getattr(t, "depends_on", []) or []:
+                    if dep in adj:
+                        adj[dep].append(t.id)
+                        indegree[t.id] += 1
 
-                started_at = time.perf_counter()
-                result = self.execution_manager.execute(
-                    task,
-                    context,
-                )
-                duration_ms = (time.perf_counter() - started_at) * 1000
+            executed = set()
+            failed = set()
+            blocked = set()
 
-                logger.info(
-                    "agent.task.execution",
-                    extra={
-                        "request_id": context.request_id,
-                        "session_id": context.session_id,
-                        "user_id": context.user_id,
-                        "task_id": task.id,
-                        "capability": task.metadata.get("capability"),
-                        "execution_success": result.success,
-                        "execution_duration_ms": round(duration_ms, 3),
-                    },
-                )
+            # Helper to mark descendants as blocked when a failure occurs
+            def mark_descendants_blocked(start_id):
+                queue = list(adj.get(start_id, []))
+                desc = set()
+                while queue:
+                    nid = queue.pop(0)
+                    if nid in desc:
+                        continue
+                    desc.add(nid)
+                    queue.extend(adj.get(nid, []))
+                for did in desc:
+                    blocked.add(did)
 
-                observation = self.observer.observe(
-                    result,
-                    task,
-                )
+            # Execute ready tasks deterministically: preserve original plan order among ready tasks
+            remaining = set(id_map.keys())
+            while remaining:
+                # find ready tasks: indegree 0, not executed, not blocked
+                ready = [nid for nid in plan.tasks if indegree.get(nid.id, 0) == 0 and nid.id in remaining and nid.id not in blocked]
+                # 'ready' uses task objects; preserve original order by sorting using original_index
+                ready_ids = [t.id for t in ready]
 
-                self.context_manager.add_observation(
-                    context,
-                    observation,
-                )
+                if not ready_ids:
+                    # No ready tasks found — should not happen due to prior validation (cycles handled there)
+                    break
 
-                if observation.success:
-                    self.context_manager.add_completed_task(
-                        context,
-                        task,
+                # Process ready tasks in the deterministic order of their appearance
+                for task_id in ready_ids:
+                    task = id_map[task_id]
+
+                    # set current task in context
+                    self.context_manager.set_task(context, task)
+
+                    started_at = time.perf_counter()
+                    result = self.execution_manager.execute(task, context)
+                    duration_ms = (time.perf_counter() - started_at) * 1000
+
+                    logger.info(
+                        "agent.task.execution",
+                        extra={
+                            "request_id": context.request_id,
+                            "session_id": context.session_id,
+                            "user_id": context.user_id,
+                            "task_id": task.id,
+                            "capability": task.metadata.get("capability"),
+                            "execution_success": result.success,
+                            "execution_duration_ms": round(duration_ms, 3),
+                        },
                     )
 
-                decision = self.decision_maker.decide(
-                    observation
-                )
+                    observation = self.observer.observe(result, task)
+                    self.context_manager.add_observation(context, observation)
 
-                if decision == DecisionType.DONE:
+                    if observation.success:
+                        executed.add(task.id)
+                        self.context_manager.add_completed_task(context, task)
+                        # decrement indegree of children
+                        for child in adj.get(task.id, []):
+                            indegree[child] -= 1
+                            if indegree[child] < 0:
+                                indegree[child] = 0
 
-                    continue
+                        # remove from remaining
+                        remaining.discard(task.id)
 
-                if decision == DecisionType.REPLAN:
+                        # Decision: continue
+                        decision = self.decision_maker.decide(observation)
+                        if decision == DecisionType.REPLAN:
+                            should_replan = True
+                            break
 
-                    should_replan = True
+                        # else continue to next ready task
+                        continue
+
+                    # If observation indicates a blocked/skipped task (due to dependency), treat as non-replanning
+                    if observation.metadata and observation.metadata.get("blocked"):
+                        # record and don't execute it
+                        blocked.add(task.id)
+                        remaining.discard(task.id)
+                        continue
+
+                    # If task failed (not a blocked skip), mark failed and block descendants
+                    failed.add(task.id)
+                    # mark descendants as blocked so they won't be executed
+                    mark_descendants_blocked(task.id)
+
+                    # create blocked observations for descendants
+                    for desc_id in list(blocked):
+                        if desc_id in remaining:
+                            desc_task = id_map[desc_id]
+                            blocked_result = self.execution_manager.execute if False else None
+                            # synthesize a blocked ExecutionResult
+                            from core.contracts.execution import ExecutionResult
+
+                            blocked_exec = ExecutionResult(success=False, output=None, error=f"Blocked due to failed dependency: {task.id}", metadata={"blocked": True})
+                            blocked_obs = self.observer.observe(blocked_exec, desc_task)
+                            self.context_manager.add_observation(context, blocked_obs)
+                            remaining.discard(desc_id)
+
+                    # Decision: replan for the failure
+                    decision = self.decision_maker.decide(observation)
+                    if decision == DecisionType.REPLAN:
+                        should_replan = True
+                        break
+
+                if should_replan:
                     break
 
             if not should_replan:
