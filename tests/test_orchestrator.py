@@ -1,3 +1,4 @@
+from core.contracts.orchestrator import DelegationRequest, DelegationResult
 from core.contracts.response import AgentResponse
 from core.orchestrator import Orchestrator
 from core.specialized_agents import ResearchAgent, SpecializedAgentRegistry
@@ -183,3 +184,101 @@ def test_research_agent_requires_query_in_structured_request():
     assert result.error == "Research request must include a query."
     assert result.metadata == {"selected_mode": "specialized_agent", "selected_agent": "research"}
     assert base_agent.calls == []
+
+
+def test_delegation_contract_round_trips_values():
+    request = DelegationRequest(target_agent="research", request="look up docs", delegation_id="del-1")
+    result = DelegationResult(
+        target_agent="research",
+        success=True,
+        output="ok",
+        delegation_id="del-1",
+        metadata={"selected_mode": "delegated"},
+    )
+
+    assert request.target_agent == "research"
+    assert request.delegation_id == "del-1"
+    assert result.target_agent == "research"
+    assert result.metadata["selected_mode"] == "delegated"
+
+
+def test_orchestrator_supports_multiple_explicit_delegations():
+    base_agent = DummyAgent()
+    registry = SpecializedAgentRegistry()
+    registry.register(
+        DummySpecializedAgent(
+            "research",
+            result=AgentResponse(
+                success=True,
+                output="research ok",
+                metadata={"selected_mode": "specialized_agent", "selected_agent": "research"},
+            ),
+        )
+    )
+    orchestrator = Orchestrator(base_agent, specialized_agent_registry=registry)
+
+    result = orchestrator.run(
+        {
+            "delegations": [
+                {"target_agent": "research", "request": "research request", "delegation_id": "d1"},
+                {"target_agent": "general", "request": "general request", "delegation_id": "d2"},
+            ]
+        }
+    )
+
+    assert result.success is True
+    assert [item.target_agent for item in result.output] == ["research", "general"]
+    assert [item.delegation_id for item in result.output] == ["d1", "d2"]
+    assert result.output[0].output == "research ok"
+    assert result.output[1].output == "agent:general request"
+    assert result.metadata["delegation_count"] == 2
+
+
+def test_orchestrator_keeps_successful_delegations_when_one_fails():
+    base_agent = DummyAgent()
+    registry = SpecializedAgentRegistry()
+    registry.register(
+        DummySpecializedAgent(
+            "research",
+            result=AgentResponse(
+                success=False,
+                error="research failed",
+                metadata={"selected_mode": "specialized_agent", "selected_agent": "research"},
+            ),
+        )
+    )
+    orchestrator = Orchestrator(base_agent, specialized_agent_registry=registry)
+
+    result = orchestrator.run(
+        {
+            "delegations": [
+                {"target_agent": "research", "request": "research request", "delegation_id": "bad"},
+                {"target_agent": "general", "request": "general request", "delegation_id": "good"},
+            ]
+        }
+    )
+
+    assert result.success is False
+    assert result.error == "One or more delegated agent requests failed."
+    assert len(result.output) == 2
+    assert result.output[0].success is False
+    assert result.output[1].success is True
+    assert result.output[0].target_agent == "research"
+    assert result.output[1].target_agent == "general"
+
+
+class DummySpecializedAgent:
+    def __init__(self, name, *, result=None, description=None):
+        self.name = name
+        self.description = description or f"{name} specialized agent"
+        self.result = result
+
+    def run(self, request, session_id=None, user_id=None):
+        if self.result is not None:
+            return self.result
+        payload = request.get("query") if isinstance(request, dict) else request
+        return AgentResponse(
+            success=True,
+            output=f"{self.name}:{payload}",
+            metadata={"selected_mode": "specialized_agent", "selected_agent": self.name},
+        )

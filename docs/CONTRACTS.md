@@ -163,6 +163,31 @@ class SpecializedAgentContract(Protocol):
 
 > Explicit deterministic specialization is currently the only supported model. Automatic agent selection and multi-agent coordination remain future work.
 
+### 1.7 Delegation Request / Result Contracts
+The orchestrator supports explicit, deterministic multi-delegation with a minimal, domain-agnostic payload.
+
+```python
+@dataclass
+class DelegationRequest:
+    target_agent: str
+    request: Any
+    metadata: Dict[str, Any] = field(default_factory=dict)
+    delegation_id: Optional[str] = None
+
+@dataclass
+class DelegationResult:
+    target_agent: str
+    success: bool
+    output: Any = None
+    error: Optional[str] = None
+    delegation_id: Optional[str] = None
+    metadata: Dict[str, Any] = field(default_factory=dict)
+```
+
+- **Producer**: `Orchestrator` when a request includes an explicit `delegations` list or a single `agent` selection.
+- **Consumer**: callers that need a structured result for each delegated execution without introducing a separate agent messaging protocol.
+- **Purpose**: preserves the target agent, per-delegation identity, success/failure state, and safe metadata while keeping all execution inside the existing `Agent` and `SpecializedAgent` contracts.
+
 ---
 
 ## 2. Observation Contract (`core/contracts/observation.py`)

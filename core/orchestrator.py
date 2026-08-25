@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from core.contracts.orchestrator import DelegationRequest, DelegationResult
 from core.contracts.response import AgentResponse
 
 
@@ -18,6 +19,83 @@ class Orchestrator:
         self.workflow_registry = workflow_registry
         self.specialized_agent_registry = specialized_agent_registry
 
+    def _delegate_one(self, delegation: DelegationRequest, session_id=None, user_id=None):
+        target = delegation.target_agent
+        request = delegation.request
+
+        if target in {"general", "main", "agent"}:
+            query = request.get("query") if isinstance(request, dict) else request
+            response = self.agent.run(query, session_id=session_id, user_id=user_id)
+        else:
+            if self.specialized_agent_registry is None:
+                return DelegationResult(
+                    target_agent=target,
+                    success=False,
+                    error=f"Specialized agent '{target}' is unavailable.",
+                    delegation_id=delegation.delegation_id,
+                    metadata={"selected_mode": "delegated", "selected_agent": target},
+                )
+            try:
+                specialized_agent = self.specialized_agent_registry.get(target)
+            except KeyError:
+                return DelegationResult(
+                    target_agent=target,
+                    success=False,
+                    error=f"Unknown specialized agent: {target}",
+                    delegation_id=delegation.delegation_id,
+                    metadata={"selected_mode": "delegated", "selected_agent": target},
+                )
+            response = specialized_agent.run(request, session_id=session_id, user_id=user_id)
+
+        metadata = dict(response.metadata or {})
+        metadata.setdefault("selected_mode", "delegated")
+        metadata["selected_agent"] = target
+        if delegation.delegation_id is not None:
+            metadata["delegation_id"] = delegation.delegation_id
+
+        return DelegationResult(
+            target_agent=target,
+            success=response.success,
+            output=response.output,
+            error=response.error,
+            delegation_id=delegation.delegation_id,
+            metadata=metadata,
+        )
+
+    def _parse_delegations(self, request: dict):
+        delegations = request.get("delegations")
+        if delegations is None:
+            return []
+        if not isinstance(delegations, list):
+            raise ValueError("Delegations must be a list of delegation requests.")
+
+        parsed = []
+        for item in delegations:
+            if isinstance(item, DelegationRequest):
+                parsed.append(item)
+                continue
+            if not isinstance(item, dict):
+                raise ValueError("Each delegation entry must be a request mapping.")
+
+            target_agent = item.get("target_agent") or item.get("agent")
+            if target_agent is None:
+                raise ValueError("Each delegation must include an explicit target agent.")
+
+            payload = item.get("request")
+            if payload is None:
+                payload = item.get("query")
+            if payload is None:
+                payload = {k: v for k, v in item.items() if k not in {"target_agent", "agent", "delegation_id", "id", "metadata"}}
+            parsed.append(
+                DelegationRequest(
+                    target_agent=str(target_agent),
+                    request=payload,
+                    metadata=item.get("metadata", {}) or {},
+                    delegation_id=item.get("delegation_id") or item.get("id"),
+                )
+            )
+        return parsed
+
     def run(
         self,
         request: Any,
@@ -25,6 +103,33 @@ class Orchestrator:
         user_id: str | None = None,
     ) -> AgentResponse:
         if isinstance(request, dict):
+            delegations = request.get("delegations")
+            if delegations is not None:
+                try:
+                    parsed_delegations = self._parse_delegations(request)
+                except ValueError as exc:
+                    return AgentResponse(
+                        success=False,
+                        error=str(exc),
+                        trace=[],
+                        metadata={"selected_mode": "delegated"},
+                    )
+
+                results = [self._delegate_one(d, session_id=session_id, user_id=user_id) for d in parsed_delegations]
+                success = all(item.success for item in results)
+                return AgentResponse(
+                    success=success,
+                    output=results,
+                    error=None if success else "One or more delegated agent requests failed.",
+                    trace=[],
+                    metadata={
+                        "selected_mode": "delegated",
+                        "delegation_count": len(results),
+                        "successful_delegations": sum(1 for item in results if item.success),
+                        "failed_delegations": sum(1 for item in results if not item.success),
+                    },
+                )
+
             selected_agent = request.get("agent")
             workflow_name = request.get("workflow")
             workflow_input = {
@@ -33,6 +138,15 @@ class Orchestrator:
             query = request.get("query")
 
             if selected_agent is not None:
+                if selected_agent in {"general", "main", "agent"}:
+                    if query is None:
+                        return AgentResponse(
+                            success=False,
+                            error="Request must include a query for the general agent.",
+                            trace=[],
+                            metadata={"selected_mode": "agent", "selected_agent": selected_agent},
+                        )
+                    return self.agent.run(query, session_id=session_id, user_id=user_id)
                 if self.specialized_agent_registry is None:
                     return AgentResponse(
                         success=False,
