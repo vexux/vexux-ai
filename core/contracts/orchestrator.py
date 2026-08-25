@@ -41,6 +41,14 @@ class SpecializedAgentContract(Protocol):
     def description(self) -> str:
         ...
 
+    @property
+    def capabilities(self) -> list[str]:
+        ...
+
+    @property
+    def supported_task_types(self) -> list[str]:
+        ...
+
     def run(
         self,
         request: Any,

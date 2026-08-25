@@ -6,6 +6,9 @@ from core.contracts.response import AgentResponse
 class ResearchAgent:
     name = "research"
     description = "Adapter for research-oriented requests using the existing Agent execution stack."
+    capabilities = ["research", "retrieval", "knowledge_lookup", "analysis"]
+    supported_task_types = ["research", "lookup", "analysis"]
+    priority = 10
 
     def __init__(self, agent):
         self.agent = agent

@@ -4,6 +4,7 @@ from typing import Any
 
 from core.contracts.orchestrator import DelegationRequest, DelegationResult
 from core.contracts.response import AgentResponse
+from core.specialized_agents.selector import AgentSelectionRequest, AgentSelector
 
 
 class Orchestrator:
@@ -14,10 +15,11 @@ class Orchestrator:
     tasks directly.
     """
 
-    def __init__(self, agent, workflow_registry=None, specialized_agent_registry=None):
+    def __init__(self, agent, workflow_registry=None, specialized_agent_registry=None, agent_selector=None):
         self.agent = agent
         self.workflow_registry = workflow_registry
         self.specialized_agent_registry = specialized_agent_registry
+        self.agent_selector = agent_selector or AgentSelector()
 
     def _delegate_one(self, delegation: DelegationRequest, session_id=None, user_id=None):
         target = delegation.target_agent
@@ -95,6 +97,32 @@ class Orchestrator:
                 )
             )
         return parsed
+
+    def _resolve_metadata_agent(self, request: dict):
+        if self.specialized_agent_registry is None:
+            return None, None
+
+        metadata = request.get("metadata") or {}
+        if isinstance(metadata, dict):
+            explicit = metadata.get("agent") or metadata.get("selected_agent")
+        else:
+            explicit = None
+
+        query = request.get("query")
+        if query is None:
+            query = request.get("task") or request.get("question") or request.get("request")
+
+        selection = self.agent_selector.select(
+            AgentSelectionRequest(
+                query=str(query) if query is not None else "",
+                explicit_agent=request.get("agent") or explicit,
+                metadata=metadata,
+            ),
+            self.specialized_agent_registry,
+        )
+        if selection.selected_agent is None:
+            return None, selection
+        return selection.selected_agent, selection
 
     def run(
         self,
@@ -193,6 +221,27 @@ class Orchestrator:
                     session_id=session_id,
                     user_id=user_id,
                 )
+
+            if self.specialized_agent_registry is not None and query is not None:
+                resolved_agent, selection = self._resolve_metadata_agent(request)
+                if resolved_agent is not None:
+                    try:
+                        specialized_agent = self.specialized_agent_registry.get(resolved_agent)
+                    except KeyError:
+                        return AgentResponse(
+                            success=False,
+                            error=f"Unknown specialized agent: {resolved_agent}",
+                            trace=[],
+                            metadata={"selected_mode": "specialized_agent", "selected_agent": resolved_agent},
+                        )
+                    result = specialized_agent.run(request, session_id=session_id, user_id=user_id)
+                    if result.metadata is None:
+                        result.metadata = {}
+                    result.metadata.setdefault("selected_mode", "specialized_agent")
+                    result.metadata["selected_agent"] = resolved_agent
+                    result.metadata["selection_reason"] = selection.reason if selection is not None else "capability_match"
+                    return result
+
             if query is None:
                 return AgentResponse(
                     success=False,
