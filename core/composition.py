@@ -42,10 +42,10 @@ def create_agent():
     # Model
     # -------------------------
 
-    provider_name = os.getenv(
-        "MODEL_PROVIDER",
-        "mistral",
-    ).lower()
+    # Load centralized configuration
+    from core.config import get_config
+    config = get_config()
+    provider_name = (config.model_provider or "mistral").lower()
 
     if provider_name == "mistral":
 
@@ -153,7 +153,8 @@ def create_agent():
 
     # Optional persistent memory: configure via PERSISTENT_MEMORY_DB environment variable.
     memory_registry = None
-    persistent_db = os.getenv("PERSISTENT_MEMORY_DB")
+    # Persistent memory DB path from centralized config
+    persistent_db = config.persistent_memory_db
     if persistent_db:
         memory_registry = MemoryRegistry()
         db_path = Path(persistent_db)
@@ -165,9 +166,9 @@ def create_agent():
                 pass
         memory_registry.register(SQLiteMemory(str(db_path)))
 
-    # Optional knowledge graph: enable by setting ENABLE_KNOWLEDGE_GRAPH=1 (keeps agent backward compatible)
+    # Optional knowledge graph: controlled by centralized config (backward compatible)
     knowledge_graph_registry = None
-    if os.getenv("ENABLE_KNOWLEDGE_GRAPH", "").lower() in ("1", "true", "yes"):
+    if config.knowledge_graph_enabled:
         knowledge_graph_registry = KnowledgeGraphRegistry()
         # Register a default in-memory backend for Phase 10 foundation
         knowledge_graph_registry.register(InMemoryKnowledgeGraph())
@@ -181,9 +182,9 @@ def create_agent():
         policy=policy,
     )
 
-    # Read max parallel tasks configuration from environment; default 1 keeps legacy sequential behavior
+    # Read max parallel tasks from config; default 1 keeps legacy sequential behavior
     try:
-        max_parallel = int(os.getenv("AGENT_MAX_PARALLEL_TASKS", "1"))
+        max_parallel = int(config.max_parallel_tasks)
     except Exception:
         max_parallel = 1
 
@@ -203,10 +204,10 @@ def create_agent():
 
     # Optional orchestrator: wire an LLM-based delegation planner when autonomous delegation is enabled
     orchestrator = None
-    enable_autonomous = os.getenv("ENABLE_AUTONOMOUS_DELEGATION", "").lower() in ("1", "true", "yes")
+    enable_autonomous = config.autonomous_delegation_enabled
     if enable_autonomous:
         try:
-            max_delegs = int(os.getenv("MAX_AUTONOMOUS_DELEGATIONS", "4"))
+            max_delegs = int(config.max_autonomous_delegations)
         except Exception:
             max_delegs = 4
         specialized_registry = SpecializedAgentRegistry()

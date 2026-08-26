@@ -74,7 +74,9 @@ def main():
     # Build a planner but only pass it to the orchestrator when the environment toggle is enabled.
     llm_planner = LLMDelegationPlanner(model_gateway=gateway, base_planner=DelegationPlanner(registry), specialized_agent_registry=registry, max_delegations=4)
 
-    enable_env = os.getenv("ENABLE_AUTONOMOUS_DELEGATION", "").lower() in ("1", "true", "yes")
+    from core.config import get_config
+    cfg = get_config()
+    enable_env = cfg.autonomous_delegation_enabled
     print(f"ENABLE_AUTONOMOUS_DELEGATION environment flag: {enable_env}")
 
     if enable_env:
