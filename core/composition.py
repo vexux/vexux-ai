@@ -66,6 +66,14 @@ def create_agent():
             adapter_path="models/checkpoints",
         )
 
+    elif provider_name == "fake":
+        # Deterministic fake provider for local testing and portability
+        try:
+            from models.providers.fake import FakeProvider
+            provider = FakeProvider(model_name=os.getenv("FAKE_MODEL", "fake-model"))
+        except Exception as exc:
+            raise ValueError(f"Failed to initialize fake provider: {exc}") from exc
+
     else:
 
         raise ValueError(
