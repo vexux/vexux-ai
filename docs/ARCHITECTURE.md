@@ -61,10 +61,11 @@ Provides structural boundaries, data contracts, and dependency mediation.
 - **ContextManager** (`core/context/context_manager.py`): Maintains state, tracks historical execution traces, records completed tasks, and isolates session/request metadata.
 - **ModelGateway** (`core/model_gateway/gateway.py`): Mediates LLM/SLM generation behind a standardized interface (`ModelProviderContract`).
 - **ToolRegistry** (`core/tools/registry.py`): In-memory registry for discovering and executing tools implementing `ToolContract`.
-- **ExecutionManager** (`agent/execution_manager.py`): Dispatches execution tasks to RAG, tools, or direct model calls.
+- **ExecutionManager** (`agent/execution_manager.py`): Dispatches execution tasks to RAG, tools, or direct model calls. It also supports explicit multi-graph retrieval tasks by executing multiple graph requests in parallel and aggregating the results with preserved graph provenance.
 - **Orchestrator** (`core/orchestrator.py`): Selects the execution owner; it delegates to the direct Agent, workflows, or an explicitly selected specialized agent without redesigning the underlying execution stack.
 - **Specialized Agent Registry** (`core/specialized_agents/`): Optional discovery/lookup registry for role-specific adapters. The current reference implementation is a thin `ResearchAgent` wrapper around the existing Agent.
 - **Composition Root** (`core/composition.py`): Factory module (`create_agent()`) that wires concrete instances and handles dependency injection; optional orchestrator helpers can register specialized agents without changing the default Agent path.
+- **Knowledge Graph Registry** (`core/knowledge/graph_registry.py`): Tracks independently registered in-memory knowledge graphs and allows graph routing through the normalized `KnowledgeRequest` layer without introducing a second graph contract.
 - **FastAPI API** (`api/main.py`): Thin HTTP boundary delegating requests to the composition-root Agent.
 - **Evaluation Suite** (`evaluation/`): Deterministic system-level evaluation runner with 44 scenarios.
 

@@ -1,6 +1,7 @@
 from typing import Any
 
 from core.contracts.evidence import Evidence, EvidenceSet
+from core.knowledge.multi_graph import execute_multi_graph_request
 
 from core.contracts.execution import (
     AgentContext,
@@ -107,9 +108,19 @@ class ExecutionManager:
         query = task.input.get("query")
         explicit_source = task.input.get("source")
         top_k = task.input.get("top_k")
+        graph_requests = task.input.get("graph_requests") or task.input.get("multi_graph_requests") or task.input.get("requests")
 
         if not isinstance(query, str) or not query.strip():
             return ExecutionResult(success=False, error="Retrieval task missing 'query' field")
+
+        # Multi-graph requests are intentionally handled before the default
+        # source-routing logic. This preserves controlled failure semantics:
+        # missing or failing graphs are surfaced instead of silently falling back.
+        if graph_requests:
+            try:
+                return self._execute_multi_graph_request(task, graph_requests)
+            except Exception as exc:
+                return ExecutionResult(success=False, error=str(exc))
 
         # If an explicit source was provided and a KnowledgeSourceRegistry exists,
         # attempt to use it directly. This preserves the original error message
@@ -126,17 +137,18 @@ class ExecutionManager:
         if self.knowledge_decision is not None:
             try:
                 # Allow callers to specify a high-level operation and structured params in the task input.
-                                operation = task.input.get("operation")
-                                params = dict(task.input.get("params", {})) if isinstance(task.input.get("params"), dict) else {}
-                                if top_k is not None:
-                                    params.setdefault("top_k", top_k)
+                operation = task.input.get("operation")
+                params = dict(task.input.get("params", {})) if isinstance(task.input.get("params"), dict) else {}
+                if top_k is not None:
+                    params.setdefault("top_k", top_k)
 
-                                kr = self.knowledge_decision.create_request(
-                                    query=query,
-                                    explicit_source=explicit_source,
-                                    operation=operation,
-                                    params=params,
-                                )
+                kr = self.knowledge_decision.create_request(
+                    query=query,
+                    explicit_source=explicit_source,
+                    operation=operation,
+                    params=params,
+                    graph_requests=graph_requests,
+                )
             except Exception as exc:
                 # Controlled failure: explicit unknown source or unavailable capability
                 return ExecutionResult(success=False, error=str(exc))
@@ -186,6 +198,9 @@ class ExecutionManager:
                 # Execute graph operations using the configured KnowledgeGraphRegistry.
                 if self.knowledge_graph_registry is None:
                     return ExecutionResult(success=False, error="Knowledge graph capability unavailable")
+
+                if kr.source == "multi_graph":
+                    return self._execute_multi_graph_request(task, kr.graph_requests or task.input.get("graph_requests", []))
 
                 try:
                     graph = self.knowledge_graph_registry.get(kr.source)
@@ -263,6 +278,45 @@ class ExecutionManager:
 
         result = self.retrieval.ask(query)
         return ExecutionResult(success=True, output=result)
+
+    def _execute_multi_graph_request(self, task: Task, graph_requests):
+        if self.knowledge_graph_registry is None:
+            raise ValueError("Knowledge graph capability unavailable")
+
+        if not isinstance(graph_requests, list) or not graph_requests:
+            raise ValueError("Multi-graph request requires a non-empty 'graph_requests' list")
+
+        requests = []
+        for item in graph_requests:
+            if isinstance(item, dict):
+                request = dict(item)
+            else:
+                request = item.as_dict() if hasattr(item, "as_dict") else dict(item)
+            if not request.get("graph_name") and request.get("source"):
+                request["graph_name"] = request.get("source")
+            if not request.get("operation") and request.get("params"):
+                request["operation"] = request.get("params", {}).get("operation")
+            if not request.get("parameters") and request.get("params"):
+                request["parameters"] = request.get("params")
+            requests.append(request)
+
+        customer_id = task.input.get("customer_id")
+        try:
+            result = execute_multi_graph_request(self.knowledge_graph_registry, requests, customer_id=customer_id)
+        except Exception as exc:
+            raise ValueError(str(exc)) from exc
+
+        evidence = result.get("evidence")
+        output = {
+            "query": task.input.get("query"),
+            "results": result.get("results", []),
+            "context_found": result.get("context_found", bool(result.get("results"))),
+            "source": "multi_graph",
+            "evidence": evidence,
+            "summary": result.get("summary", {}),
+            "facts": result.get("facts", []),
+        }
+        return ExecutionResult(success=True, output=output, metadata={"capability": "retrieval", "source": "multi_graph"})
 
     def _execute_retrieval_source(
         self,

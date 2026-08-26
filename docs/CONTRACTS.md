@@ -417,7 +417,7 @@ class MemoryContract(Protocol):
 A small, domain-agnostic dataclass used by the KnowledgeDecision component to express which knowledge capability should be used to satisfy a query.
 
 ```python
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Optional, Dict, Any
 
 @dataclass
@@ -427,6 +427,7 @@ class KnowledgeRequest:
     source: Optional[str] = None
     operation: Optional[str] = None
     params: Dict[str, Any] = field(default_factory=dict)
+    graph_requests: list[Dict[str, Any]] = field(default_factory=list)
 ```
 
-- **Purpose**: Normalize and validate the intent to use a particular knowledge capability without executing retrievals. The contract is intentionally small and domain-agnostic so it can be used across the Planner, Decision, and Execution components.
+- **Purpose**: Normalize and validate the intent to use a particular knowledge capability without executing retrievals. The contract is intentionally small and domain-agnostic so it can be used across the Planner, Decision, and Execution components. When a single high-level request needs multiple independent graph lookups, callers may populate `graph_requests` with explicit `graph_name`, `operation`, and `parameters` entries; the execution layer then executes those requests in parallel and aggregates them without inventing a second graph contract or a domain-specific request type.

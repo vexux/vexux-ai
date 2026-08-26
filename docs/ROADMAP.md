@@ -91,6 +91,7 @@ Evaluation suite
 ### 4.5 Additional Knowledge Sources
 - SQL, knowledge graph, API documentation, and external knowledge implementations behind `KnowledgeSourceContract`.
 - Phase 11: Introduce a small domain-agnostic KnowledgeDecision layer that normalizes and validates which knowledge capability (RAG, registered knowledge source, or knowledge graph) should be used for a request. This component does NOT execute retrievals and intentionally does not perform multi-source fusion or ranking.
+- Multi-graph knowledge retrieval is supported through a small, explicit `graph_requests` structure on `KnowledgeRequest` plus a domain-agnostic `GraphCorrelator` that joins explicit identifiers across independent graphs while preserving per-graph provenance in `EvidenceSet`.
 - Planner-based selection among multiple knowledge sources (multi-source routing and source fusion) remains future work.
 
 ### 4.6 Streaming and Asynchronous Execution

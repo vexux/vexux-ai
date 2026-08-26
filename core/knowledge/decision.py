@@ -33,8 +33,20 @@ class KnowledgeDecision:
         explicit_source: Optional[str] = None,
         operation: Optional[str] = None,
         params: Optional[Dict[str, Any]] = None,
+        graph_requests: Optional[list[Dict[str, Any]]] = None,
     ) -> KnowledgeRequest:
         params = params or {}
+        graph_requests = list(graph_requests or []) if graph_requests is not None else []
+
+        if graph_requests:
+            return KnowledgeRequest(
+                kind="graph",
+                query=query,
+                source="multi_graph",
+                operation=operation or "multi_graph",
+                params={**params, "graph_requests": graph_requests},
+                graph_requests=graph_requests,
+            )
 
         # If a specific source was explicitly requested, validate it and
         # return a KnowledgeRequest targeted to that capability.
@@ -47,6 +59,11 @@ class KnowledgeDecision:
                 if self.rag is None:
                     raise ValueError("Requested source 'rag' is unavailable")
                 return KnowledgeRequest(kind="rag", query=query, source="rag", operation=operation, params=params)
+
+            if lname == "multi_graph":
+                if not graph_requests:
+                    raise ValueError("Requested source 'multi_graph' requires graph_requests")
+                return KnowledgeRequest(kind="graph", query=query, source="multi_graph", operation=operation or "multi_graph", params={**params, "graph_requests": graph_requests}, graph_requests=graph_requests)
 
             # Explicit knowledge source (SQL / API docs / other registered sources)
             if self.knowledge_source_registry is not None:
