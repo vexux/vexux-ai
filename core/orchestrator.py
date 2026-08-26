@@ -77,6 +77,15 @@ class Orchestrator:
                 # Non-fatal: if policy check fails unexpectedly, fall back to original behavior
                 pass
 
+            # emit delegation_started
+            try:
+                from core.contracts.audit import make_event
+                from core.audit_logger import emit as emit_audit
+                evt_start = make_event(event_type="delegation_started", request_id=session_id or None, orchestration_id=None, task_id=delegation.delegation_id, agent_name=target, status="started", resource_type="specialized_agent", resource_name=target, action="run", metadata={"delegation_id": delegation.delegation_id})
+                emit_audit(evt_start)
+            except Exception:
+                pass
+
             response = specialized_agent.run(request, session_id=session_id, user_id=user_id)
 
         metadata = dict(response.metadata or {})
@@ -84,6 +93,15 @@ class Orchestrator:
         metadata["selected_agent"] = target
         if delegation.delegation_id is not None:
             metadata["delegation_id"] = delegation.delegation_id
+
+        # emit delegation_completed audit event
+        try:
+            from core.contracts.audit import make_event
+            from core.audit_logger import emit as emit_audit
+            evt = make_event(event_type="delegation_completed", request_id=session_id or None, orchestration_id=None, task_id=delegation.delegation_id, agent_name=target, status=("success" if response.success else "failed"), resource_type="specialized_agent", resource_name=target, action="run", metadata={"delegation_id": delegation.delegation_id})
+            emit_audit(evt)
+        except Exception:
+            pass
 
         return DelegationResult(
             target_agent=target,

@@ -123,6 +123,15 @@ class ExecutionManager:
             # Authorize each requested graph before any execution. Authorization must
             # occur prior to submitting protected tasks for parallel execution.
             if self.policy is not None:
+                from core.contracts.audit import make_event
+                from core.audit_logger import emit as emit_audit
+                # emit request_started for this multi-graph retrieval (use task.id as request id)
+                try:
+                    evt_start = make_event(event_type="request_started", request_id=task.id, status="started", metadata={"kind": "multi_graph"})
+                    emit_audit(evt_start)
+                except Exception:
+                    pass
+
                 for item in graph_requests:
                     name = item.get("graph_name") or item.get("source")
                     try:
@@ -130,12 +139,44 @@ class ExecutionManager:
                     except Exception as exc:
                         import traceback as _tb
                         tb = _tb.format_exc()
+                        # emit authorization error event
+                        try:
+                            evt = make_event(event_type="authorization_denied", request_id=task.id, task_id=None, resource_type="knowledge_graph", resource_name=name, action="read", status="error", metadata={"error": str(exc)})
+                            emit_audit(evt)
+                        except Exception:
+                            pass
                         return ExecutionResult(success=False, error=f"Authorization error: {exc}", metadata={"trace": tb})
+                    # emit authorization allowed/denied
+                    try:
+                        if decision.allowed:
+                            evt = make_event(event_type="authorization_allowed", request_id=task.id, resource_type="knowledge_graph", resource_name=name, action="read", status="allowed", metadata={"policy": decision.policy_name})
+                        else:
+                            evt = make_event(event_type="authorization_denied", request_id=task.id, resource_type="knowledge_graph", resource_name=name, action="read", status="denied", metadata={"policy": decision.policy_name, "reason": decision.reason})
+                        emit_audit(evt)
+                    except Exception:
+                        pass
                     if not decision.allowed:
                         return ExecutionResult(success=False, error=f"Unauthorized access to knowledge graph: {name}", metadata={"policy": decision.policy_name, "reason": decision.reason})
             try:
-                return self._execute_multi_graph_request(task, graph_requests)
+                result = self._execute_multi_graph_request(task, graph_requests)
+                # emit request_completed
+                try:
+                    from core.contracts.audit import make_event as _make_event
+                    from core.audit_logger import emit as _emit_audit
+                    evt_c = _make_event(event_type="request_completed", request_id=task.id, status="completed", metadata={"kind": "multi_graph"})
+                    _emit_audit(evt_c)
+                except Exception:
+                    pass
+                return result
             except Exception as exc:
+                # emit request_failed
+                try:
+                    from core.contracts.audit import make_event as _make_event
+                    from core.audit_logger import emit as _emit_audit
+                    evt_fail = _make_event(event_type="request_completed", request_id=task.id, status="failed", metadata={"error": str(exc), "kind": "multi_graph"})
+                    _emit_audit(evt_fail)
+                except Exception:
+                    pass
                 return ExecutionResult(success=False, error=str(exc))
 
         # If an explicit source was provided and a KnowledgeSourceRegistry exists,
@@ -365,15 +406,51 @@ class ExecutionManager:
 
         # Authorize access to this knowledge source before retrieval
         if self.policy is not None:
-            decision = self.policy.authorize_resource(None, "knowledge_source", getattr(source, "name", None), "read", {"task_id": task.id})
+            from core.contracts.audit import make_event
+            from core.audit_logger import emit as emit_audit
+            try:
+                decision = self.policy.authorize_resource(None, "knowledge_source", getattr(source, "name", None), "read", {"task_id": task.id})
+            except Exception as exc:
+                try:
+                    evt = make_event(event_type="authorization_denied", request_id=task.id, resource_type="knowledge_source", resource_name=getattr(source, "name", None), action="read", status="error", metadata={"error": str(exc)})
+                    emit_audit(evt)
+                except Exception:
+                    pass
+                return ExecutionResult(success=False, error=f"Authorization error: {exc}", metadata={})
+            try:
+                if decision.allowed:
+                    evt = make_event(event_type="authorization_allowed", request_id=task.id, resource_type="knowledge_source", resource_name=getattr(source, "name", None), action="read", status="allowed", metadata={"policy": decision.policy_name})
+                else:
+                    evt = make_event(event_type="authorization_denied", request_id=task.id, resource_type="knowledge_source", resource_name=getattr(source, "name", None), action="read", status="denied", metadata={"policy": decision.policy_name, "reason": decision.reason})
+                emit_audit(evt)
+            except Exception:
+                pass
             if not decision.allowed:
                 return ExecutionResult(success=False, error=f"Unauthorized access to knowledge source: {getattr(source, 'name', None)}", metadata={"policy": decision.policy_name, "reason": decision.reason})
+
+        # emit resource_accessed (start)
+        try:
+            from core.contracts.audit import make_event as _make_event
+            from core.audit_logger import emit as _emit_audit
+            evt_start = _make_event(event_type="resource_accessed", request_id=task.id, resource_type="knowledge_source", resource_name=getattr(source, "name", None), action="read", status="started")
+            _emit_audit(evt_start)
+        except Exception:
+            pass
 
         retrieved = (
             source.retrieve(query, k=top_k)
             if top_k is not None
             else source.retrieve(query)
         )
+
+        # emit resource_accessed (completed)
+        try:
+            from core.contracts.audit import make_event as _make_event
+            from core.audit_logger import emit as _emit_audit
+            evt_done = _make_event(event_type="resource_accessed", request_id=task.id, resource_type="knowledge_source", resource_name=getattr(source, "name", None), action="read", status="completed")
+            _emit_audit(evt_done)
+        except Exception:
+            pass
 
         if not retrieved:
             return ExecutionResult(

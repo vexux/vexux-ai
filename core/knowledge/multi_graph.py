@@ -259,8 +259,13 @@ def execute_multi_graph_request(
         raise ValueError("Multi-graph request requires at least one graph request")
 
     results: List[Dict[str, Any]] = []
+    from core.audit_logger import emit as emit_audit
+    from core.contracts.audit import make_event
+
     with ThreadPoolExecutor(max_workers=min(len(requests), 4)) as executor:
         future_map = {}
+        # record start times per future so durations can be reported
+        start_times = {}
         for request_spec in requests:
             request_dict = request_spec.as_dict() if isinstance(request_spec, GraphRequest) else dict(request_spec)
             graph_name = request_dict.get("graph_name")
@@ -270,17 +275,90 @@ def execute_multi_graph_request(
                 graph = registry.get(graph_name)
             except Exception as exc:
                 raise ValueError(f"Required graph '{graph_name}' unavailable: {exc}") from exc
-            future_map[executor.submit(execute_graph_request, graph, request_dict)] = request_dict
+            # emit task_started audit event (task id is graph_name:operation)
+            op = request_dict.get("operation")
+            task_id = f"{graph_name}:{op}"
+            evt = make_event(
+                event_type="task_started",
+                request_id=None,
+                session_id=None,
+                orchestration_id=None,
+                task_id=task_id,
+                agent_name=None,
+                status="started",
+                resource_type="knowledge_graph",
+                resource_name=graph_name,
+                action=op,
+                metadata={"source": "multi_graph"},
+            )
+            try:
+                emit_audit(evt)
+            except Exception:
+                pass
+            future = executor.submit(execute_graph_request, graph, request_dict)
+            future_map[future] = request_dict
+            start_times[future] = __import__("time").time()
 
         for future in as_completed(future_map):
+            request_dict = future_map[future]
+            graph_name = request_dict.get("graph_name")
+            operation = request_dict.get("operation")
+            task_id = f"{graph_name}:{operation}"
             try:
                 result = future.result()
+                results.append(result)
+                # emit task_completed with duration
+                duration = None
+                try:
+                    duration = (__import__("time").time() - start_times.get(future, 0)) * 1000.0
+                except Exception:
+                    duration = None
+                evt = make_event(
+                    event_type="task_completed",
+                    request_id=None,
+                    session_id=None,
+                    orchestration_id=None,
+                    task_id=task_id,
+                    agent_name=None,
+                    status="completed",
+                    resource_type="knowledge_graph",
+                    resource_name=graph_name,
+                    action=operation,
+                    duration_ms=duration,
+                    metadata={"source": "multi_graph"},
+                )
+                try:
+                    emit_audit(evt)
+                except Exception:
+                    pass
             except Exception as exc:
+                # emit task_failed
+                try:
+                    duration = (__import__("time").time() - start_times.get(future, 0)) * 1000.0
+                except Exception:
+                    duration = None
+                evt = make_event(
+                    event_type="task_failed",
+                    request_id=None,
+                    session_id=None,
+                    orchestration_id=None,
+                    task_id=task_id,
+                    agent_name=None,
+                    status="failed",
+                    resource_type="knowledge_graph",
+                    resource_name=graph_name,
+                    action=operation,
+                    duration_ms=duration,
+                    metadata={"error": str(exc), "source": "multi_graph"},
+                )
+                try:
+                    emit_audit(evt)
+                except Exception:
+                    pass
                 request_dict = future_map[future]
                 graph_name = request_dict.get("graph_name")
                 operation = request_dict.get("operation")
                 raise ValueError(f"Graph '{graph_name}' operation '{operation}' failed: {exc}") from exc
-            results.append(result)
 
         results.sort(key=lambda item: (item.get("graph_name") or "", item.get("operation") or ""))
         summary = correlate_graph_results(results, customer_id=customer_id)
