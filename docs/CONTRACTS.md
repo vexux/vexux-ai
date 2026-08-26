@@ -163,7 +163,37 @@ class SpecializedAgentContract(Protocol):
 
 > Explicit deterministic specialization is currently the only supported model. Automatic agent selection and multi-agent coordination remain future work.
 
-### 1.7 DelegationPlan Contract
+---
+
+### 1.7 Authorization Contracts (`core/contracts/authorization.py`)
+A minimal resource-level authorization contract used by the policy layer to decide whether an actor may perform an action on a named resource.
+
+```python
+@dataclass
+class AuthorizationRequest:
+    actor: Optional[str]
+    resource_type: str
+    resource_name: Optional[str]
+    action: str
+    context: Optional[dict] = None
+
+@dataclass
+class AuthorizationDecision:
+    allowed: bool
+    reason: Optional[str] = None
+    policy_name: str = "authorization"
+```
+
+- **Purpose**: Encapsulate a simple allow/deny decision for resource types such as `knowledge_graph`, `knowledge_source`, `specialized_agent`, and `workflow`.
+- **Producer**: Policy implementations (e.g., `DefaultPolicy.authorize_resource`).
+- **Consumer**: Enforcement points in `ExecutionManager` and `Orchestrator` which call into the policy to make deterministic allow/deny decisions before using protected resources.
+
+Notes:
+- The contract is intentionally small and resource-oriented — it is not a full RBAC/IAM model and deliberately omits external identity provider integration.
+- Decisions must be surfaced as controlled failures (error + safe metadata) and must not leak raw protected outputs.
+
+### 1.8 DelegationPlan Contract
+
 The controlled multi-agent planning layer uses a domain-agnostic, explicit delegation plan that reuses the existing `Task` dependency semantics without introducing a second graph abstraction.
 
 ```python

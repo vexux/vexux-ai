@@ -50,6 +50,33 @@ class Orchestrator:
                     delegation_id=delegation.delegation_id,
                     metadata={"selected_mode": "delegated", "selected_agent": target},
                 )
+
+            # Authorize usage of the specialized agent via the agent policy when available
+            try:
+                agent_policy = getattr(self.agent, "policy", None)
+                if agent_policy is not None:
+                    try:
+                        decision = agent_policy.authorize_resource(user_id, "specialized_agent", target, "use", {"delegation_id": delegation.delegation_id})
+                    except Exception as exc:
+                        return DelegationResult(
+                            target_agent=target,
+                            success=False,
+                            error=f"Authorization error: {exc}",
+                            delegation_id=delegation.delegation_id,
+                            metadata={"selected_mode": "delegated", "selected_agent": target},
+                        )
+                    if not decision.allowed:
+                        return DelegationResult(
+                            target_agent=target,
+                            success=False,
+                            error=f"Unauthorized access to specialized agent: {target}",
+                            delegation_id=delegation.delegation_id,
+                            metadata={"selected_mode": "delegated", "selected_agent": target, "policy": decision.policy_name, "reason": decision.reason},
+                        )
+            except Exception:
+                # Non-fatal: if policy check fails unexpectedly, fall back to original behavior
+                pass
+
             response = specialized_agent.run(request, session_id=session_id, user_id=user_id)
 
         metadata = dict(response.metadata or {})

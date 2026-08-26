@@ -1,4 +1,5 @@
 from typing import Any
+import traceback
 
 from core.contracts.evidence import Evidence, EvidenceSet
 from core.knowledge.multi_graph import execute_multi_graph_request
@@ -67,7 +68,8 @@ class ExecutionManager:
             if capability == "retrieval":
 
                 return self._execute_retrieval(
-                    task
+                    task,
+                    context,
                 )
 
             if capability == "tool":
@@ -101,6 +103,7 @@ class ExecutionManager:
     def _execute_retrieval(
         self,
         task: Task,
+        context: AgentContext | None = None,
     ) -> ExecutionResult:
 
         # Use the KnowledgeDecision component (if available) to normalize and
@@ -117,6 +120,19 @@ class ExecutionManager:
         # source-routing logic. This preserves controlled failure semantics:
         # missing or failing graphs are surfaced instead of silently falling back.
         if graph_requests:
+            # Authorize each requested graph before any execution. Authorization must
+            # occur prior to submitting protected tasks for parallel execution.
+            if self.policy is not None:
+                for item in graph_requests:
+                    name = item.get("graph_name") or item.get("source")
+                    try:
+                        decision = self.policy.authorize_resource(context.user_id if context is not None else None, "knowledge_graph", name, "read", {"task_id": task.id})
+                    except Exception as exc:
+                        import traceback as _tb
+                        tb = _tb.format_exc()
+                        return ExecutionResult(success=False, error=f"Authorization error: {exc}", metadata={"trace": tb})
+                    if not decision.allowed:
+                        return ExecutionResult(success=False, error=f"Unauthorized access to knowledge graph: {name}", metadata={"policy": decision.policy_name, "reason": decision.reason})
             try:
                 return self._execute_multi_graph_request(task, graph_requests)
             except Exception as exc:
@@ -206,6 +222,15 @@ class ExecutionManager:
                     graph = self.knowledge_graph_registry.get(kr.source)
                 except Exception as exc:
                     return ExecutionResult(success=False, error=str(exc))
+
+                # Authorize access to the resolved graph resource
+                if self.policy is not None:
+                    try:
+                        decision = self.policy.authorize_resource(context.user_id if context is not None else None, "knowledge_graph", graph.name if hasattr(graph, "name") else kr.source, "read", {"task_id": task.id})
+                    except Exception as exc:
+                        return ExecutionResult(success=False, error=f"Authorization error: {exc}")
+                    if not decision.allowed:
+                        return ExecutionResult(success=False, error=f"Unauthorized access to knowledge graph: {graph.name}", metadata={"policy": decision.policy_name, "reason": decision.reason})
 
                 operation = kr.operation or kr.params.get("operation") if hasattr(kr, "params") else kr.operation
                 params = kr.params if hasattr(kr, "params") else {}
@@ -337,6 +362,12 @@ class ExecutionManager:
                 success=False,
                 error="Retrieval top_k must be a positive integer",
             )
+
+        # Authorize access to this knowledge source before retrieval
+        if self.policy is not None:
+            decision = self.policy.authorize_resource(None, "knowledge_source", getattr(source, "name", None), "read", {"task_id": task.id})
+            if not decision.allowed:
+                return ExecutionResult(success=False, error=f"Unauthorized access to knowledge source: {getattr(source, 'name', None)}", metadata={"policy": decision.policy_name, "reason": decision.reason})
 
         retrieved = (
             source.retrieve(query, k=top_k)

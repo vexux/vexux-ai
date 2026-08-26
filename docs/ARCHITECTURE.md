@@ -69,6 +69,24 @@ Provides structural boundaries, data contracts, and dependency mediation.
 - **FastAPI API** (`api/main.py`): Thin HTTP boundary delegating requests to the composition-root Agent.
 - **Evaluation Suite** (`evaluation/`): Deterministic system-level evaluation runner with 44 scenarios.
 
+### Authorization Boundary (Phase 24)
+
+A small, resource-aware authorization boundary has been added to the architecture to control access to sensitive resources (knowledge graphs, registered knowledge sources, workflows, and specialized agents) while preserving the existing policy boundary and security/redaction mechanisms.
+
+Key behaviors (implemented):
+
+- Authorization contract types: `AuthorizationRequest` and `AuthorizationDecision` exist under `core/contracts/authorization.py` and express actor identity, resource type/name, action, and resulting decision metadata.
+- Policy extension: `DefaultPolicy` exposes `authorize_resource(actor, resource_type, resource_name, action, context)` which returns a `PolicyDecision`. The default implementation is permissive to preserve backward compatibility.
+- Enforcement points: the `ExecutionManager` and `Orchestrator` call `authorize_resource` prior to using protected resources:
+ - ExecutionManager authorizes single-graph access, multi-graph access (before parallel submission), and registered knowledge-source access.
+ - Orchestrator authorizes specialized-agent delegation before executing a delegated request.
+- Multi-graph authorization occurs before any graph execution/submission; if any required graph is denied the current implementation rejects the entire multi-graph request and does not execute any of the requested graphs.
+- Authorization failures are returned as controlled failures (clear error strings and safe metadata) and do not cause uncaught exceptions, nor do they silently fall back to alternative resources.
+- Observability: authorization decisions are surfaced via execution/response metadata (policy name and safe reason) without exposing internal policy implementation details or raw protected data.
+- Security separation: authorization is distinct from the existing security/redaction mechanisms — the authorization layer decides access; redaction remains responsible for removing or masking sensitive payloads in traces.
+
+This keeps the authorization layer small, deterministic, and domain-agnostic while integrating with the established policy boundary and preserving existing behavior when no custom policy is configured.
+
 ### Layer 3: Data / Capability Layer
 Houses the domain-specific models, data processors, vector indices, training loops, and concrete tools.
 - **RAG Subsystem** (`rag/`): File-based document loader, sliding-window chunker, `SentenceTransformer` embedder (`BAAI/bge-small-en-v1.5`), FAISS flat IP vector index, and contextual prompt builder.

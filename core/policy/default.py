@@ -30,6 +30,14 @@ class DefaultPolicy:
     def authorize_execution(self, task, context):
         return PolicyDecision(True)
 
+    def authorize_resource(self, actor: str | None, resource_type: str, resource_name: str | None, action: str, context: dict | None = None) -> PolicyDecision:
+        """Authorize access to a named resource (e.g., knowledge_graph, specialized_agent, workflow, knowledge_source).
+
+        The default policy is permissive to preserve backward compatibility. Implementations
+        may override this to apply deterministic allow/deny rules.
+        """
+        return PolicyDecision(True)
+
     def validate_output(self, output, context):
         if not isinstance(output, str):
             return PolicyDecision(False, "Final output must be a string.", "output_validation")

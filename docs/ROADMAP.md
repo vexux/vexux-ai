@@ -45,7 +45,16 @@ Evaluation suite
 
 ### 2.5 Evaluation and Training
 - Deterministic system evaluation: `python -m evaluation`, currently 44 scenarios.
-- QLoRA fine-tuning and dataset handling under `training/`, `lora/`, and `data/`.
+
+### 2.6 Phase 24 — Resource-aware Authorization (Completed)
+A lightweight, resource-level authorization boundary was added to control access to sensitive resources while preserving the existing policy and security boundaries.
+
+Key points:
+- `AuthorizationRequest` / `AuthorizationDecision` contracts added under `core/contracts/authorization.py`.
+- `DefaultPolicy` exposes `authorize_resource(actor, resource_type, resource_name, action, context)` and remains permissive by default to preserve backward compatibility.
+- Enforcement is applied in `ExecutionManager` (single-graph, multi-graph, and registered knowledge-source retrievals) and `Orchestrator` (specialized-agent delegation). Multi-graph requests are authorized before any graph execution; a denial of any required graph rejects the whole multi-graph request.
+- Authorization failures are deterministic controlled failures surfaced via `ExecutionResult` / `AgentResponse` metadata and do not cause uncaught exceptions.
+- This implementation is intentionally small and domain-agnostic; full enterprise IAM, RBAC engines, or external identity integrations are out of scope for this phase.- QLoRA fine-tuning and dataset handling under `training/`, `lora/`, and `data/`.
 
 ## 3. In-Progress Capabilities
 
