@@ -191,6 +191,15 @@ class DelegationPlan:
 - **Consumer**: `Orchestrator` to validate, order, and execute the explicit plan.
 - **Purpose**: small, structured, deterministic delegation scheduling without autonomous agent spawning or multi-agent memory.
 
+### Orchestration metadata
+The orchestrator enriches every delegation run with minimal, privacy-conscious observability metadata. When a request contains `delegations` the returned `AgentResponse` will include an `orchestration_id` in `response.metadata` and each `DelegationResult.metadata` will include:
+- `orchestration_id`: stable id for this fan-out run
+- `delegation_id`: the delegation's id
+- `selected_agent`: the agent name used
+- `dependency_status`: one of `executed` or `blocked`
+
+This metadata is intentionally small and safe for logging and trace correlation. Sensitive raw outputs remain subject to existing policy and redaction rules.
+
 ### 1.8 Delegation Request / Result Contracts
 The orchestrator still returns per-delegation results in a minimal, deterministic structure.
 

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from typing import Any
+import uuid
 
 from core.contracts.orchestrator import DelegationPlan, DelegationRequest, DelegationResult
 from core.contracts.response import AgentResponse
@@ -112,6 +113,7 @@ class Orchestrator:
         return plan
 
     def _execute_delegation_plan(self, plan: DelegationPlan, session_id=None, user_id=None):
+        orchestration_id = str(uuid.uuid4())
         remaining = {delegation.delegation_id: delegation for delegation in plan.delegations}
         ordered = []
         while remaining:
@@ -122,22 +124,31 @@ class Orchestrator:
             if not ready:
                 break
             for delegation in ready:
-                ordered.append(self._delegate_one(delegation, session_id=session_id, user_id=user_id))
+                res = self._delegate_one(delegation, session_id=session_id, user_id=user_id)
+                # enrich metadata with orchestration context and dependency status
+                if res.metadata is None:
+                    res.metadata = {}
+                res.metadata.setdefault("selected_mode", "delegated")
+                res.metadata.setdefault("selected_agent", delegation.target_agent)
+                res.metadata["orchestration_id"] = orchestration_id
+                res.metadata["delegation_id"] = delegation.delegation_id
+                res.metadata["dependency_status"] = "executed"
+                ordered.append(res)
                 remaining.pop(delegation.delegation_id, None)
         if remaining:
             for delegation in plan.delegations:
                 if delegation.delegation_id in remaining:
-                    ordered.append(
-                        DelegationResult(
-                            target_agent=delegation.target_agent,
-                            success=False,
-                            output=None,
-                            error=f"Delegation '{delegation.delegation_id}' is blocked by unresolved dependencies.",
-                            delegation_id=delegation.delegation_id,
-                            metadata={"selected_mode": "delegated", "selected_agent": delegation.target_agent, "dependency_status": "blocked"},
-                        )
+                    result = DelegationResult(
+                        target_agent=delegation.target_agent,
+                        success=False,
+                        output=None,
+                        error=f"Delegation '{delegation.delegation_id}' is blocked by unresolved dependencies.",
+                        delegation_id=delegation.delegation_id,
+                        metadata={"selected_mode": "delegated", "selected_agent": delegation.target_agent, "dependency_status": "blocked"},
                     )
-        return ordered
+                    result.metadata["orchestration_id"] = orchestration_id
+                    ordered.append(result)
+        return orchestration_id, ordered
 
     def _resolve_metadata_agent(self, request: dict):
         if self.specialized_agent_registry is None:
@@ -176,7 +187,7 @@ class Orchestrator:
             if delegations is not None:
                 try:
                     plan = self._build_delegation_plan(request)
-                    results = self._execute_delegation_plan(plan, session_id=session_id, user_id=user_id)
+                    orchestration_id, results = self._execute_delegation_plan(plan, session_id=session_id, user_id=user_id)
                 except ValueError as exc:
                     return AgentResponse(
                         success=False,
@@ -184,6 +195,12 @@ class Orchestrator:
                         trace=[],
                         metadata={"selected_mode": "delegated"},
                     )
+
+                # enrich overall metadata with orchestration id
+                for r in results:
+                    if r.metadata is None:
+                        r.metadata = {}
+                    r.metadata.setdefault("orchestration_id", orchestration_id)
 
                 success = all(item.success for item in results)
                 return AgentResponse(
@@ -196,6 +213,7 @@ class Orchestrator:
                         "delegation_count": len(results),
                         "successful_delegations": sum(1 for item in results if item.success),
                         "failed_delegations": sum(1 for item in results if not item.success),
+                        "orchestration_id": orchestration_id,
                     },
                 )
 

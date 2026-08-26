@@ -232,6 +232,12 @@ def test_orchestrator_supports_multiple_explicit_delegations():
     assert result.output[0].output == "research ok"
     assert result.output[1].output == "agent:general request"
     assert result.metadata["delegation_count"] == 2
+    # orchestration metadata
+    assert "orchestration_id" in result.metadata
+    for item in result.output:
+        assert item.metadata is not None
+        assert item.metadata.get("orchestration_id") == result.metadata["orchestration_id"]
+        assert item.metadata.get("dependency_status") == "executed"
 
 
 def test_orchestrator_keeps_successful_delegations_when_one_fails():
@@ -265,6 +271,8 @@ def test_orchestrator_keeps_successful_delegations_when_one_fails():
     assert result.output[1].success is True
     assert result.output[0].target_agent == "research"
     assert result.output[1].target_agent == "general"
+    assert "orchestration_id" in result.metadata
+    assert all((it.metadata and it.metadata.get("orchestration_id") == result.metadata["orchestration_id"]) for it in result.output)
 
 
 def test_delegation_plan_validates_dependencies_and_rejects_invalid_graph():
