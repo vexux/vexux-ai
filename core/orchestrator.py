@@ -217,6 +217,48 @@ class Orchestrator:
                     },
                 )
 
+            # If no explicit delegations were provided, allow an autonomous delegation planner
+            # (e.g., an LLM-based planner) to propose a plan when available. The planner must
+            # explicitly opt-in via supports_autonomous(). This keeps default behavior unchanged.
+            if self.delegation_planner is not None and hasattr(self.delegation_planner, "supports_autonomous"):
+                try:
+                    if self.delegation_planner.supports_autonomous():
+                        # Only propose delegations when the request is a simple query and no explicit
+                        # agent or workflow selection is present.
+                        if request.get("delegations") is None and request.get("agent") is None and request.get("workflow") is None and request.get("query") is not None and self.specialized_agent_registry is not None:
+                            try:
+                                plan = self._build_delegation_plan(request)
+                                orchestration_id, results = self._execute_delegation_plan(plan, session_id=session_id, user_id=user_id)
+                                # enrich overall metadata with orchestration id
+                                for r in results:
+                                    if r.metadata is None:
+                                        r.metadata = {}
+                                    r.metadata.setdefault("orchestration_id", orchestration_id)
+                                success = all(item.success for item in results)
+                                return AgentResponse(
+                                    success=success,
+                                    output=results,
+                                    error=None if success else "One or more delegated agent requests failed.",
+                                    trace=[],
+                                    metadata={
+                                        "selected_mode": "delegated",
+                                        "delegation_count": len(results),
+                                        "successful_delegations": sum(1 for item in results if item.success),
+                                        "failed_delegations": sum(1 for item in results if not item.success),
+                                        "orchestration_id": orchestration_id,
+                                    },
+                                )
+                            except ValueError as exc:
+                                return AgentResponse(
+                                    success=False,
+                                    error=str(exc),
+                                    trace=[],
+                                    metadata={"selected_mode": "delegated"},
+                                )
+                except Exception:
+                    # Non-fatal: if the planner crashes, fall back to normal routing
+                    pass
+
             selected_agent = request.get("agent")
             workflow_name = request.get("workflow")
             workflow_input = {

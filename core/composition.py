@@ -32,6 +32,7 @@ from core.memory.registry import MemoryRegistry
 from core.memory.sqlite_memory import SQLiteMemory
 from core.orchestrator import Orchestrator
 from core.specialized_agents import ResearchAgent, SpecializedAgentRegistry
+from core.specialized_agents.llm_delegation_planner import LLMDelegationPlanner
 from pathlib import Path
 
 
@@ -191,6 +192,26 @@ def create_agent():
         knowledge_graph_registry=knowledge_graph_registry,
         max_parallel_tasks=max_parallel,
     )
+
+    # Optional orchestrator: wire an LLM-based delegation planner when autonomous delegation is enabled
+    orchestrator = None
+    enable_autonomous = os.getenv("ENABLE_AUTONOMOUS_DELEGATION", "").lower() in ("1", "true", "yes")
+    if enable_autonomous:
+        try:
+            max_delegs = int(os.getenv("MAX_AUTONOMOUS_DELEGATIONS", "4"))
+        except Exception:
+            max_delegs = 4
+        specialized_registry = SpecializedAgentRegistry()
+        # register the default ResearchAgent for discovery (preserve earlier behavior)
+        try:
+            specialized_registry.register(ResearchAgent(agent))
+        except ValueError:
+            pass
+        # Build an LLM-backed delegation planner that will propose plans in JSON
+        delegation_planner = LLMDelegationPlanner(model_gateway=model_gateway, base_planner=DelegationPlanner(specialized_registry), specialized_agent_registry=specialized_registry, max_delegations=max_delegs)
+        orchestrator = Orchestrator(agent=agent, workflow_registry=workflows, specialized_agent_registry=specialized_registry, delegation_planner=delegation_planner)
+    else:
+        orchestrator = Orchestrator(agent=agent, workflow_registry=workflows)
 
     return agent
 
