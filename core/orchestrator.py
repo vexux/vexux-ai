@@ -2,8 +2,9 @@ from __future__ import annotations
 
 from typing import Any
 
-from core.contracts.orchestrator import DelegationRequest, DelegationResult
+from core.contracts.orchestrator import DelegationPlan, DelegationRequest, DelegationResult
 from core.contracts.response import AgentResponse
+from core.specialized_agents.planner import DelegationPlanner
 from core.specialized_agents.selector import AgentSelectionRequest, AgentSelector
 
 
@@ -15,11 +16,12 @@ class Orchestrator:
     tasks directly.
     """
 
-    def __init__(self, agent, workflow_registry=None, specialized_agent_registry=None, agent_selector=None):
+    def __init__(self, agent, workflow_registry=None, specialized_agent_registry=None, agent_selector=None, delegation_planner=None):
         self.agent = agent
         self.workflow_registry = workflow_registry
         self.specialized_agent_registry = specialized_agent_registry
         self.agent_selector = agent_selector or AgentSelector()
+        self.delegation_planner = delegation_planner or DelegationPlanner(specialized_agent_registry)
 
     def _delegate_one(self, delegation: DelegationRequest, session_id=None, user_id=None):
         target = delegation.target_agent
@@ -87,16 +89,55 @@ class Orchestrator:
             if payload is None:
                 payload = item.get("query")
             if payload is None:
-                payload = {k: v for k, v in item.items() if k not in {"target_agent", "agent", "delegation_id", "id", "metadata"}}
+                payload = item.get("input")
+            if payload is None:
+                payload = {k: v for k, v in item.items() if k not in {"target_agent", "agent", "delegation_id", "id", "metadata", "depends_on", "input"}}
+
             parsed.append(
                 DelegationRequest(
                     target_agent=str(target_agent),
                     request=payload,
                     metadata=item.get("metadata", {}) or {},
                     delegation_id=item.get("delegation_id") or item.get("id"),
+                    depends_on=[str(dep) for dep in (item.get("depends_on") or [])],
+                    input=item.get("input"),
                 )
             )
         return parsed
+
+    def _build_delegation_plan(self, request: dict) -> DelegationPlan:
+        planner = self.delegation_planner
+        plan = planner.build_plan(request)
+        planner.validate(plan)
+        return plan
+
+    def _execute_delegation_plan(self, plan: DelegationPlan, session_id=None, user_id=None):
+        remaining = {delegation.delegation_id: delegation for delegation in plan.delegations}
+        ordered = []
+        while remaining:
+            ready = [
+                delegation for delegation in plan.delegations
+                if delegation.delegation_id in remaining and all(dep not in remaining for dep in delegation.depends_on)
+            ]
+            if not ready:
+                break
+            for delegation in ready:
+                ordered.append(self._delegate_one(delegation, session_id=session_id, user_id=user_id))
+                remaining.pop(delegation.delegation_id, None)
+        if remaining:
+            for delegation in plan.delegations:
+                if delegation.delegation_id in remaining:
+                    ordered.append(
+                        DelegationResult(
+                            target_agent=delegation.target_agent,
+                            success=False,
+                            output=None,
+                            error=f"Delegation '{delegation.delegation_id}' is blocked by unresolved dependencies.",
+                            delegation_id=delegation.delegation_id,
+                            metadata={"selected_mode": "delegated", "selected_agent": delegation.target_agent, "dependency_status": "blocked"},
+                        )
+                    )
+        return ordered
 
     def _resolve_metadata_agent(self, request: dict):
         if self.specialized_agent_registry is None:
@@ -134,7 +175,8 @@ class Orchestrator:
             delegations = request.get("delegations")
             if delegations is not None:
                 try:
-                    parsed_delegations = self._parse_delegations(request)
+                    plan = self._build_delegation_plan(request)
+                    results = self._execute_delegation_plan(plan, session_id=session_id, user_id=user_id)
                 except ValueError as exc:
                     return AgentResponse(
                         success=False,
@@ -143,7 +185,6 @@ class Orchestrator:
                         metadata={"selected_mode": "delegated"},
                     )
 
-                results = [self._delegate_one(d, session_id=session_id, user_id=user_id) for d in parsed_delegations]
                 success = all(item.success for item in results)
                 return AgentResponse(
                     success=success,

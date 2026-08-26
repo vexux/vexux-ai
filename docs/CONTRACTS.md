@@ -163,8 +163,8 @@ class SpecializedAgentContract(Protocol):
 
 > Explicit deterministic specialization is currently the only supported model. Automatic agent selection and multi-agent coordination remain future work.
 
-### 1.7 Delegation Request / Result Contracts
-The orchestrator supports explicit, deterministic multi-delegation with a minimal, domain-agnostic payload.
+### 1.7 DelegationPlan Contract
+The controlled multi-agent planning layer uses a domain-agnostic, explicit delegation plan that reuses the existing `Task` dependency semantics without introducing a second graph abstraction.
 
 ```python
 @dataclass
@@ -173,7 +173,28 @@ class DelegationRequest:
     request: Any
     metadata: Dict[str, Any] = field(default_factory=dict)
     delegation_id: Optional[str] = None
+    depends_on: list[str] = field(default_factory=list)
+    input: Any = None
 
+@dataclass
+class DelegationPlan:
+    delegations: list[DelegationRequest] = field(default_factory=list)
+```
+
+- **Fields**:
+  - `target_agent` (`str`): registered agent name to invoke.
+  - `request` (`Any`): request payload or query for that agent.
+  - `delegation_id` (`Optional[str]`): stable identifier for the work unit.
+  - `depends_on` (`list[str]`): IDs of upstream delegated work that must complete before this delegation becomes eligible.
+  - `input` (`Any`): optional structured input payload or dataflow-bound object.
+- **Producer**: `DelegationPlanner` in the specialized-agent planning layer.
+- **Consumer**: `Orchestrator` to validate, order, and execute the explicit plan.
+- **Purpose**: small, structured, deterministic delegation scheduling without autonomous agent spawning or multi-agent memory.
+
+### 1.8 Delegation Request / Result Contracts
+The orchestrator still returns per-delegation results in a minimal, deterministic structure.
+
+```python
 @dataclass
 class DelegationResult:
     target_agent: str

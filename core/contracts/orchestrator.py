@@ -10,6 +10,12 @@ class DelegationRequest:
     request: Any
     metadata: Dict[str, Any] = field(default_factory=dict)
     delegation_id: Optional[str] = None
+    depends_on: list[str] = field(default_factory=list)
+    input: Any = None
+
+    def __post_init__(self) -> None:
+        if self.depends_on is None:
+            self.depends_on = []
 
 
 @dataclass
@@ -20,6 +26,15 @@ class DelegationResult:
     error: Optional[str] = None
     delegation_id: Optional[str] = None
     metadata: Dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
+class DelegationPlan:
+    delegations: list[DelegationRequest] = field(default_factory=list)
+
+    def __post_init__(self) -> None:
+        if self.delegations is None:
+            self.delegations = []
 
 
 class OrchestratorContract(Protocol):

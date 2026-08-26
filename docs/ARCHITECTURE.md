@@ -53,6 +53,7 @@ Contains the cognitive and control-loop primitives. This layer is responsible fo
 - **ResponseSynthesizer** (`agent/response_synthesizer.py`): Synthesizes multi-task observation outputs into a clear, unified final response.
 - **Specialized Agents** (`core/specialized_agents/`): Optional role adapters around the existing Agent. The current reference implementation is `ResearchAgent`, a narrow adapter that reuses the agent's normal execution pipeline instead of creating a second planner or scheduler.
 - **Controlled Delegation** (`core/orchestrator.py`): An explicit, deterministic way to fan out a request to multiple named agents; each delegated execution remains isolated to its own request-scoped context and results are aggregated without introducing automatic routing or a second scheduler.
+- **Delegation Planning** (`core/specialized_agents/planner.py`): A small, controlled planning component that normalizes a structured `delegations` list into a `DelegationPlan`, validates IDs, dependencies, and dataflow references, and preserves DAG semantics without executing the underlying agents.
 
 ### Layer 2: Middle / Architecture Layer
 Provides structural boundaries, data contracts, and dependency mediation.

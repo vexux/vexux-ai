@@ -78,6 +78,7 @@ Evaluation suite
 - Explicit, deterministic specialization via an orchestrator-level selection mechanism.
 - Reference implementation: `ResearchAgent`, a thin adapter around the existing Agent that reuses the current planning, DAG, workflow, and execution stack instead of creating a second planner or scheduler.
 - Controlled multi-agent delegation is supported only when a request explicitly names a target agent or includes a list of `delegations`.
+- `DelegationPlan` and `DelegationPlanner` provide a small, explicit structured multi-agent plan that validates IDs, dependency edges, and upstream dataflow references before execution.
 - Old behavior remains the default when no specialized agent is explicitly requested.
 - Multi-agent collaboration, automatic agent selection, recursive delegation, and shared multi-agent memory remain future work.
 

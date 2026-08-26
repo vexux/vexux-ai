@@ -1,7 +1,7 @@
-from core.contracts.orchestrator import DelegationRequest, DelegationResult
+from core.contracts.orchestrator import DelegationPlan, DelegationRequest, DelegationResult
 from core.contracts.response import AgentResponse
 from core.orchestrator import Orchestrator
-from core.specialized_agents import ResearchAgent, SpecializedAgentRegistry
+from core.specialized_agents import DelegationPlanner, ResearchAgent, SpecializedAgentRegistry
 
 
 class DummyAgent:
@@ -265,6 +265,71 @@ def test_orchestrator_keeps_successful_delegations_when_one_fails():
     assert result.output[1].success is True
     assert result.output[0].target_agent == "research"
     assert result.output[1].target_agent == "general"
+
+
+def test_delegation_plan_validates_dependencies_and_rejects_invalid_graph():
+    registry = SpecializedAgentRegistry()
+    registry.register(ResearchAgent(DummyAgent()))
+    registry.register(DummySpecializedAgent("analysis"))
+
+    planner = DelegationPlanner(registry)
+    plan = planner.build_plan(
+        {
+            "delegations": [
+                {"id": "research", "agent": "research", "query": "Find papers"},
+                {"id": "analysis", "agent": "analysis", "query": {"from_task": "research", "path": "output"}, "depends_on": ["research"]},
+            ]
+        }
+    )
+    planner.validate(plan)
+
+    bad = DelegationPlan(
+        delegations=[
+            DelegationRequest(target_agent="research", request="a", delegation_id="r", depends_on=["missing"]),
+            DelegationRequest(target_agent="analysis", request="b", delegation_id="a"),
+        ]
+    )
+    try:
+        planner.validate(bad)
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("Expected invalid delegation dependency to be rejected")
+
+    cycle = DelegationPlan(
+        delegations=[
+            DelegationRequest(target_agent="research", request="a", delegation_id="r", depends_on=["a"]),
+            DelegationRequest(target_agent="analysis", request="b", delegation_id="a", depends_on=["r"]),
+        ]
+    )
+    try:
+        planner.validate(cycle)
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("Expected dependency cycle to be rejected")
+
+
+def test_orchestrator_executes_dependency_ordered_multi_agent_plan():
+    base_agent = DummyAgent()
+    registry = SpecializedAgentRegistry()
+    registry.register(ResearchAgent(base_agent))
+    registry.register(DummySpecializedAgent("analysis"))
+    orchestrator = Orchestrator(base_agent, specialized_agent_registry=registry)
+
+    result = orchestrator.run(
+        {
+            "delegations": [
+                {"id": "research", "agent": "research", "query": "Find papers"},
+                {"id": "analysis", "agent": "analysis", "query": {"from_task": "research", "path": "output"}, "depends_on": ["research"]},
+            ]
+        }
+    )
+
+    assert result.success is True
+    assert [item.delegation_id for item in result.output] == ["research", "analysis"]
+    assert result.output[0].target_agent == "research"
+    assert result.output[1].target_agent == "analysis"
 
 
 class DummySpecializedAgent:
