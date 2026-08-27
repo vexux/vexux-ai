@@ -147,6 +147,25 @@ Endpoint:
 POST /api/v1/agent/run
 ```
 
+The existing agent endpoint remains backward compatible. The thin orchestrator
+boundary is also available at `POST /api/v1/orchestrator/run` with the same
+`query`, optional `session_id`/`user_id`, and existing routing fields such as
+`agent`, `workflow`, and `delegations`. Responses include redacted output/error,
+request identity, optional orchestration identity, and safe metadata.
+
+Operational endpoints:
+
+```text
+GET /health
+GET /ready
+GET /api/v1/orchestrator/{request_id}/trace
+```
+
+`/health` checks process liveness. `/ready` validates configuration without
+calling external providers. The trace endpoint returns redacted audit events
+only. The API accepts an already-authenticated `user_id` from callers but does
+not implement authentication.
+
 Example request:
 
 ```json

@@ -4,6 +4,20 @@ This document provides the authoritative documentation for all data structures a
 
 All inter-module communication in Vexux-AI is governed by these contracts.
 
+## API Contracts
+
+`POST /api/v1/agent/run` and `POST /api/v1/orchestrator/run` accept `query`,
+optional `session_id`/`user_id`, and the existing routing fields (`agent`,
+`workflow`, and `delegations`). Responses contain `success`, redacted `output`
+and `error`, request/session identity, optional `orchestration_id`, and safe
+metadata. Validation failures are handled by FastAPI; execution failures retain
+the existing controlled `AgentResponse` semantics.
+
+The API emits request start/completion audit events and the trace endpoint
+filters by request or orchestration ID. It never returns prompts, credentials,
+stack traces, or unredacted secret-bearing payloads. `/health` performs no
+dependency calls; `/ready` validates provider configuration only.
+
 ---
 
 ## 1. Execution Contracts (`core/contracts/execution.py`)

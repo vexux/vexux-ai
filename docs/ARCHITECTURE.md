@@ -87,6 +87,18 @@ Key behaviors (implemented):
 
 This keeps the authorization layer small, deterministic, and domain-agnostic while integrating with the established policy boundary and preserving existing behavior when no custom policy is configured.
 
+### Production API boundary (Phase 30)
+
+The FastAPI layer exposes the existing Agent at `POST /api/v1/agent/run` and the
+thin Orchestrator at `POST /api/v1/orchestrator/run`. Both use the same safe
+request/response shape and preserve `AgentResponse` success and error semantics.
+The API accepts caller-supplied `session_id` and `user_id`; it does not implement
+authentication.
+
+`GET /health` is a process liveness check. `GET /ready` validates the centralized
+configuration without making model or network calls. `GET /api/v1/orchestrator/{id}/trace`
+returns only redacted audit events matching a request or orchestration ID.
+
 ### End-to-end integration scenarios (Phase 29)
 
 The integration coverage exercises the existing secured multi-graph flow:

@@ -116,3 +116,11 @@ Key points:
   validated plans, controlled invalid-plan failures, and delegation audit events.
 - Configuration portability and optional persistent-memory behavior are verified
   without enabling new defaults or introducing provider failover.
+
+### 4.8 Phase 30 — Production API and operational readiness
+- Added a thin orchestrator API endpoint while preserving the existing agent
+  endpoint and `AgentResponse` semantics.
+- Added stable redacted API serialization, request/audit ID correlation, safe
+  trace retrieval, and lightweight liveness/readiness endpoints.
+- Authentication, rate limiting, distributed tracing, and external deployment
+  infrastructure remain out of scope.
