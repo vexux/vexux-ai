@@ -21,6 +21,8 @@ from core.workflows.knowledge_grounded_answer import KnowledgeGroundedAnswerWork
 from core.knowledge.graph_registry import KnowledgeGraphRegistry
 from core.knowledge.inmemory_graph import InMemoryKnowledgeGraph
 from core.knowledge.neo4j_graph import Neo4jKnowledgeGraph
+from core.knowledge.sql_source import SQLKnowledgeSource
+from core.knowledge.sqlite_backend import SQLiteBackend
 
 from agent.execution_manager import ExecutionManager
 from agent.planner import Planner
@@ -96,6 +98,10 @@ def create_agent():
     knowledge_sources.register(
         RAGKnowledgeSource(rag)
     )
+    if config.sql_database_path:
+        knowledge_sources.register(
+            SQLKnowledgeSource(SQLiteBackend(config.sql_database_path))
+        )
 
     # -------------------------
     # Tools

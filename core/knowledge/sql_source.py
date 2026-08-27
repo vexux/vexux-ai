@@ -11,11 +11,15 @@ class SQLKnowledgeSource:
     def __init__(self, backend):
         self.backend = backend
 
-    def retrieve(self, query, k=None):
+    def retrieve(self, query, k=None, parameters=None):
         normalized = query.strip()
         if not re.match(r"(?is)^select\b", normalized) or ";" in normalized.rstrip(";"):
             raise ValueError("SQL knowledge source accepts one read-only SELECT statement.")
-        rows = self.backend.execute(normalized)
+        rows = (
+            self.backend.execute(normalized, parameters)
+            if parameters is not None
+            else self.backend.execute(normalized)
+        )
         return list(rows) if k is None else list(rows)[:k]
 
     def schema_metadata(self):

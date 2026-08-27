@@ -126,6 +126,17 @@ backend and the optional `Neo4jKnowledgeGraph` adapter. Configure
 require a Neo4j server. The adapter uses parameterized queries and does not
 provide arbitrary Cypher execution.
 
+### 2.7 Optional SQL knowledge source
+
+`SQLKnowledgeSource` provides a contract-level adapter to relational data.
+Set `SQL_DATABASE_PATH` to an existing SQLite database to register the
+`business_db` source. Queries are read-only single `SELECT` statements and
+support parameterized values; writes and multiple statements are rejected.
+The source runs through `KnowledgeSourceRegistry`, `KnowledgeDecision`, and
+`ExecutionManager`, so existing authorization, audit, and evidence behavior
+is preserved. Run `python -m scripts.manual.sql_backend_demo` for a temporary
+real SQLite fixture.
+
 ---
 
 ## 3. Training & Inference Workflows

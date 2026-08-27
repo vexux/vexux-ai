@@ -35,6 +35,15 @@ request. Authorization is evaluated for every named graph before execution;
 results retain each graph name as evidence provenance for cross-graph
 aggregation.
 
+## SQL knowledge source
+
+`SQLKnowledgeSource` implements `KnowledgeSourceContract` for structured
+relational reads. `SQLiteBackend` supplies real SQLite execution through the
+existing `KnowledgeSourceRegistry`; the source validates one read-only
+`SELECT`, passes optional DB-API parameters to the backend, and normalizes
+rows to `structured_data` evidence. Vendor-specific SQL drivers require their
+own backend adapter and configuration.
+
 ---
 
 ## 1. Execution Contracts (`core/contracts/execution.py`)

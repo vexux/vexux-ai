@@ -144,6 +144,22 @@ Run it with `python -m scripts.manual.heterogeneous_multigraph_demo`. It
 requires an explicitly configured Neo4j connection; otherwise it reports that
 the real-backend portion is unavailable rather than claiming a successful run.
 
+## SQL knowledge source
+
+`SQLKnowledgeSource` provides a contract-level adapter to relational data.
+The included `SQLiteBackend` proves the real read-only path without an
+external server. Configure an existing database with `SQL_DATABASE_PATH` to
+register it as a `business_db` source in the composition root. Only a single
+`SELECT` statement is accepted; values can be supplied as DB-API parameters.
+Authorization, audit events, and `structured_data` evidence use the existing
+knowledge-source flow.
+
+Run the self-contained demonstration with:
+
+```powershell
+python -m scripts.manual.sql_backend_demo
+```
+
 ## Model Provider Configuration
 
 Mistral is the default provider:

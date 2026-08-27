@@ -68,6 +68,7 @@ Provides structural boundaries, data contracts, and dependency mediation.
 - **Knowledge Graph Registry** (`core/knowledge/graph_registry.py`): Tracks independently registered graph implementations through `KnowledgeGraphContract`. The in-memory backend and optional `Neo4jKnowledgeGraph` adapter can coexist; each external backend requires an adapter and the core remains vendor-agnostic.
 - **Heterogeneous multi-graph execution**: A single multi-graph request may route `customer_graph` to `Neo4jKnowledgeGraph` and `fraud_graph` to `InMemoryKnowledgeGraph`. Both use the existing `ExecutionManager`, bounded execution, cross-graph correlation, evidence, authorization, and audit boundaries.
 - **FastAPI API** (`api/main.py`): Thin HTTP boundary delegating requests to the composition-root Agent.
+- **SQL knowledge source** (`core/knowledge/sql_source.py`): Contract-level adapter to relational data. `SQLiteBackend` is an optional real backend selected through `SQL_DATABASE_PATH`; the core remains vendor-agnostic and accepts only read-only single statements.
 - **Evaluation Suite** (`evaluation/`): Deterministic system-level evaluation runner with 44 scenarios.
 
 ### Authorization Boundary (Phase 24)

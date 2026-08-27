@@ -437,11 +437,13 @@ class ExecutionManager:
         except Exception:
             pass
 
-        retrieved = (
-            source.retrieve(query, k=top_k)
-            if top_k is not None
-            else source.retrieve(query)
-        )
+        parameters = task.input.get("parameters")
+        if parameters is not None:
+            retrieved = source.retrieve(query, k=top_k, parameters=parameters)
+        elif top_k is not None:
+            retrieved = source.retrieve(query, k=top_k)
+        else:
+            retrieved = source.retrieve(query)
 
         # emit resource_accessed (completed)
         try:

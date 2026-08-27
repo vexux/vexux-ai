@@ -58,6 +58,12 @@ Evaluation suite
 - Added deterministic mocked coverage for aggregation, evidence provenance, and
   authorization-before-execution.
 
+### 2.9 Phase 34 - Real SQL backend integration (Completed)
+- Added the read-only `SQLiteBackend` behind `SQLKnowledgeSource`.
+- Registered optional SQLite sources through the existing knowledge-source
+  registry using `SQL_DATABASE_PATH`, with deterministic real-database tests
+  and a temporary-database demo.
+
 ### 2.6 Phase 24 — Resource-aware Authorization (Completed)
 A lightweight, resource-level authorization boundary was added to control access to sensitive resources while preserving the existing policy and security boundaries.
 

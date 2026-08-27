@@ -47,6 +47,7 @@ class Config:
     neo4j_password: Optional[str] = None
     neo4j_database: Optional[str] = None
     neo4j_graph_name: str = "neo4j"
+    sql_database_path: Optional[str] = None
 
     # Hide potential secrets from default repr by overriding
     def __repr__(self) -> str:  # pragma: no cover - trivial
@@ -84,6 +85,7 @@ def load_config_from_env(prefix: str = "") -> Config:
     neo4j_password = e("NEO4J_PASSWORD") or None
     neo4j_database = e("NEO4J_DATABASE") or None
     neo4j_graph_name = e("NEO4J_GRAPH_NAME") or "neo4j"
+    sql_database_path = e("SQL_DATABASE_PATH") or None
 
     return Config(
         model_provider=model_provider.lower(),
@@ -97,6 +99,7 @@ def load_config_from_env(prefix: str = "") -> Config:
         neo4j_password=neo4j_password,
         neo4j_database=neo4j_database,
         neo4j_graph_name=neo4j_graph_name,
+        sql_database_path=sql_database_path,
     )
 
 
@@ -118,6 +121,7 @@ def _env_snapshot(prefix: str = "") -> tuple:
         "NEO4J_PASSWORD",
         "NEO4J_DATABASE",
         "NEO4J_GRAPH_NAME",
+        "SQL_DATABASE_PATH",
     ]
     return tuple(os.getenv(prefix + k) for k in keys)
 
