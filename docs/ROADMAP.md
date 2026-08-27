@@ -52,6 +52,12 @@ Evaluation suite
 - Neo4j remains optional and is registered through `KnowledgeGraphRegistry`
   only when configured; in-memory and Neo4j graphs may coexist.
 
+### 2.8 Phase 33 - Heterogeneous multi-graph integration (Completed)
+- Demonstrated `customer_graph` backed by Neo4j alongside `fraud_graph` backed
+  by `InMemoryKnowledgeGraph` through the existing registry and execution path.
+- Added deterministic mocked coverage for aggregation, evidence provenance, and
+  authorization-before-execution.
+
 ### 2.6 Phase 24 — Resource-aware Authorization (Completed)
 A lightweight, resource-level authorization boundary was added to control access to sensitive resources while preserving the existing policy and security boundaries.
 

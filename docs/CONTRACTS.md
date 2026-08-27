@@ -30,6 +30,11 @@ plain dictionaries before reaching execution, evidence, or audit layers.
 Neo4j identifiers are passed as query parameters, and arbitrary Cypher is not
 part of the contract.
 
+Multiple graph instances may use different contract implementations in one
+request. Authorization is evaluated for every named graph before execution;
+results retain each graph name as evidence provenance for cross-graph
+aggregation.
+
 ---
 
 ## 1. Execution Contracts (`core/contracts/execution.py`)

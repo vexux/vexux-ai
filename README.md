@@ -131,6 +131,19 @@ the core does not expose arbitrary Cypher execution. A mixed registry can use
 `python -m scripts.manual.neo4j_graph_demo` demonstrates registration and
 reports when Neo4j is not configured.
 
+The heterogeneous investigation proof uses the same registry and execution
+path for both backends:
+
+```text
+KnowledgeGraphRegistry
+├── customer_graph -> Neo4jKnowledgeGraph
+└── fraud_graph    -> InMemoryKnowledgeGraph
+```
+
+Run it with `python -m scripts.manual.heterogeneous_multigraph_demo`. It
+requires an explicitly configured Neo4j connection; otherwise it reports that
+the real-backend portion is unavailable rather than claiming a successful run.
+
 ## Model Provider Configuration
 
 Mistral is the default provider:
