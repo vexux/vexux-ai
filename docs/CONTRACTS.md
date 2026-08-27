@@ -44,6 +44,11 @@ existing `KnowledgeSourceRegistry`; the source validates one read-only
 rows to `structured_data` evidence. Vendor-specific SQL drivers require their
 own backend adapter and configuration.
 
+A multi-source investigation may combine graph requests with a registered SQL
+source through the existing execution manager. Each source is authorized
+before its protected read, and evidence retains `customer_graph`,
+`fraud_graph`, or `business_db` provenance.
+
 ---
 
 ## 1. Execution Contracts (`core/contracts/execution.py`)

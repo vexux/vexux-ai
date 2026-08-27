@@ -64,6 +64,12 @@ Evaluation suite
   registry using `SQL_DATABASE_PATH`, with deterministic real-database tests
   and a temporary-database demo.
 
+### 2.10 Phase 35 - End-to-end multi-source investigation (Completed)
+- Added deterministic integration coverage combining mocked Neo4j graph
+  behavior, the in-memory fraud graph, and a real temporary SQLite source
+  through existing registries and `ExecutionManager`.
+- Added a no-secrets manual demo with explicit unavailable-Neo4j behavior.
+
 ### 2.6 Phase 24 — Resource-aware Authorization (Completed)
 A lightweight, resource-level authorization boundary was added to control access to sensitive resources while preserving the existing policy and security boundaries.
 

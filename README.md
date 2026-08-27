@@ -160,6 +160,12 @@ Run the self-contained demonstration with:
 python -m scripts.manual.sql_backend_demo
 ```
 
+The combined synthetic investigation is available with
+`python -m scripts.manual.multi_source_investigation_demo`. It always uses
+SQLite and the in-memory fraud graph; the customer graph is reported as
+unavailable unless an explicitly configured Neo4j backend is supplied, so the
+demo never claims a heterogeneous run when that backend is absent.
+
 ## Model Provider Configuration
 
 Mistral is the default provider:

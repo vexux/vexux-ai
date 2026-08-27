@@ -99,9 +99,9 @@ def create_agent():
         RAGKnowledgeSource(rag)
     )
     if config.sql_database_path:
-        knowledge_sources.register(
-            SQLKnowledgeSource(SQLiteBackend(config.sql_database_path))
-        )
+        sql_source = SQLKnowledgeSource(SQLiteBackend(config.sql_database_path))
+        sql_source.name = "business_db"
+        knowledge_sources.register(sql_source)
 
     # -------------------------
     # Tools
