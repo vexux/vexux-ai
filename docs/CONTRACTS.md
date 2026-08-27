@@ -163,6 +163,16 @@ class SpecializedAgentContract(Protocol):
 
 > Explicit deterministic specialization is currently the only supported model. Automatic agent selection and multi-agent coordination remain future work.
 
+### Integration contract usage
+
+Phase 29 integration tests exercise these existing contracts together rather than
+introducing new execution contracts. Multi-graph retrieval carries explicit graph
+names and identifiers into `ExecutionManager`, authorization decisions remain
+resource-level, and results retain `EvidenceSet` provenance. Delegation uses the
+existing `DelegationPlan` and `DelegationResult` contracts. Audit records and
+responses must contain safe metadata only; prompts, credentials, and raw
+secret-bearing outputs are not part of these application contracts.
+
 ---
 
 ### 1.7 Authorization Contracts (`core/contracts/authorization.py`)

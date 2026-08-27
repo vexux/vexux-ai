@@ -362,6 +362,22 @@ def execute_multi_graph_request(
 
         results.sort(key=lambda item: (item.get("graph_name") or "", item.get("operation") or ""))
         summary = correlate_graph_results(results, customer_id=customer_id)
+        try:
+            emit_audit(
+                make_event(
+                    event_type="resource_accessed",
+                    status="aggregated",
+                    resource_type="knowledge_graph",
+                    resource_name="multi_graph",
+                    action="aggregate",
+                    metadata={
+                        "source": "multi_graph",
+                        "graph_count": len({item.get("graph_name") for item in results}),
+                    },
+                )
+            )
+        except Exception:
+            pass
     evidence = summary["evidence"]
     output = {
         "query": query,

@@ -108,3 +108,11 @@ Key points:
 
 ### 4.6 Multi-Backend Model Gateway
 - Optional vLLM, Ollama, Llama.cpp, and remote provider implementations.
+
+### 4.7 Phase 29 — End-to-end integration and hardening
+- Integration coverage now verifies the secured synthetic customer/fraud multi-graph
+  investigation, including all-or-nothing authorization and cross-graph evidence.
+- Deterministic autonomous delegation coverage verifies one model-gateway call,
+  validated plans, controlled invalid-plan failures, and delegation audit events.
+- Configuration portability and optional persistent-memory behavior are verified
+  without enabling new defaults or introducing provider failover.

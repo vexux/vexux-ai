@@ -87,6 +87,21 @@ Key behaviors (implemented):
 
 This keeps the authorization layer small, deterministic, and domain-agnostic while integrating with the established policy boundary and preserving existing behavior when no custom policy is configured.
 
+### End-to-end integration scenarios (Phase 29)
+
+The integration coverage exercises the existing secured multi-graph flow:
+`Orchestrator -> authorization -> multi-graph retrieval -> aggregation -> EvidenceSet -> response -> audit`.
+Required multi-graph requests are all-or-nothing: a denied graph prevents submission of every graph request.
+
+The autonomous delegation scenario uses `LLMDelegationPlanner` with an injected deterministic
+gateway, validates the structured plan through `DelegationPlanner`, and records delegated-agent
+audit events. Invalid model JSON is a controlled planning failure with no fallback execution.
+
+Configuration portability is verified through `MODEL_PROVIDER=fake` and the existing centralized
+configuration boundary. Persistent memory remains optional and is only used when explicitly
+configured; it is not written implicitly for ordinary requests. Integration tests use synthetic
+data and do not add a scheduler, graph backend, security framework, or distributed infrastructure.
+
 ### Layer 3: Data / Capability Layer
 Houses the domain-specific models, data processors, vector indices, training loops, and concrete tools.
 - **RAG Subsystem** (`rag/`): File-based document loader, sliding-window chunker, `SentenceTransformer` embedder (`BAAI/bge-small-en-v1.5`), FAISS flat IP vector index, and contextual prompt builder.
@@ -296,4 +311,3 @@ sequenceDiagram
   - Explicit: persistent memory is only read or written by explicit memory operations; normal agent runs do not automatically persist or retrieve persistent memory.
   - Secure: the memory backend reuses the repository's redaction utilities and rejects obvious secret-like inputs.
   - Minimal: Phase 9 provides store/retrieve/clear only — no embeddings, vector search, or automatic extraction.
-
