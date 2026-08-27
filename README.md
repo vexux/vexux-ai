@@ -100,6 +100,16 @@ Runtime dependencies include the official `mistralai` SDK, PyTorch, Transformers
 
 The default model is `mistral-small-latest`, accessed through the Mistral API. The first RAG use may download embedding assets. The local Qwen path requires the checkpoint files under `models/checkpoints`.
 
+For reproducible setup, install both dependency files with:
+
+```powershell
+python -m pip install -r requirements.txt -r requirements-dev.txt
+```
+
+CI uses `MODEL_PROVIDER=fake` for deterministic tests without external
+credentials. The live Mistral test is isolated from the normal CI job and only
+runs when explicitly enabled with a configured API key.
+
 ## Model Provider Configuration
 
 Mistral is the default provider:
@@ -139,6 +149,13 @@ python test.py
 
 ```powershell
 uvicorn api.main:app --reload
+```
+
+For a credential-free local smoke run:
+
+```powershell
+$env:MODEL_PROVIDER = "fake"
+python -m uvicorn api.main:app --host 0.0.0.0 --port 8000
 ```
 
 Endpoint:
@@ -199,6 +216,15 @@ Example response shape:
 ```
 
 The route delegates to `Agent.run()` and contains no orchestration logic.
+
+## Validation
+
+```powershell
+python -m pytest
+python -m evaluation
+```
+
+These are the canonical deterministic validation commands used by CI.
 
 ## Example Scenarios
 

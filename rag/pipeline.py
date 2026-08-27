@@ -14,10 +14,12 @@ class RAGPipeline:
         self,
         top_k=3,
         relevance_threshold=None,
+        enable_inference=True,
     ):
 
         self.top_k = top_k
         self.relevance_threshold = relevance_threshold
+        self.enable_inference = enable_inference
 
         self.loader = DocumentLoader(
             "data/documents"
@@ -59,7 +61,7 @@ class RAGPipeline:
             embedder=self.embedder,
         )
 
-        self.inference = InferencePipeline()
+        self.inference = InferencePipeline() if self.enable_inference else None
 
     def retrieve(
         self,
@@ -88,6 +90,8 @@ class RAGPipeline:
         ]
 
     def ask(self, question):
+        if self.inference is None:
+            raise RuntimeError("RAG generation is disabled for this pipeline.")
 
         retrieved = self.retrieve(
             question

@@ -82,8 +82,39 @@ python scripts/manual/run_agent.py
 
 ### 2.3 Running Pytest
 ```bash
-pytest
+python -m pytest
 ```
+
+### 2.4 Canonical deterministic validation
+
+From the repository root, use these commands for the same checks run in CI:
+
+```bash
+python -m pytest
+python -m evaluation
+```
+
+CI sets `MODEL_PROVIDER=fake`, so deterministic tests do not require external
+credentials. The live Mistral test is separate and is skipped by default unless
+`MISTRAL_API_KEY` is available; the optional CI job runs only when the repository
+variable `RUN_LIVE_MISTRAL=true` is explicitly enabled.
+
+### 2.5 Running the API
+
+```bash
+MODEL_PROVIDER=fake uvicorn api.main:app --host 0.0.0.0 --port 8000
+```
+
+On Windows PowerShell:
+
+```powershell
+$env:MODEL_PROVIDER = "fake"
+python -m uvicorn api.main:app --host 0.0.0.0 --port 8000
+```
+
+The API exposes `POST /api/v1/agent/run`, `POST /api/v1/orchestrator/run`,
+`GET /health`, and `GET /ready`. The fake provider is intended for local and CI
+validation; no provider credentials are required.
 
 ---
 

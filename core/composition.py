@@ -88,7 +88,7 @@ def create_agent():
     # RAG
     # -------------------------
 
-    rag = RAGPipeline()
+    rag = RAGPipeline(enable_inference=provider_name != "fake")
 
     knowledge_sources = KnowledgeSourceRegistry()
 
