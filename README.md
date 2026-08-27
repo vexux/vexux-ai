@@ -110,6 +110,27 @@ CI uses `MODEL_PROVIDER=fake` for deterministic tests without external
 credentials. The live Mistral test is isolated from the normal CI job and only
 runs when explicitly enabled with a configured API key.
 
+## Knowledge graph backends
+
+Vexux supports pluggable graph backends through the common
+`KnowledgeGraphContract` and `KnowledgeGraphRegistry`. The default in-memory
+backend needs no external service. Neo4j is an optional adapter; configure it
+without putting credentials in source:
+
+```powershell
+$env:ENABLE_KNOWLEDGE_GRAPH = "1"
+$env:NEO4J_URI = "bolt://localhost:7687"
+$env:NEO4J_USERNAME = "neo4j"
+$env:NEO4J_PASSWORD = "your-password"
+$env:NEO4J_GRAPH_NAME = "customer_graph"
+```
+
+Each graph database backend requires its own adapter implementing the contract;
+the core does not expose arbitrary Cypher execution. A mixed registry can use
+`customer_graph` with Neo4j and `fraud_graph` with the in-memory backend.
+`python -m scripts.manual.neo4j_graph_demo` demonstrates registration and
+reports when Neo4j is not configured.
+
 ## Model Provider Configuration
 
 Mistral is the default provider:

@@ -42,6 +42,11 @@ class Config:
     max_parallel_tasks: int = 1
     persistent_memory_db: Optional[str] = None
     knowledge_graph_enabled: bool = False
+    neo4j_uri: Optional[str] = None
+    neo4j_username: Optional[str] = None
+    neo4j_password: Optional[str] = None
+    neo4j_database: Optional[str] = None
+    neo4j_graph_name: str = "neo4j"
 
     # Hide potential secrets from default repr by overriding
     def __repr__(self) -> str:  # pragma: no cover - trivial
@@ -74,6 +79,11 @@ def load_config_from_env(prefix: str = "") -> Config:
     persistent_memory_db = e("PERSISTENT_MEMORY_DB") or None
 
     knowledge_graph_enabled = _parse_bool(e("ENABLE_KNOWLEDGE_GRAPH"))
+    neo4j_uri = e("NEO4J_URI") or None
+    neo4j_username = e("NEO4J_USERNAME") or None
+    neo4j_password = e("NEO4J_PASSWORD") or None
+    neo4j_database = e("NEO4J_DATABASE") or None
+    neo4j_graph_name = e("NEO4J_GRAPH_NAME") or "neo4j"
 
     return Config(
         model_provider=model_provider.lower(),
@@ -82,6 +92,11 @@ def load_config_from_env(prefix: str = "") -> Config:
         max_parallel_tasks=max_parallel_tasks,
         persistent_memory_db=persistent_memory_db,
         knowledge_graph_enabled=knowledge_graph_enabled,
+        neo4j_uri=neo4j_uri,
+        neo4j_username=neo4j_username,
+        neo4j_password=neo4j_password,
+        neo4j_database=neo4j_database,
+        neo4j_graph_name=neo4j_graph_name,
     )
 
 
@@ -98,6 +113,11 @@ def _env_snapshot(prefix: str = "") -> tuple:
         "AGENT_MAX_PARALLEL_TASKS",
         "PERSISTENT_MEMORY_DB",
         "ENABLE_KNOWLEDGE_GRAPH",
+        "NEO4J_URI",
+        "NEO4J_USERNAME",
+        "NEO4J_PASSWORD",
+        "NEO4J_DATABASE",
+        "NEO4J_GRAPH_NAME",
     ]
     return tuple(os.getenv(prefix + k) for k in keys)
 

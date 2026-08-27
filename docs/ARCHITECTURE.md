@@ -65,7 +65,7 @@ Provides structural boundaries, data contracts, and dependency mediation.
 - **Orchestrator** (`core/orchestrator.py`): Selects the execution owner; it delegates to the direct Agent, workflows, or an explicitly selected specialized agent without redesigning the underlying execution stack.
 - **Specialized Agent Registry** (`core/specialized_agents/`): Optional discovery/lookup registry for role-specific adapters. The current reference implementation is a thin `ResearchAgent` wrapper around the existing Agent.
 - **Composition Root** (`core/composition.py`): Factory module (`create_agent()`) that wires concrete instances and handles dependency injection; optional orchestrator helpers can register specialized agents without changing the default Agent path.
-- **Knowledge Graph Registry** (`core/knowledge/graph_registry.py`): Tracks independently registered in-memory knowledge graphs and allows graph routing through the normalized `KnowledgeRequest` layer without introducing a second graph contract.
+- **Knowledge Graph Registry** (`core/knowledge/graph_registry.py`): Tracks independently registered graph implementations through `KnowledgeGraphContract`. The in-memory backend and optional `Neo4jKnowledgeGraph` adapter can coexist; each external backend requires an adapter and the core remains vendor-agnostic.
 - **FastAPI API** (`api/main.py`): Thin HTTP boundary delegating requests to the composition-root Agent.
 - **Evaluation Suite** (`evaluation/`): Deterministic system-level evaluation runner with 44 scenarios.
 

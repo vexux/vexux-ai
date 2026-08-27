@@ -20,6 +20,7 @@ from core.workflows.knowledge_grounded_answer import KnowledgeGroundedAnswerWork
 # Optional knowledge graph foundation (Phase 10)
 from core.knowledge.graph_registry import KnowledgeGraphRegistry
 from core.knowledge.inmemory_graph import InMemoryKnowledgeGraph
+from core.knowledge.neo4j_graph import Neo4jKnowledgeGraph
 
 from agent.execution_manager import ExecutionManager
 from agent.planner import Planner
@@ -168,10 +169,20 @@ def create_agent():
 
     # Optional knowledge graph: controlled by centralized config (backward compatible)
     knowledge_graph_registry = None
-    if config.knowledge_graph_enabled:
+    if config.knowledge_graph_enabled or config.neo4j_uri:
         knowledge_graph_registry = KnowledgeGraphRegistry()
-        # Register a default in-memory backend for Phase 10 foundation
-        knowledge_graph_registry.register(InMemoryKnowledgeGraph())
+        if config.knowledge_graph_enabled:
+            knowledge_graph_registry.register(InMemoryKnowledgeGraph())
+        if config.neo4j_uri:
+            knowledge_graph_registry.register(
+                Neo4jKnowledgeGraph(
+                    uri=config.neo4j_uri,
+                    username=config.neo4j_username or "",
+                    password=config.neo4j_password or "",
+                    database=config.neo4j_database,
+                    name=config.neo4j_graph_name,
+                )
+            )
 
     # Create the ExecutionManager after optional components have been configured
     execution_manager = ExecutionManager(

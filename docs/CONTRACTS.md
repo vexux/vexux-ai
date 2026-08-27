@@ -20,6 +20,18 @@ dependency calls; `/ready` validates provider configuration only.
 
 ---
 
+## Knowledge graph contract
+
+`KnowledgeGraphContract` defines generic node, relationship, and neighbor
+operations. `KnowledgeGraphRegistry` is the sole registration boundary. The
+repository includes `InMemoryKnowledgeGraph` and an optional
+`Neo4jKnowledgeGraph` adapter; Neo4j records are normalized into the contract's
+plain dictionaries before reaching execution, evidence, or audit layers.
+Neo4j identifiers are passed as query parameters, and arbitrary Cypher is not
+part of the contract.
+
+---
+
 ## 1. Execution Contracts (`core/contracts/execution.py`)
 
 ### 1.1 `Task`

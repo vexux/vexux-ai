@@ -116,6 +116,16 @@ The API exposes `POST /api/v1/agent/run`, `POST /api/v1/orchestrator/run`,
 `GET /health`, and `GET /ready`. The fake provider is intended for local and CI
 validation; no provider credentials are required.
 
+### 2.6 Optional Neo4j graph backend
+
+The generic `KnowledgeGraphContract` is implemented by both the in-memory
+backend and the optional `Neo4jKnowledgeGraph` adapter. Configure
+`NEO4J_URI`, `NEO4J_USERNAME`, `NEO4J_PASSWORD`, and optionally
+`NEO4J_DATABASE`/`NEO4J_GRAPH_NAME`. Neo4j is registered through the existing
+`KnowledgeGraphRegistry` only when configured; normal startup and tests do not
+require a Neo4j server. The adapter uses parameterized queries and does not
+provide arbitrary Cypher execution.
+
 ---
 
 ## 3. Training & Inference Workflows

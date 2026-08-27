@@ -46,6 +46,12 @@ Evaluation suite
 ### 2.5 Evaluation and Training
 - Deterministic system evaluation: `python -m evaluation`, currently 44 scenarios.
 
+### 2.7 Phase 32 - Pluggable graph backend proof (Completed)
+- Added a parameterized `Neo4jKnowledgeGraph` adapter implementing the existing
+  `KnowledgeGraphContract`.
+- Neo4j remains optional and is registered through `KnowledgeGraphRegistry`
+  only when configured; in-memory and Neo4j graphs may coexist.
+
 ### 2.6 Phase 24 — Resource-aware Authorization (Completed)
 A lightweight, resource-level authorization boundary was added to control access to sensitive resources while preserving the existing policy and security boundaries.
 
