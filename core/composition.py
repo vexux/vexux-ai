@@ -23,6 +23,7 @@ from core.knowledge.inmemory_graph import InMemoryKnowledgeGraph
 from core.knowledge.neo4j_graph import Neo4jKnowledgeGraph
 from core.knowledge.sql_source import SQLKnowledgeSource
 from core.knowledge.sqlite_backend import SQLiteBackend
+from core.knowledge.resource_router import ResourceRouter
 
 from agent.execution_manager import ExecutionManager
 from agent.planner import Planner
@@ -99,7 +100,11 @@ def create_agent():
         RAGKnowledgeSource(rag)
     )
     if config.sql_database_path:
-        sql_source = SQLKnowledgeSource(SQLiteBackend(config.sql_database_path))
+        sql_source = SQLKnowledgeSource(
+            SQLiteBackend(config.sql_database_path),
+            default_query="SELECT * FROM accounts WHERE customer_id = ?",
+            aliases=("business db", "sqlite db", "sqlite"),
+        )
         sql_source.name = "business_db"
         knowledge_sources.register(sql_source)
 
@@ -198,6 +203,10 @@ def create_agent():
         knowledge_graph_registry=knowledge_graph_registry,
         policy=policy,
     )
+    resource_router = ResourceRouter(
+        knowledge_source_registry=knowledge_sources,
+        knowledge_graph_registry=knowledge_graph_registry,
+    )
 
     # Read max parallel tasks from config; default 1 keeps legacy sequential behavior
     try:
@@ -217,6 +226,7 @@ def create_agent():
         memory_registry=memory_registry,
         knowledge_graph_registry=knowledge_graph_registry,
         max_parallel_tasks=max_parallel,
+        resource_router=resource_router,
     )
 
     # Optional orchestrator: wire an LLM-based delegation planner when autonomous delegation is enabled

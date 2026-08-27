@@ -70,6 +70,16 @@ Evaluation suite
   through existing registries and `ExecutionManager`.
 - Added a no-secrets manual demo with explicit unavailable-Neo4j behavior.
 
+### 2.11 Phase 36 - Deterministic natural-language resource routing (Completed)
+- Added metadata-driven explicit routing for registered graph and SQL resources,
+  including aliases, single-resource selection, and existing multi-source task
+  construction.
+- Unknown explicit resources fail without falling back to RAG; queries without
+  resource mentions preserve the normal planner path.
+- Added an interactive synthetic authorization demo for `investigator` and
+  `support_user`; routing remains separate from authorization and does not add
+  an LLM call, scheduler, or registry.
+
 ### 2.6 Phase 24 — Resource-aware Authorization (Completed)
 A lightweight, resource-level authorization boundary was added to control access to sensitive resources while preserving the existing policy and security boundaries.
 

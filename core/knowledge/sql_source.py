@@ -8,8 +8,10 @@ class SQLKnowledgeSource:
     description = "Read-only structured queries over an injected data backend."
     capabilities = ["structured_query", "metadata_lookup"]
 
-    def __init__(self, backend):
+    def __init__(self, backend, default_query=None, aliases=()):
         self.backend = backend
+        self.default_query = default_query
+        self.aliases = tuple(aliases)
 
     def retrieve(self, query, k=None, parameters=None):
         normalized = query.strip()

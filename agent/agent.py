@@ -30,6 +30,7 @@ class Agent:
         knowledge_graph_registry=None,
         # Maximum number of tasks to run in parallel. Default 1 preserves sequential behavior.
         max_parallel_tasks: int = 1,
+        resource_router=None,
     ):
 
         self.execution_manager = (
@@ -60,6 +61,7 @@ class Agent:
         # concurrency: maximum number of concurrently executing ready tasks
         # default is 1 to preserve previous sequential behavior unless configured
         self.max_parallel_tasks = max(1, int(max_parallel_tasks or 1))
+        self.resource_router = resource_router
 
     def run(
         self,
@@ -79,6 +81,47 @@ class Agent:
             if not decision.allowed:
                 return AgentResponse(success=False, error=f"Policy denied input: {decision.reason}", trace=[], metadata={"request_id": context.request_id, "policy": decision.policy_name})
 
+        routed_plan = None
+        if self.resource_router is not None:
+            try:
+                route = self.resource_router.route(query)
+            except (ValueError, KeyError) as exc:
+                return AgentResponse(
+                    success=False,
+                    error=f"Resource routing failed: {exc}",
+                    trace=[],
+                    metadata={"request_id": context.request_id, "user_id": user_id},
+                )
+            if route is not None:
+                routed_tasks = []
+                if route.graph_requests:
+                    graph_input = {
+                        "query": query,
+                        "graph_requests": route.graph_requests,
+                    }
+                    if len(route.graph_requests) == 1:
+                        request = route.graph_requests[0]
+                        graph_input.update({
+                            "source": request["graph_name"],
+                            "operation": request["operation"],
+                            "params": request["params"],
+                        })
+                        graph_input.pop("graph_requests")
+                    routed_tasks.append(Task(
+                        id="routed_graphs",
+                        description="Retrieve explicitly requested graph resources",
+                        input=graph_input,
+                        metadata={"capability": "retrieval"},
+                    ))
+                for index, source_task in enumerate(route.source_tasks, start=1):
+                    routed_tasks.append(Task(
+                        id=f"routed_source_{index}",
+                        description=f"Retrieve explicitly requested source {source_task['source']}",
+                        input=source_task,
+                        metadata={"capability": "retrieval"},
+                    ))
+                routed_plan = Plan(tasks=routed_tasks)
+
         retry_count = 0
         logger = logging.getLogger(__name__)
 
@@ -87,8 +130,7 @@ class Agent:
             try:
 
                 if retry_count == 0:
-
-                    plan = self.planner.create_plan(
+                    plan = routed_plan or self.planner.create_plan(
                         query,
                         conversation_context=context.conversation_history,
                     )

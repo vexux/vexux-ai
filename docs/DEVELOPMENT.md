@@ -137,6 +137,13 @@ The source runs through `KnowledgeSourceRegistry`, `KnowledgeDecision`, and
 is preserved. Run `python -m scripts.manual.sql_backend_demo` for a temporary
 real SQLite fixture.
 
+For a deterministic routing and authorization walkthrough, run
+`python -m scripts.manual.resource_routing_authorization_demo`. Use `/run` as
+`investigator`, then `/actor support_user` and `/run`; the latter is denied
+`fraud_graph` before protected execution. Routing selects resources but never
+grants authorization. Explicit unknown resources fail and queries without an
+explicit resource continue through the normal planner path.
+
 ---
 
 ## 3. Training & Inference Workflows

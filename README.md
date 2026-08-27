@@ -166,6 +166,14 @@ SQLite and the in-memory fraud graph; the customer graph is reported as
 unavailable unless an explicitly configured Neo4j backend is supplied, so the
 demo never claims a heterogeneous run when that backend is absent.
 
+Explicit mentions of registered resources are routed deterministically from
+registry metadata into the existing retrieval and authorization path. Try the
+interactive actor demonstration with
+`python -m scripts.manual.resource_routing_authorization_demo`, then use
+`/run`, `/actor support_user`, and `/run`. Routing does not grant access:
+`support_user` is denied `fraud_graph`; queries without explicit resources keep
+the normal planner behavior and unknown explicit resources fail.
+
 ## Model Provider Configuration
 
 Mistral is the default provider:
