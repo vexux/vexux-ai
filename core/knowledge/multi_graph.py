@@ -37,6 +37,12 @@ def build_fraud_investigation_graphs() -> KnowledgeGraphRegistry:
 
     customer_graph = InMemoryKnowledgeGraph()
     customer_graph.name = "customer_graph"
+    customer_graph.aliases = (
+        "customer",
+        "customer knowledge graph",
+        "customer knowledge graphs",
+    )
+    customer_graph.default_node_id = "C1001"
 
     customer_graph.add_node("C1001", label="Customer", properties={"customer_id": "C1001"})
     customer_graph.add_node("C2001", label="Customer", properties={"customer_id": "C2001"})
@@ -53,6 +59,12 @@ def build_fraud_investigation_graphs() -> KnowledgeGraphRegistry:
 
     fraud_graph = InMemoryKnowledgeGraph()
     fraud_graph.name = "fraud_graph"
+    fraud_graph.aliases = (
+        "fraud",
+        "fraud knowledge graph",
+        "fraud knowledge graphs",
+    )
+    fraud_graph.default_node_id = "C1001"
 
     fraud_graph.add_node("C1001", label="Customer", properties={"customer_id": "C1001"})
     fraud_graph.add_node("C2001", label="Customer", properties={"customer_id": "C2001"})

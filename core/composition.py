@@ -102,8 +102,8 @@ def create_agent():
     if config.sql_database_path:
         sql_source = SQLKnowledgeSource(
             SQLiteBackend(config.sql_database_path),
-            default_query="SELECT * FROM accounts WHERE customer_id = ?",
-            aliases=("business db", "sqlite db", "sqlite"),
+            default_query="SELECT * FROM accounts",
+            aliases=("business db", "sqlite", "sqlite db", "sqlite database"),
         )
         sql_source.name = "business_db"
         knowledge_sources.register(sql_source)

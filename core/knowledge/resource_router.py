@@ -58,6 +58,15 @@ class ResourceRouter:
             raise ValueError(f"Unknown or unavailable knowledge resource: {unknown[0]}")
         return selected
 
+    @staticmethod
+    def is_authorization_query(query: str) -> bool:
+        return bool(re.search(
+            r"\b(?:am\s+i\s+(?:allowed|authorized)|can\s+i\s+access|"
+            r"do\s+i\s+have\s+permission|permission\s+to|authorized\s+to|"
+            r"allowed\s+to)\b",
+            query.lower(),
+        ))
+
     def route(self, query: str) -> ResourceRoute | None:
         selections = self.select(query)
         if not selections:
@@ -68,7 +77,8 @@ class ResourceRouter:
         source_tasks = []
         for selection in selections:
             if selection.resource_type == "knowledge_graph":
-                params = {"node_id": identifier} if identifier else {}
+                node_id = identifier or getattr(selection.resource, "default_node_id", None)
+                params = {"node_id": node_id} if node_id else {}
                 graph_requests.append({
                     "graph_name": selection.name,
                     "operation": "get_neighbors",

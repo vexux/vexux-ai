@@ -83,6 +83,49 @@ class Agent:
 
         routed_plan = None
         if self.resource_router is not None:
+            if self.resource_router.is_authorization_query(query):
+                try:
+                    selections = self.resource_router.select(query)
+                except (ValueError, KeyError) as exc:
+                    return AgentResponse(
+                        success=False,
+                        error=f"Authorization resource resolution failed: {exc}",
+                        trace=[],
+                        metadata={"request_id": context.request_id, "user_id": user_id},
+                    )
+                if not selections:
+                    return AgentResponse(
+                        success=False,
+                        output=None,
+                        error="Authorization question did not identify a specific registered resource.",
+                        trace=[],
+                        metadata={"request_id": context.request_id, "user_id": user_id},
+                    )
+                decisions = []
+                for selection in selections:
+                    if self.policy is None:
+                        decisions.append(f"{selection.name} -> AUTHORIZATION POLICY UNAVAILABLE")
+                        continue
+                    decision = self.policy.authorize_resource(
+                        user_id,
+                        selection.resource_type,
+                        selection.name,
+                        "read",
+                        {"request_id": context.request_id},
+                    )
+                    status = "ALLOWED" if decision.allowed else "DENIED"
+                    decisions.append(f"{selection.name} -> {status}")
+                return AgentResponse(
+                    success=all("ALLOWED" in decision for decision in decisions),
+                    output="\n".join(decisions),
+                    error=None,
+                    trace=[],
+                    metadata={
+                        "request_id": context.request_id,
+                        "user_id": user_id,
+                        "authorization_check": True,
+                    },
+                )
             try:
                 route = self.resource_router.route(query)
             except (ValueError, KeyError) as exc:
