@@ -6,6 +6,14 @@ class ResponseSynthesizer:
     ):
         self.model_gateway = model_gateway
 
+    def synthesize_authorization(self, requests: list, decisions: list) -> str:
+        """Present safe policy outcomes without exposing policy internals."""
+        return "\n".join(
+            f"{request.resource_name} -> "
+            f"{'ALLOWED' if decision.allowed else 'DENIED'}"
+            for request, decision in zip(requests, decisions)
+        )
+
     def synthesize(
         self,
         query: str,

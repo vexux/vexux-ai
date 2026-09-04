@@ -5,6 +5,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 from typing import Any, Dict, List
+from core.contracts.authorization import AuthorizationRequest
 
 
 @dataclass(frozen=True)
@@ -66,6 +67,23 @@ class ResourceRouter:
             r"allowed\s+to)\b",
             query.lower(),
         ))
+
+    def authorization_requests(
+        self,
+        query: str,
+        actor: str | None,
+        context: dict | None = None,
+    ) -> List[AuthorizationRequest]:
+        return [
+            AuthorizationRequest(
+                actor=actor,
+                resource_type=selection.resource_type,
+                resource_name=selection.name,
+                action="read",
+                context=context,
+            )
+            for selection in self.select(query)
+        ]
 
     def route(self, query: str) -> ResourceRoute | None:
         selections = self.select(query)

@@ -85,7 +85,11 @@ class Agent:
         if self.resource_router is not None:
             if self.resource_router.is_authorization_query(query):
                 try:
-                    selections = self.resource_router.select(query)
+                    requests = self.resource_router.authorization_requests(
+                        query,
+                        actor=user_id,
+                        context={"request_id": context.request_id},
+                    )
                 except (ValueError, KeyError) as exc:
                     return AgentResponse(
                         success=False,
@@ -93,7 +97,7 @@ class Agent:
                         trace=[],
                         metadata={"request_id": context.request_id, "user_id": user_id},
                     )
-                if not selections:
+                if not requests:
                     return AgentResponse(
                         success=False,
                         output=None,
@@ -101,23 +105,27 @@ class Agent:
                         trace=[],
                         metadata={"request_id": context.request_id, "user_id": user_id},
                     )
-                decisions = []
-                for selection in selections:
-                    if self.policy is None:
-                        decisions.append(f"{selection.name} -> AUTHORIZATION POLICY UNAVAILABLE")
-                        continue
-                    decision = self.policy.authorize_resource(
-                        user_id,
-                        selection.resource_type,
-                        selection.name,
-                        "read",
-                        {"request_id": context.request_id},
+                if self.policy is None:
+                    return AgentResponse(
+                        success=False,
+                        output=None,
+                        error="Authorization policy is unavailable.",
+                        trace=[],
+                        metadata={"request_id": context.request_id, "user_id": user_id},
                     )
-                    status = "ALLOWED" if decision.allowed else "DENIED"
-                    decisions.append(f"{selection.name} -> {status}")
+                decisions = [
+                    self.policy.authorize_resource(
+                        request.actor,
+                        request.resource_type,
+                        request.resource_name,
+                        request.action,
+                        request.context,
+                    )
+                    for request in requests
+                ]
                 return AgentResponse(
-                    success=all("ALLOWED" in decision for decision in decisions),
-                    output="\n".join(decisions),
+                    success=all(decision.allowed for decision in decisions),
+                    output=self.response_synthesizer.synthesize_authorization(requests, decisions),
                     error=None,
                     trace=[],
                     metadata={

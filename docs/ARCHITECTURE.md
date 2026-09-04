@@ -90,6 +90,11 @@ Key behaviors (implemented):
 
 This keeps the authorization layer small, deterministic, and domain-agnostic while integrating with the established policy boundary and preserving existing behavior when no custom policy is configured.
 
+Authorization questions follow the same separation: `ResourceRouter` creates
+`AuthorizationRequest` values for explicitly named resources, the injected
+policy returns decisions, and `ResponseSynthesizer` presents only safe resource
+names and outcomes. Conversation history is never treated as authorization.
+
 ### Production API boundary (Phase 30)
 
 The FastAPI layer exposes the existing Agent at `POST /api/v1/agent/run` and the

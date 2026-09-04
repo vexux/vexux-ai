@@ -34,6 +34,12 @@ class StaticSynthesizer:
     def synthesize(self, query, observations, conversation_context=None):
         return "ok"
 
+    def synthesize_authorization(self, requests, decisions):
+        return "\n".join(
+            f"{request.resource_name} -> {'ALLOWED' if decision.allowed else 'DENIED'}"
+            for request, decision in zip(requests, decisions)
+        )
+
 
 from core.policy.default import DefaultPolicy
 
