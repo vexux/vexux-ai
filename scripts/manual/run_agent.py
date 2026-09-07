@@ -11,6 +11,12 @@ def main():
         print("=" * 60)
         print("Vexux AI Interactive Terminal")
         print("Type 'exit' or 'quit' to stop. Use '/actor investigator' or '/actor support_user'.")
+        print("Resource-aware demo queries include:")
+        print("  - Give me information about C1001 from the customer graph.")
+        print("  - Give me data from the customer graph and fraud graph for C1001.")
+        print("  - Am I allowed to access customer_graph and fraud_graph?")
+        print("  - Am I allowed to access fraud_graph?")
+        print("Note: entity IDs alone such as 'C1001' are not resources; mention the graph explicitly.")
         print("=" * 60)
 
         while True:
