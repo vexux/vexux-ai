@@ -26,7 +26,8 @@ authorization input.
 
 The fraud investigation runner is an application composition that injects
 resources, identities, and policy into this platform boundary; those concepts
-are not required by the core agent.
+are not required by the core agent. Domain-specific fraud fixtures and policies
+live under `apps/fraud/`, while the generic runtime remains in `core/`.
 
 ## 2. The Three Conceptual Layers
 

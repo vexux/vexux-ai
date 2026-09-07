@@ -71,6 +71,7 @@ flowchart TD
 ```text
 agent/                    Agent orchestration, planning, dispatch, observation, decisions
 api/                      FastAPI application (`api/main.py`)
+apps/                     Domain-specific application boundaries (for example `apps/fraud/`)
 core/                     Composition root, contracts, gateway, context, tools
 rag/                      Loading, chunking, embeddings, FAISS retrieval, prompting, RAG knowledge adapter
 models/                   Mistral/Qwen providers and local Qwen adapter checkpoints

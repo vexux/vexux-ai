@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import warnings
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from typing import Any, Dict, Iterable, List, Optional
@@ -33,54 +34,41 @@ class MultiGraphRequest:
 
 
 def build_fraud_investigation_graphs() -> KnowledgeGraphRegistry:
-    registry = KnowledgeGraphRegistry()
+    """Compatibility shim for legacy imports.
 
-    customer_graph = InMemoryKnowledgeGraph()
-    customer_graph.name = "customer_graph"
-    customer_graph.aliases = (
-        "customer",
-        "customer knowledge graph",
-        "customer knowledge graphs",
+    Fraud-specific fixtures are defined in the application boundary under
+    apps.fraud. The core package remains generic and does not own this domain.
+    """
+    warnings.warn(
+        "build_fraud_investigation_graphs is deprecated; import from apps.fraud.composition instead.",
+        DeprecationWarning,
+        stacklevel=2,
     )
-    customer_graph.default_node_id = "C1001"
+    from apps.fraud.composition import build_fraud_investigation_graphs as _build
 
-    customer_graph.add_node("C1001", label="Customer", properties={"customer_id": "C1001"})
-    customer_graph.add_node("C2001", label="Customer", properties={"customer_id": "C2001"})
-    customer_graph.add_node("A100", label="Account", properties={"account_id": "A100"})
-    customer_graph.add_node("A101", label="Account", properties={"account_id": "A101"})
-    customer_graph.add_node("D500", label="Device", properties={"device_id": "D500"})
+    return _build()
 
-    customer_graph.add_relationship("C1001", "A100", rel_type="owns", properties={"customer_id": "C1001", "account_id": "A100"})
-    customer_graph.add_relationship("C1001", "A101", rel_type="owns", properties={"customer_id": "C1001", "account_id": "A101"})
-    customer_graph.add_relationship("C1001", "D500", rel_type="uses", properties={"customer_id": "C1001", "device_id": "D500"})
-    customer_graph.add_relationship("C2001", "D500", rel_type="uses", properties={"customer_id": "C2001", "device_id": "D500"})
 
-    registry.register(customer_graph)
-
-    fraud_graph = InMemoryKnowledgeGraph()
-    fraud_graph.name = "fraud_graph"
-    fraud_graph.aliases = (
-        "fraud",
-        "fraud knowledge graph",
-        "fraud knowledge graphs",
+def create_customer_fraud_graphs() -> KnowledgeGraphRegistry:
+    warnings.warn(
+        "create_customer_fraud_graphs is deprecated; import from apps.fraud.composition instead.",
+        DeprecationWarning,
+        stacklevel=2,
     )
-    fraud_graph.default_node_id = "C1001"
+    from apps.fraud.composition import build_fraud_investigation_graphs as _build
 
-    fraud_graph.add_node("C1001", label="Customer", properties={"customer_id": "C1001"})
-    fraud_graph.add_node("C2001", label="Customer", properties={"customer_id": "C2001"})
-    fraud_graph.add_node("F900", label="FraudCase", properties={"case_id": "F900"})
-    fraud_graph.add_node("D500", label="Device", properties={"device_id": "D500"})
-
-    fraud_graph.add_relationship("C1001", "F900", rel_type="involved_in", properties={"customer_id": "C1001", "case_id": "F900"})
-    fraud_graph.add_relationship("C1001", "D500", rel_type="linked_to", properties={"customer_id": "C1001", "device_id": "D500"})
-    fraud_graph.add_relationship("C2001", "D500", rel_type="linked_to", properties={"customer_id": "C2001", "device_id": "D500"})
-
-    registry.register(fraud_graph)
-    return registry
+    return _build()
 
 
-create_customer_fraud_graphs = build_fraud_investigation_graphs
-create_fraud_investigation_fixture = build_fraud_investigation_graphs
+def create_fraud_investigation_fixture() -> KnowledgeGraphRegistry:
+    warnings.warn(
+        "create_fraud_investigation_fixture is deprecated; import from apps.fraud.composition instead.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
+    from apps.fraud.composition import build_fraud_investigation_graphs as _build
+
+    return _build()
 
 
 def create_fraud_investigation_request(
@@ -88,15 +76,14 @@ def create_fraud_investigation_request(
     customer_id: str = "C1001",
     device_id: str = "D500",
 ) -> MultiGraphRequest:
-    return MultiGraphRequest(
-        query=query,
-        requests=[
-            GraphRequest("customer_graph", "get_neighbors", {"node_id": customer_id, "direction": "outgoing"}),
-            GraphRequest("fraud_graph", "get_neighbors", {"node_id": customer_id, "direction": "outgoing"}),
-            GraphRequest("customer_graph", "get_neighbors", {"node_id": device_id, "direction": "incoming"}),
-            GraphRequest("fraud_graph", "get_neighbors", {"node_id": device_id, "direction": "incoming"}),
-        ],
+    warnings.warn(
+        "create_fraud_investigation_request is deprecated; import from apps.fraud.composition instead.",
+        DeprecationWarning,
+        stacklevel=2,
     )
+    from apps.fraud.composition import create_fraud_investigation_request as _create
+
+    return _create(query=query, customer_id=customer_id, device_id=device_id)
 
 
 def execute_graph_request(graph: Any, request: Dict[str, Any] | GraphRequest) -> Dict[str, Any]:
