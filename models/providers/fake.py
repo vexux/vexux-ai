@@ -1,10 +1,6 @@
-"""Deterministic fake model provider for local testing and portability demos.
-
-This lightweight provider implements the ModelProviderContract and returns a
-predictable string response. It avoids any network dependency and is suitable
-as a second provider implementation for Phase 27.
-"""
-from typing import Any
+"""Deterministic fake model provider for local testing and portability demos."""
+import json
+import re
 
 
 class FakeProvider:
@@ -17,10 +13,63 @@ class FakeProvider:
         return self._name
 
     def generate(self, prompt: str, **kwargs) -> str:
-        # Return a deterministic JSON-like response when the prompt requests JSON.
-        # If the prompt mentions 'delegations' we return a small delegations plan.
         text = prompt or ""
-        if "delegations" in text and "JSON" in text or 'delegations' in text:
-            return '{"delegations": [{"id": "research", "agent": "research", "request": "Find relevant documents about X"}, {"id": "analysis", "agent": "analysis", "request": {"from_task": "research", "path": "output"}, "depends_on": ["research"]}]}'
-        # Default fallback: echo the prompt in a safe wrapper
+        normalized = text.lower()
+
+        if "delegation" in normalized and "json" in normalized:
+            return json.dumps({
+                "delegations": [
+                    {
+                        "id": "research",
+                        "agent": "research",
+                        "request": "Find relevant information for the user request",
+                    },
+                    {
+                        "id": "analysis",
+                        "agent": "analysis",
+                        "request": {"from_task": "research", "path": "output"},
+                        "depends_on": ["research"],
+                    },
+                ]
+            })
+
+        if "classify the user request" in normalized and "intent" in normalized:
+            return json.dumps({
+                "intent": "general",
+                "confidence": 1.0,
+                "entities": {},
+            })
+
+        if "structured planning component" in normalized or "structured recovery-planning component" in normalized:
+            query = self._extract_user_request(text)
+            return json.dumps({
+                "tasks": [
+                    {
+                        "id": self._extract_task_id(text) or "task_1",
+                        "description": "Answer the user's request",
+                        "capability": "model",
+                        "input": {"query": query},
+                    }
+                ]
+            })
+
         return f"FAKE_RESPONSE: {text[:200]}"
+
+    @staticmethod
+    def _extract_user_request(prompt: str) -> str:
+        match = re.search(
+            r"User request:\s*(.*?)(?:\n\s*(?:Previous conversation context|Registered tools|"
+            r"Registered knowledge sources|Registered workflows|Failed task ID|$))",
+            prompt,
+            flags=re.IGNORECASE | re.DOTALL,
+        )
+        if match:
+            request = match.group(1).strip()
+            if request:
+                return request
+        return "Answer the user's request"
+
+    @staticmethod
+    def _extract_task_id(prompt: str) -> str | None:
+        match = re.search(r"Failed task ID \(YOU MUST PRESERVE THIS EXACT ID\):\s*([^\s]+)", prompt)
+        return match.group(1) if match else None

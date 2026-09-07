@@ -8,6 +8,26 @@ The core architecture is organized to keep the agent control flow completely dec
 
 ---
 
+## Production runtime boundaries
+
+Provider selection and authentication are application/runtime concerns. The
+generic composition root selects the configured `MODEL_PROVIDER`; Mistral and
+Qwen providers are loaded lazily, so selecting `fake` does not import or
+initialize unused heavyweight provider stacks. RAG retrieval is initialized
+without local causal-language-model generation by default. Local RAG
+generation is opt-in with `ENABLE_LOCAL_RAG_INFERENCE=1`.
+
+Applications may supply a generic `SecurityContext` containing an actor ID,
+roles, claims, and attributes through `Agent.run()`. The authentication
+mechanism remains outside Vexux core. Legacy `user_id` callers remain
+supported, and policy decisions continue to receive the effective actor,
+resource, action, and request context. Conversation history is never an
+authorization input.
+
+The fraud investigation runner is an application composition that injects
+resources, identities, and policy into this platform boundary; those concepts
+are not required by the core agent.
+
 ## 2. The Three Conceptual Layers
 
 ```text
@@ -94,6 +114,11 @@ Authorization questions follow the same separation: `ResourceRouter` creates
 `AuthorizationRequest` values for explicitly named resources, the injected
 policy returns decisions, and `ResponseSynthesizer` presents only safe resource
 names and outcomes. Conversation history is never treated as authorization.
+
+The synthetic customer/fraud/SQLite composition is kept in
+`scripts/manual/demo_fixtures.py`. The generic composition root and core
+components do not require those fixtures; the manual runner supplies them as
+replaceable registered resources and a demo-only policy.
 
 ### Production API boundary (Phase 30)
 

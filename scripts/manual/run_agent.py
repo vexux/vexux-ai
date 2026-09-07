@@ -1,53 +1,10 @@
-import sqlite3
-import tempfile
-from pathlib import Path
+"""Interactive runner for the synthetic reference composition."""
 
-from core.composition import create_agent
-from core.knowledge.multi_graph import build_fraud_investigation_graphs
-from core.knowledge.registry import KnowledgeSourceRegistry
-from core.knowledge.sql_source import SQLKnowledgeSource
-from core.knowledge.sqlite_backend import SQLiteBackend
-from core.policy.default import DefaultPolicy, PolicyDecision
-
-
-class DemoPolicy(DefaultPolicy):
-    def authorize_resource(self, actor, resource_type, resource_name, action, context=None):
-        if actor == "support_user" and resource_name == "fraud_graph":
-            return PolicyDecision(False, "support_user cannot access fraud_graph", "demo_policy")
-        return super().authorize_resource(actor, resource_type, resource_name, action, context)
+from scripts.manual.demo_fixtures import create_demo_agent
 
 
 def main():
-
-    agent = create_agent()
-    with tempfile.TemporaryDirectory() as directory:
-        database = Path(directory) / "business.db"
-        connection = sqlite3.connect(database)
-        try:
-            connection.executescript(
-                "CREATE TABLE accounts (account_id TEXT, customer_id TEXT, status TEXT);"
-                "INSERT INTO accounts VALUES ('A100', 'C1001', 'active');"
-            )
-        finally:
-            connection.close()
-
-        graphs = build_fraud_investigation_graphs()
-        sources = KnowledgeSourceRegistry()
-        sql = SQLKnowledgeSource(
-            SQLiteBackend(str(database)),
-            default_query="SELECT * FROM accounts",
-            aliases=("business db", "sqlite", "sqlite db", "sqlite database"),
-        )
-        sql.name = "business_db"
-        sources.register(sql)
-        agent.resource_router.knowledge_graph_registry = graphs
-        agent.resource_router.knowledge_source_registry = sources
-        agent.execution_manager.knowledge_graph_registry = graphs
-        agent.execution_manager.knowledge_source_registry = sources
-        agent.knowledge_graph_registry = graphs
-        policy = DemoPolicy()
-        agent.policy = policy
-        agent.execution_manager.policy = policy
+    with create_demo_agent() as agent:
         actor = "investigator"
         session_id = "terminal-session"
 
@@ -78,6 +35,7 @@ def main():
                     print(f"- {selection.name}")
             except ValueError as exc:
                 print(f"\nRouting error: {exc}")
+
             result = agent.run(query, session_id=session_id, user_id=actor)
 
             print("\nAgent:")

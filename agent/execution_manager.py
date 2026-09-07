@@ -127,7 +127,16 @@ class ExecutionManager:
                 from core.audit_logger import emit as emit_audit
                 # emit request_started for this multi-graph retrieval (use task.id as request id)
                 try:
-                    evt_start = make_event(event_type="request_started", request_id=task.id, status="started", metadata={"kind": "multi_graph"})
+                    evt_start = make_event(
+                        event_type="request_started",
+                        request_id=context.request_id if context is not None else task.id,
+                        session_id=context.session_id if context is not None else None,
+                        status="started",
+                        metadata={
+                            "kind": "multi_graph",
+                            "actor_id": context.user_id if context is not None else None,
+                        },
+                    )
                     emit_audit(evt_start)
                 except Exception:
                     pass
@@ -135,13 +144,24 @@ class ExecutionManager:
                 for item in graph_requests:
                     name = item.get("graph_name") or item.get("source")
                     try:
-                        decision = self.policy.authorize_resource(context.user_id if context is not None else None, "knowledge_graph", name, "read", {"task_id": task.id})
+                        decision = self.policy.authorize_resource(
+                            context.user_id if context is not None else None,
+                            "knowledge_graph",
+                            name,
+                            "read",
+                            {
+                                "task_id": task.id,
+                                "request_id": context.request_id if context is not None else None,
+                                "session_id": context.session_id if context is not None else None,
+                                "security_context": context.security_context if context is not None else None,
+                            },
+                        )
                     except Exception as exc:
                         import traceback as _tb
                         tb = _tb.format_exc()
                         # emit authorization error event
                         try:
-                            evt = make_event(event_type="authorization_denied", request_id=task.id, task_id=None, resource_type="knowledge_graph", resource_name=name, action="read", status="error", metadata={"error": str(exc)})
+                            evt = make_event(event_type="authorization_denied", request_id=context.request_id if context is not None else task.id, session_id=context.session_id if context is not None else None, task_id=None, resource_type="knowledge_graph", resource_name=name, action="read", status="error", metadata={"error": str(exc), "actor_id": context.user_id if context is not None else None})
                             emit_audit(evt)
                         except Exception:
                             pass
@@ -149,9 +169,9 @@ class ExecutionManager:
                     # emit authorization allowed/denied
                     try:
                         if decision.allowed:
-                            evt = make_event(event_type="authorization_allowed", request_id=task.id, resource_type="knowledge_graph", resource_name=name, action="read", status="allowed", metadata={"policy": decision.policy_name})
+                            evt = make_event(event_type="authorization_allowed", request_id=context.request_id if context is not None else task.id, session_id=context.session_id if context is not None else None, resource_type="knowledge_graph", resource_name=name, action="read", status="allowed", metadata={"policy": decision.policy_name, "actor_id": context.user_id if context is not None else None})
                         else:
-                            evt = make_event(event_type="authorization_denied", request_id=task.id, resource_type="knowledge_graph", resource_name=name, action="read", status="denied", metadata={"policy": decision.policy_name, "reason": decision.reason})
+                            evt = make_event(event_type="authorization_denied", request_id=context.request_id if context is not None else task.id, session_id=context.session_id if context is not None else None, resource_type="knowledge_graph", resource_name=name, action="read", status="denied", metadata={"policy": decision.policy_name, "reason": decision.reason, "actor_id": context.user_id if context is not None else None})
                         emit_audit(evt)
                     except Exception:
                         pass
@@ -186,10 +206,17 @@ class ExecutionManager:
         if explicit_source and self.knowledge_source_registry is not None:
             try:
                 source = self.knowledge_source_registry.get(explicit_source)
-                return self._execute_retrieval_source(source, task)
+                return self._execute_retrieval_source(source, task, context)
             except KeyError as exc:
-                # Preserve the original KeyError string representation
-                return ExecutionResult(success=False, error=str(exc))
+                if self.knowledge_graph_registry is not None:
+                    try:
+                        self.knowledge_graph_registry.get(explicit_source)
+                    except KeyError:
+                        return ExecutionResult(success=False, error=str(exc))
+                    # A graph with this name should continue through the
+                    # knowledge decision path below.
+                else:
+                    return ExecutionResult(success=False, error=str(exc))
 
         if self.knowledge_decision is not None:
             try:
@@ -219,7 +246,7 @@ class ExecutionManager:
                     return ExecutionResult(success=False, error=str(exc))
 
                 # Reuse existing source-based retrieval executor
-                return self._execute_retrieval_source(source, task)
+                return self._execute_retrieval_source(source, task, context)
 
             if kr.kind == "rag":
                 # Route to the RAG retrieval pipeline (self.retrieval). Keep the
@@ -323,7 +350,7 @@ class ExecutionManager:
         # If KnowledgeDecision is not present, preserve existing behavior.
         if self.knowledge_source_registry is not None:
             source = self.knowledge_source_registry.get(task.input.get("source"))
-            return self._execute_retrieval_source(source, task)
+            return self._execute_retrieval_source(source, task, context)
 
         if self.retrieval is None:
             return ExecutionResult(success=False, error="Retrieval capability unavailable")
@@ -388,6 +415,7 @@ class ExecutionManager:
         self,
         source,
         task: Task,
+        context: AgentContext | None = None,
     ) -> ExecutionResult:
 
         query = task.input["query"]
@@ -409,19 +437,30 @@ class ExecutionManager:
             from core.contracts.audit import make_event
             from core.audit_logger import emit as emit_audit
             try:
-                decision = self.policy.authorize_resource(None, "knowledge_source", getattr(source, "name", None), "read", {"task_id": task.id})
+                decision = self.policy.authorize_resource(
+                    context.user_id if context is not None else None,
+                    "knowledge_source",
+                    getattr(source, "name", None),
+                    "read",
+                    {
+                        "task_id": task.id,
+                        "request_id": context.request_id if context is not None else None,
+                        "session_id": context.session_id if context is not None else None,
+                        "security_context": context.security_context if context is not None else None,
+                    },
+                )
             except Exception as exc:
                 try:
-                    evt = make_event(event_type="authorization_denied", request_id=task.id, resource_type="knowledge_source", resource_name=getattr(source, "name", None), action="read", status="error", metadata={"error": str(exc)})
+                    evt = make_event(event_type="authorization_denied", request_id=context.request_id if context is not None else task.id, session_id=context.session_id if context is not None else None, resource_type="knowledge_source", resource_name=getattr(source, "name", None), action="read", status="error", metadata={"error": str(exc), "actor_id": context.user_id if context is not None else None})
                     emit_audit(evt)
                 except Exception:
                     pass
                 return ExecutionResult(success=False, error=f"Authorization error: {exc}", metadata={})
             try:
                 if decision.allowed:
-                    evt = make_event(event_type="authorization_allowed", request_id=task.id, resource_type="knowledge_source", resource_name=getattr(source, "name", None), action="read", status="allowed", metadata={"policy": decision.policy_name})
+                    evt = make_event(event_type="authorization_allowed", request_id=context.request_id if context is not None else task.id, session_id=context.session_id if context is not None else None, resource_type="knowledge_source", resource_name=getattr(source, "name", None), action="read", status="allowed", metadata={"policy": decision.policy_name, "actor_id": context.user_id if context is not None else None})
                 else:
-                    evt = make_event(event_type="authorization_denied", request_id=task.id, resource_type="knowledge_source", resource_name=getattr(source, "name", None), action="read", status="denied", metadata={"policy": decision.policy_name, "reason": decision.reason})
+                    evt = make_event(event_type="authorization_denied", request_id=context.request_id if context is not None else task.id, session_id=context.session_id if context is not None else None, resource_type="knowledge_source", resource_name=getattr(source, "name", None), action="read", status="denied", metadata={"policy": decision.policy_name, "reason": decision.reason, "actor_id": context.user_id if context is not None else None})
                 emit_audit(evt)
             except Exception:
                 pass

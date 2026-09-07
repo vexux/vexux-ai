@@ -5,7 +5,7 @@ from core.config import load_config_from_env, _parse_bool, _parse_int, get_confi
 
 def test_default_config(monkeypatch):
     # Ensure no env variables
-    for k in ["MODEL_PROVIDER","ENABLE_AUTONOMOUS_DELEGATION","MAX_AUTONOMOUS_DELEGATIONS","AGENT_MAX_PARALLEL_TASKS","PERSISTENT_MEMORY_DB","ENABLE_KNOWLEDGE_GRAPH"]:
+    for k in ["MODEL_PROVIDER","ENABLE_AUTONOMOUS_DELEGATION","MAX_AUTONOMOUS_DELEGATIONS","AGENT_MAX_PARALLEL_TASKS","PERSISTENT_MEMORY_DB","ENABLE_KNOWLEDGE_GRAPH","ENABLE_LOCAL_RAG_INFERENCE"]:
         monkeypatch.delenv(k, raising=False)
     cfg = load_config_from_env()
     assert cfg.model_provider == "mistral"
@@ -14,6 +14,12 @@ def test_default_config(monkeypatch):
     assert cfg.max_parallel_tasks == 1
     assert cfg.persistent_memory_db is None
     assert cfg.knowledge_graph_enabled is False
+    assert cfg.local_rag_inference_enabled is False
+
+
+def test_local_rag_inference_is_explicitly_configured(monkeypatch):
+    monkeypatch.setenv("ENABLE_LOCAL_RAG_INFERENCE", "1")
+    assert load_config_from_env().local_rag_inference_enabled is True
 
 
 def test_boolean_parsing_true_values():

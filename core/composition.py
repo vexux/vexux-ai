@@ -3,9 +3,6 @@ import os
 from rag.pipeline import RAGPipeline
 
 from core.model_gateway.gateway import ModelGateway
-from models.providers.mistral import MistralProvider
-from models.providers.qwen import QwenProvider
-
 from core.tools.registry import ToolRegistry
 from core.tools.calculator import CalculatorTool
 from core.tools.string_formatter import StringFormatterTool
@@ -52,6 +49,7 @@ def create_agent():
     provider_name = (config.model_provider or "mistral").lower()
 
     if provider_name == "mistral":
+        from models.providers.mistral import MistralProvider
 
         provider = MistralProvider(
             model_name=os.getenv(
@@ -61,6 +59,7 @@ def create_agent():
         )
 
     elif provider_name == "qwen":
+        from models.providers.qwen import QwenProvider
 
         provider = QwenProvider(
             model_name=os.getenv(
@@ -92,7 +91,7 @@ def create_agent():
     # RAG
     # -------------------------
 
-    rag = RAGPipeline(enable_inference=provider_name != "fake")
+    rag = RAGPipeline(enable_inference=config.local_rag_inference_enabled)
 
     knowledge_sources = KnowledgeSourceRegistry()
 

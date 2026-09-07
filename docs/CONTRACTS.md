@@ -138,6 +138,13 @@ class AgentContext:
 - **Consumer**: `Agent` (`run`), `ExecutionManager` (`execute`).
 - **Purpose**: Holds runtime state, active pointers, and execution traces for a single agent invocation.
 
+`SecurityContext` (`core/contracts/identity.py`) is an optional application-
+supplied identity contract with `actor_id`, `roles`, `claims`, `attributes`,
+and `authentication_method`. It carries authenticated identity information
+without coupling core contracts to a particular identity provider or domain
+role. `Agent.run(security_context=...)` uses its `actor_id` when no legacy
+`user_id` is supplied.
+
 ---
 
 ### 1.4 `ExecutionResult`

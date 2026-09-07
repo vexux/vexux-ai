@@ -96,6 +96,16 @@ Key points:
 - Route all answer generation through the central `ModelGateway`.
 - Keep retrieval and answer generation as distinct capability responsibilities.
 
+### 3.2 Phase 37 - Production runtime and security boundary (Completed)
+- Provider modules are loaded lazily, and the configured generation provider is
+  no longer coupled to local causal-model RAG generation.
+- `ENABLE_LOCAL_RAG_INFERENCE=1` explicitly enables the optional local RAG
+  generation pipeline; retrieval remains independently available.
+- Added the generic application-supplied `SecurityContext` contract while
+  preserving legacy `user_id` callers and keeping authentication outside core.
+- Authorization receives request/session/security context, and existing
+  resource policy, evidence, audit, and failure semantics remain unchanged.
+
 ### 3.2 Test Organization
 - Gradually consolidate root verification scripts into a structured test package while retaining deterministic coverage.
 

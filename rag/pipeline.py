@@ -5,9 +5,6 @@ from rag.vectorstore import VectorStore
 from rag.retriever import Retriever
 from rag.prompt_builder import PromptBuilder
 
-from training.inference import InferencePipeline
-
-
 class RAGPipeline:
 
     def __init__(
@@ -61,7 +58,11 @@ class RAGPipeline:
             embedder=self.embedder,
         )
 
-        self.inference = InferencePipeline() if self.enable_inference else None
+        if self.enable_inference:
+            from training.inference import InferencePipeline
+            self.inference = InferencePipeline()
+        else:
+            self.inference = None
 
     def retrieve(
         self,

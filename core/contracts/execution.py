@@ -40,6 +40,8 @@ class AgentContext:
 
     user_id: Optional[str] = None
 
+    security_context: Optional[Any] = None
+
     metadata: Dict[str, Any] = field(
         default_factory=dict
     )

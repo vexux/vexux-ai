@@ -68,12 +68,16 @@ class Agent:
         query: str,
         session_id: str | None = None,
         user_id: str | None = None,
+        security_context=None,
     ):
+        if user_id is None and security_context is not None:
+            user_id = security_context.actor_id
 
         context = self.context_manager.create(
             request_id=str(uuid.uuid4()),
             session_id=session_id,
             user_id=user_id,
+            security_context=security_context,
         )
 
         if self.policy is not None:
@@ -88,7 +92,11 @@ class Agent:
                     requests = self.resource_router.authorization_requests(
                         query,
                         actor=user_id,
-                        context={"request_id": context.request_id},
+                        context={
+                            "request_id": context.request_id,
+                            "session_id": context.session_id,
+                            "security_context": security_context,
+                        },
                     )
                 except (ValueError, KeyError) as exc:
                     return AgentResponse(

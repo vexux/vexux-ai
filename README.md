@@ -98,6 +98,11 @@ python -m pip install -r requirements-dev.txt
 
 Runtime dependencies include the official `mistralai` SDK, PyTorch, Transformers, PEFT, Sentence Transformers, FAISS, and FastAPI.
 
+The default generation provider is `mistral` and requires `MISTRAL_API_KEY`.
+Use `MODEL_PROVIDER=fake` for deterministic tests. Retrieval is independent
+of answer generation; local causal-model RAG generation is disabled unless
+`ENABLE_LOCAL_RAG_INFERENCE=1` is explicitly configured.
+
 The default model is `mistral-small-latest`, accessed through the Mistral API. The first RAG use may download embedding assets. The local Qwen path requires the checkpoint files under `models/checkpoints`.
 
 For reproducible setup, install both dependency files with:

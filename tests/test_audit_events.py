@@ -31,6 +31,13 @@ def test_multi_graph_audit_events_present():
     resources = [e.resource_name for e in events if e.resource_name]
     assert "customer_graph" in resources
     assert "fraud_graph" in resources
+    authorization_events = [
+        event for event in events
+        if event.event_type == "authorization_allowed"
+    ]
+    assert authorization_events
+    assert all(event.metadata.get("actor_id") == "investigator" for event in authorization_events)
+    assert all(event.request_id == "r1" for event in authorization_events)
     # request should complete
     assert any(e.event_type == "request_completed" and e.status == "completed" for e in events)
     assert res.success
