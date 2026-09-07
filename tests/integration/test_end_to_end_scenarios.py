@@ -5,7 +5,7 @@ from core.audit_logger import clear_events, get_events
 from core.config import load_config_from_env
 from core.contracts.execution import AgentContext, Task
 from core.contracts.response import AgentResponse
-from core.knowledge.multi_graph import (
+from apps.fraud.composition import (
     create_fraud_investigation_fixture,
     create_fraud_investigation_request,
 )

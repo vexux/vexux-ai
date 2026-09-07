@@ -16,7 +16,7 @@ The demo does not change production behavior; it only instantiates a custom
 policy instance for demonstration and prints observable metadata.
 """
 
-from core.knowledge.multi_graph import (
+from apps.fraud.composition import (
     create_fraud_investigation_fixture,
     create_fraud_investigation_request,
 )

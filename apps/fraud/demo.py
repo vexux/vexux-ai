@@ -1,4 +1,6 @@
-"""Synthetic reference composition for the interactive fraud demonstration."""
+"""Application-specific runtime composition for the fraud demo workload."""
+
+from __future__ import annotations
 
 from contextlib import contextmanager
 import os
@@ -7,11 +9,12 @@ import tempfile
 from pathlib import Path
 
 import core.composition as composition
-from core.knowledge.multi_graph import build_fraud_investigation_graphs
 from core.knowledge.registry import KnowledgeSourceRegistry
 from core.knowledge.sql_source import SQLKnowledgeSource
 from core.knowledge.sqlite_backend import SQLiteBackend
 from core.policy.default import DefaultPolicy, PolicyDecision
+
+from apps.fraud.composition import build_fraud_investigation_graphs
 
 
 class DemoPolicy(DefaultPolicy):

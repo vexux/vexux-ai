@@ -1,13 +1,11 @@
 from __future__ import annotations
 
-import warnings
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from typing import Any, Dict, Iterable, List, Optional
 
 from core.contracts.evidence import Evidence, EvidenceSet
 from core.knowledge.graph_registry import KnowledgeGraphRegistry
-from core.knowledge.inmemory_graph import InMemoryKnowledgeGraph
 
 
 @dataclass(frozen=True)
@@ -32,58 +30,6 @@ class MultiGraphRequest:
     def as_dict_list(self) -> List[Dict[str, Any]]:
         return [request.as_dict() for request in self.requests]
 
-
-def build_fraud_investigation_graphs() -> KnowledgeGraphRegistry:
-    """Compatibility shim for legacy imports.
-
-    Fraud-specific fixtures are defined in the application boundary under
-    apps.fraud. The core package remains generic and does not own this domain.
-    """
-    warnings.warn(
-        "build_fraud_investigation_graphs is deprecated; import from apps.fraud.composition instead.",
-        DeprecationWarning,
-        stacklevel=2,
-    )
-    from apps.fraud.composition import build_fraud_investigation_graphs as _build
-
-    return _build()
-
-
-def create_customer_fraud_graphs() -> KnowledgeGraphRegistry:
-    warnings.warn(
-        "create_customer_fraud_graphs is deprecated; import from apps.fraud.composition instead.",
-        DeprecationWarning,
-        stacklevel=2,
-    )
-    from apps.fraud.composition import build_fraud_investigation_graphs as _build
-
-    return _build()
-
-
-def create_fraud_investigation_fixture() -> KnowledgeGraphRegistry:
-    warnings.warn(
-        "create_fraud_investigation_fixture is deprecated; import from apps.fraud.composition instead.",
-        DeprecationWarning,
-        stacklevel=2,
-    )
-    from apps.fraud.composition import build_fraud_investigation_graphs as _build
-
-    return _build()
-
-
-def create_fraud_investigation_request(
-    query: str,
-    customer_id: str = "C1001",
-    device_id: str = "D500",
-) -> MultiGraphRequest:
-    warnings.warn(
-        "create_fraud_investigation_request is deprecated; import from apps.fraud.composition instead.",
-        DeprecationWarning,
-        stacklevel=2,
-    )
-    from apps.fraud.composition import create_fraud_investigation_request as _create
-
-    return _create(query=query, customer_id=customer_id, device_id=device_id)
 
 
 def execute_graph_request(graph: Any, request: Dict[str, Any] | GraphRequest) -> Dict[str, Any]:

@@ -5,11 +5,8 @@ ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from core.knowledge.multi_graph import (
-    build_fraud_investigation_graphs,
-    create_fraud_investigation_request,
-    execute_multi_graph_request,
-)
+from core.knowledge.multi_graph import execute_multi_graph_request
+from apps.fraud.composition import build_fraud_investigation_graphs, create_fraud_investigation_request
 
 
 def main() -> None:

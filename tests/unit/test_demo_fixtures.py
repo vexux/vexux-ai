@@ -1,4 +1,4 @@
-from scripts.manual.demo_fixtures import create_demo_agent
+from apps.fraud.demo import create_demo_agent
 from types import SimpleNamespace
 
 
@@ -60,7 +60,7 @@ def test_demo_provider_defaults_only_when_environment_is_absent(monkeypatch):
         observed.append(__import__("os").environ.get("MODEL_PROVIDER"))
         return fake_agent
 
-    monkeypatch.setattr("scripts.manual.demo_fixtures.composition.create_agent", fake_create_agent)
+    monkeypatch.setattr("apps.fraud.demo.composition.create_agent", fake_create_agent)
     monkeypatch.delenv("MODEL_PROVIDER", raising=False)
     with create_demo_agent():
         pass
@@ -80,7 +80,7 @@ def test_demo_provider_respects_explicit_environment(monkeypatch):
         observed.append(__import__("os").environ.get("MODEL_PROVIDER"))
         return fake_agent
 
-    monkeypatch.setattr("scripts.manual.demo_fixtures.composition.create_agent", fake_create_agent)
+    monkeypatch.setattr("apps.fraud.demo.composition.create_agent", fake_create_agent)
     monkeypatch.setenv("MODEL_PROVIDER", "qwen")
     with create_demo_agent():
         pass

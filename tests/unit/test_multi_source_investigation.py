@@ -5,8 +5,8 @@ from core.contracts.execution import AgentContext, Task
 from core.knowledge.registry import KnowledgeSourceRegistry
 from core.knowledge.sql_source import SQLKnowledgeSource
 from core.knowledge.sqlite_backend import SQLiteBackend
-from core.knowledge.multi_graph import build_fraud_investigation_graphs
-from tests.test_heterogeneous_multigraph import build_registry
+from apps.fraud.composition import build_fraud_investigation_graphs
+from tests.unit.test_heterogeneous_multigraph import build_registry
 
 
 def test_three_heterogeneous_sources_share_execution_and_evidence(tmp_path):
@@ -67,7 +67,7 @@ def test_three_heterogeneous_sources_share_execution_and_evidence(tmp_path):
 
 
 def test_multi_source_required_graph_authorization_remains_all_or_nothing():
-    from tests.test_authorization import TestPolicy
+    from tests.unit.test_authorization import TestPolicy
 
     registry = build_fraud_investigation_graphs()
     manager = ExecutionManager(

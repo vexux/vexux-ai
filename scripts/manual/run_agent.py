@@ -1,6 +1,6 @@
 """Interactive runner for the synthetic reference composition."""
 
-from scripts.manual.demo_fixtures import create_demo_agent
+from apps.fraud.demo import create_demo_agent
 
 
 def main():

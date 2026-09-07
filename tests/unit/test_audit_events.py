@@ -2,7 +2,7 @@ import pytest
 
 from core.audit_logger import clear_events, get_events
 from core.contracts.audit import AuditEvent
-from core.knowledge.multi_graph import create_fraud_investigation_fixture, create_fraud_investigation_request
+from apps.fraud.composition import create_fraud_investigation_fixture, create_fraud_investigation_request
 from core.policy.default import DefaultPolicy
 from agent.execution_manager import ExecutionManager
 from core.contracts.execution import Task, AgentContext

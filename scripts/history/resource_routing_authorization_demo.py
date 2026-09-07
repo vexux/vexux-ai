@@ -8,7 +8,7 @@ from pathlib import Path
 
 from agent.execution_manager import ExecutionManager
 from core.contracts.execution import AgentContext, Task
-from core.knowledge.multi_graph import build_fraud_investigation_graphs
+from apps.fraud.composition import build_fraud_investigation_graphs
 from core.knowledge.registry import KnowledgeSourceRegistry
 from core.knowledge.resource_router import ResourceRouter
 from core.knowledge.sql_source import SQLKnowledgeSource

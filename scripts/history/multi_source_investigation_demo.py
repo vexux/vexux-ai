@@ -10,7 +10,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from agent.execution_manager import ExecutionManager
 from core.contracts.execution import AgentContext, Task
-from core.knowledge.multi_graph import build_fraud_investigation_graphs
+from apps.fraud.composition import build_fraud_investigation_graphs
 from core.knowledge.graph_registry import KnowledgeGraphRegistry
 from core.knowledge.neo4j_graph import Neo4jKnowledgeGraph
 from core.knowledge.registry import KnowledgeSourceRegistry

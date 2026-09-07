@@ -18,7 +18,7 @@ def test_fake_composition_does_not_enable_local_rag_inference(monkeypatch):
 
 def test_security_context_actor_id_is_used_by_agent(monkeypatch):
     monkeypatch.setenv("MODEL_PROVIDER", "fake")
-    from scripts.manual.demo_fixtures import create_demo_agent
+    from apps.fraud.demo import create_demo_agent
 
     with create_demo_agent() as agent:
         result = agent.run(

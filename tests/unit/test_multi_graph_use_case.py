@@ -3,11 +3,8 @@ import pytest
 from agent.execution_manager import ExecutionManager
 from core.contracts.execution import AgentContext, Task
 from core.knowledge.decision import KnowledgeDecision
-from core.knowledge.multi_graph import (
-    build_fraud_investigation_graphs,
-    create_fraud_investigation_request,
-    execute_multi_graph_request,
-)
+from core.knowledge.multi_graph import execute_multi_graph_request
+from apps.fraud.composition import build_fraud_investigation_graphs, create_fraud_investigation_request
 
 
 def test_customer_graph_registration():
