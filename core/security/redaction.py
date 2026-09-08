@@ -6,6 +6,10 @@ _SECRET_PATTERN = re.compile(
     r"(?:password|passwd|secret|token)\s*[=:]\s*)([^\s,;]+)"
 )
 _URL_CREDENTIAL_PATTERN = re.compile(r"(?i)(://[^:/\s]+:)([^@/\s]+)(@)")
+_SENSITIVE_KEYS = re.compile(
+    r"(?i)^(?:api[_-]?key|authorization|password|passwd|secret|token|"
+    r"access[_-]?token|refresh[_-]?token)$"
+)
 
 
 def redact_sensitive_data(value):
@@ -13,7 +17,11 @@ def redact_sensitive_data(value):
         redacted = _SECRET_PATTERN.sub(r"\1[REDACTED]", value)
         return _URL_CREDENTIAL_PATTERN.sub(r"\1[REDACTED]\3", redacted)
     if isinstance(value, dict):
-        return {key: redact_sensitive_data(item) for key, item in value.items()}
+        return {
+            key: "[REDACTED]" if _SENSITIVE_KEYS.match(str(key))
+            else redact_sensitive_data(item)
+            for key, item in value.items()
+        }
     if isinstance(value, list):
         return [redact_sensitive_data(item) for item in value]
     if isinstance(value, tuple):
