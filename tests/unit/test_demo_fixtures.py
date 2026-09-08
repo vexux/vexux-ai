@@ -42,6 +42,7 @@ def test_demo_single_graph_query_executes_through_graph_resource(monkeypatch):
 
 def test_generic_agent_initialization_does_not_import_demo_fixture(monkeypatch):
     monkeypatch.setenv("MODEL_PROVIDER", "fake")
+    monkeypatch.setenv("NEO4J_URI", "")
     from core.composition import create_agent
 
     agent = create_agent()

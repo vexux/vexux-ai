@@ -6,12 +6,11 @@ credentials are configured. Normal pytest remains deterministic and offline.
 
 from __future__ import annotations
 
-import os
-
 import pytest
 
 from agent.execution_manager import ExecutionManager
 from core.contracts.execution import AgentContext, Task
+from core.config import get_config
 from core.knowledge.graph_registry import KnowledgeGraphRegistry
 from core.knowledge.mysql_backend import MySQLBackend
 from core.knowledge.neo4j_graph import Neo4jKnowledgeGraph
@@ -19,25 +18,27 @@ from core.knowledge.registry import KnowledgeSourceRegistry
 from core.knowledge.sql_source import SQLKnowledgeSource
 
 
-REQUIRED = (
-    "NEO4J_URI",
-    "NEO4J_USERNAME",
-    "NEO4J_PASSWORD",
-    "MYSQL_PASSWORD",
-)
+CONFIG = get_config()
 
 pytestmark = pytest.mark.skipif(
-    not all(os.getenv(name) for name in REQUIRED),
+    not all(
+        (
+            CONFIG.neo4j_uri,
+            CONFIG.neo4j_username,
+            CONFIG.neo4j_password,
+            CONFIG.mysql_password,
+        )
+    ),
     reason="Local Neo4j/MySQL credentials are not configured.",
 )
 
 
 def _graph(name: str):
     return Neo4jKnowledgeGraph(
-        uri=os.environ["NEO4J_URI"],
-        username=os.environ["NEO4J_USERNAME"],
-        password=os.environ["NEO4J_PASSWORD"],
-        database=os.getenv("NEO4J_DATABASE"),
+        uri=CONFIG.neo4j_uri,
+        username=CONFIG.neo4j_username,
+        password=CONFIG.neo4j_password,
+        database=CONFIG.neo4j_database,
         name=name,
     )
 
@@ -53,11 +54,11 @@ def test_neo4j_seeded_lookup_and_multi_hop_traversal():
 
 def test_mysql_seeded_customer_transactions_alerts_and_schema():
     backend = MySQLBackend(
-        host=os.getenv("MYSQL_HOST", "127.0.0.1"),
-        port=int(os.getenv("MYSQL_PORT", "3306")),
-        user=os.getenv("MYSQL_USER", "vexux_app"),
-        password=os.environ["MYSQL_PASSWORD"],
-        database=os.getenv("MYSQL_DATABASE", "vexux_fraud"),
+        host=CONFIG.mysql_host,
+        port=CONFIG.mysql_port,
+        user=CONFIG.mysql_user,
+        password=CONFIG.mysql_password,
+        database=CONFIG.mysql_database,
     )
     tables = backend.schema_metadata()["tables"]
     assert {"customers", "accounts", "transactions", "fraud_alerts", "investigations"} <= set(tables)
@@ -79,11 +80,11 @@ def test_vexux_registry_adapter_execution_produces_real_source_evidence():
     sources = KnowledgeSourceRegistry()
     source = SQLKnowledgeSource(
         MySQLBackend(
-            host=os.getenv("MYSQL_HOST", "127.0.0.1"),
-            port=int(os.getenv("MYSQL_PORT", "3306")),
-            user=os.getenv("MYSQL_USER", "vexux_app"),
-            password=os.environ["MYSQL_PASSWORD"],
-            database=os.getenv("MYSQL_DATABASE", "vexux_fraud"),
+            host=CONFIG.mysql_host,
+            port=CONFIG.mysql_port,
+            user=CONFIG.mysql_user,
+            password=CONFIG.mysql_password,
+            database=CONFIG.mysql_database,
         ),
         aliases=("business database",),
     )

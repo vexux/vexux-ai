@@ -116,6 +116,11 @@ CI uses `MODEL_PROVIDER=fake` for deterministic tests without external
 credentials. The live Mistral test is isolated from the normal CI job and only
 runs when explicitly enabled with a configured API key.
 
+For local development, copy `.env.example` to `.env` and fill in local
+credentials. The centralized configuration loader reads the repository `.env`
+without overwriting explicitly supplied process environment variables. `.env`
+is ignored by Git; `.env.example` is tracked as a template.
+
 ## Knowledge graph backends
 
 Vexux supports pluggable graph backends through the common

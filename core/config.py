@@ -6,7 +6,24 @@ avoids including secrets in repr/serialization.
 """
 from dataclasses import dataclass, field
 import os
+from pathlib import Path
 from typing import Optional
+
+from dotenv import dotenv_values
+
+
+_ENV_FILE = Path(__file__).resolve().parents[1] / ".env"
+
+
+def _local_env_values() -> dict[str, str]:
+    """Read local development values without overriding process variables."""
+    if not _ENV_FILE.is_file():
+        return {}
+    return {
+        key: value
+        for key, value in dotenv_values(_ENV_FILE).items()
+        if key and value is not None
+    }
 
 
 def _parse_bool(value: Optional[str]) -> bool:
@@ -37,6 +54,7 @@ def _parse_int(value: Optional[str], default: int, min_value: int = 1, max_value
 @dataclass
 class Config:
     model_provider: str = "mistral"
+    mistral_api_key: Optional[str] = None
     autonomous_delegation_enabled: bool = False
     max_autonomous_delegations: int = 4
     max_parallel_tasks: int = 1
@@ -59,6 +77,7 @@ class Config:
     def __repr__(self) -> str:  # pragma: no cover - trivial
         return (
             f"Config(model_provider={self.model_provider!r}, "
+            f"mistral_api_key={'<set>' if self.mistral_api_key else None}, "
             f"autonomous_delegation_enabled={self.autonomous_delegation_enabled!r}, "
             f"max_autonomous_delegations={self.max_autonomous_delegations!r}, "
             f"max_parallel_tasks={self.max_parallel_tasks!r}, "
@@ -72,10 +91,17 @@ def load_config_from_env(prefix: str = "") -> Config:
 
     prefix may be used by callers to namespace variables (unused by default).
     """
+    local_values = _local_env_values()
+
     def e(name: str) -> Optional[str]:
-        return os.getenv(prefix + name)
+        key = prefix + name
+        process_value = os.getenv(key)
+        if process_value is not None:
+            return process_value
+        return local_values.get(key)
 
     model_provider = e("MODEL_PROVIDER") or "mistral"
+    mistral_api_key = e("MISTRAL_API_KEY") or None
 
     autonomous_delegation_enabled = _parse_bool(e("ENABLE_AUTONOMOUS_DELEGATION"))
 
@@ -101,6 +127,7 @@ def load_config_from_env(prefix: str = "") -> Config:
 
     return Config(
         model_provider=model_provider.lower(),
+        mistral_api_key=mistral_api_key,
         autonomous_delegation_enabled=autonomous_delegation_enabled,
         max_autonomous_delegations=max_autonomous_delegations,
         max_parallel_tasks=max_parallel_tasks,
@@ -129,6 +156,7 @@ _cached_env_snapshot: Optional[tuple] = None
 def _env_snapshot(prefix: str = "") -> tuple:
     keys = [
         "MODEL_PROVIDER",
+        "MISTRAL_API_KEY",
         "ENABLE_AUTONOMOUS_DELEGATION",
         "MAX_AUTONOMOUS_DELEGATIONS",
         "AGENT_MAX_PARALLEL_TASKS",
@@ -147,7 +175,13 @@ def _env_snapshot(prefix: str = "") -> tuple:
         "MYSQL_DATABASE",
         "ENABLE_LOCAL_RAG_INFERENCE",
     ]
-    return tuple(os.getenv(prefix + k) for k in keys)
+    local_values = _local_env_values()
+    return tuple(
+        os.getenv(prefix + key)
+        if os.getenv(prefix + key) is not None
+        else local_values.get(prefix + key)
+        for key in keys
+    )
 
 
 def get_config() -> Config:

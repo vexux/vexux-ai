@@ -55,7 +55,8 @@ def create_agent():
             model_name=os.getenv(
                 "MISTRAL_MODEL",
                 "mistral-small-latest",
-            )
+            ),
+            api_key=config.mistral_api_key,
         )
 
     elif provider_name == "qwen":
