@@ -11,6 +11,7 @@ from core.knowledge.registry import KnowledgeSourceRegistry
 from core.knowledge.sql_source import SQLKnowledgeSource
 
 from apps.fraud.policy import FraudPolicy
+from apps.fraud.investigation import FraudInvestigationService
 
 
 def _required(value: str | None, name: str) -> str:
@@ -83,4 +84,14 @@ def create_real_agent():
     return agent
 
 
-__all__ = ["create_real_agent"]
+def create_real_investigation_service() -> FraudInvestigationService:
+    """Compose the deterministic investigation service with real resources."""
+    agent = create_real_agent()
+    return FraudInvestigationService(
+        graph_registry=agent.knowledge_graph_registry,
+        source_registry=agent.execution_manager.knowledge_source_registry,
+        policy=agent.policy,
+    )
+
+
+__all__ = ["create_real_agent", "create_real_investigation_service"]
