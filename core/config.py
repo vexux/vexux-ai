@@ -48,6 +48,11 @@ class Config:
     neo4j_database: Optional[str] = None
     neo4j_graph_name: str = "neo4j"
     sql_database_path: Optional[str] = None
+    mysql_host: str = "127.0.0.1"
+    mysql_port: int = 3306
+    mysql_user: str = "vexux_app"
+    mysql_password: Optional[str] = None
+    mysql_database: str = "vexux_fraud"
     local_rag_inference_enabled: bool = False
 
     # Hide potential secrets from default repr by overriding
@@ -87,6 +92,11 @@ def load_config_from_env(prefix: str = "") -> Config:
     neo4j_database = e("NEO4J_DATABASE") or None
     neo4j_graph_name = e("NEO4J_GRAPH_NAME") or "neo4j"
     sql_database_path = e("SQL_DATABASE_PATH") or None
+    mysql_host = e("MYSQL_HOST") or "127.0.0.1"
+    mysql_port = _parse_int(e("MYSQL_PORT"), default=3306, min_value=1, max_value=65535)
+    mysql_user = e("MYSQL_USER") or "vexux_app"
+    mysql_password = e("MYSQL_PASSWORD") or None
+    mysql_database = e("MYSQL_DATABASE") or "vexux_fraud"
     local_rag_inference_enabled = _parse_bool(e("ENABLE_LOCAL_RAG_INFERENCE"))
 
     return Config(
@@ -102,6 +112,11 @@ def load_config_from_env(prefix: str = "") -> Config:
         neo4j_database=neo4j_database,
         neo4j_graph_name=neo4j_graph_name,
         sql_database_path=sql_database_path,
+        mysql_host=mysql_host,
+        mysql_port=mysql_port,
+        mysql_user=mysql_user,
+        mysql_password=mysql_password,
+        mysql_database=mysql_database,
         local_rag_inference_enabled=local_rag_inference_enabled,
     )
 
@@ -125,6 +140,11 @@ def _env_snapshot(prefix: str = "") -> tuple:
         "NEO4J_DATABASE",
         "NEO4J_GRAPH_NAME",
         "SQL_DATABASE_PATH",
+        "MYSQL_HOST",
+        "MYSQL_PORT",
+        "MYSQL_USER",
+        "MYSQL_PASSWORD",
+        "MYSQL_DATABASE",
         "ENABLE_LOCAL_RAG_INFERENCE",
     ]
     return tuple(os.getenv(prefix + k) for k in keys)

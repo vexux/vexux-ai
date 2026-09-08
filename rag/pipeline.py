@@ -5,6 +5,7 @@ from rag.vectorstore import VectorStore
 from rag.retriever import Retriever
 from rag.prompt_builder import PromptBuilder
 
+
 class RAGPipeline:
 
     def __init__(
@@ -24,11 +25,33 @@ class RAGPipeline:
 
         self.chunker = TextChunker()
 
-        self.embedder = Embedder()
+        self.embedder = None
+        self.store = None
+        self.retriever = None
+        self.inference = None
+        self._initialized = False
 
-        self.initialize()
+    def _ensure_initialized(self):
+        if getattr(self, "_initialized", False):
+            return
+        if getattr(self, "retriever", None) is not None:
+            self._initialized = True
+            return
+
+        try:
+            self.embedder = Embedder()
+            self.initialize()
+        except Exception as exc:
+            self.embedder = None
+            self.store = None
+            self.retriever = None
+            raise RuntimeError(f"RAG retrieval initialization failed: {exc}") from exc
+
+        self._initialized = True
 
     def initialize(self):
+        if self.embedder is None:
+            self.embedder = Embedder()
 
         documents = self.loader.load()
 
@@ -58,12 +81,6 @@ class RAGPipeline:
             embedder=self.embedder,
         )
 
-        if self.enable_inference:
-            from training.inference import InferencePipeline
-            self.inference = InferencePipeline()
-        else:
-            self.inference = None
-
     def retrieve(
         self,
         query,
@@ -76,6 +93,7 @@ class RAGPipeline:
         if not isinstance(k, int) or isinstance(k, bool) or k <= 0:
             raise ValueError("Retrieval top_k must be a positive integer.")
 
+        self._ensure_initialized()
         results = self.retriever.retrieve(
             query,
             k=k,
@@ -91,6 +109,15 @@ class RAGPipeline:
         ]
 
     def ask(self, question):
+        self._ensure_initialized()
+        if self.inference is None and self.enable_inference:
+            try:
+                from training.inference import InferencePipeline
+                self.inference = InferencePipeline()
+            except Exception as exc:
+                raise RuntimeError(
+                    f"RAG local inference initialization failed: {exc}"
+                ) from exc
         if self.inference is None:
             raise RuntimeError("RAG generation is disabled for this pipeline.")
 

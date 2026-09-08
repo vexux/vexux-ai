@@ -92,6 +92,14 @@ Key points:
 
 ## 3. In-Progress Capabilities
 
+### 3.0 Phase 2 - Real local fraud data platform (Completed)
+- Added deterministic Neo4j schema/seed resources under `apps/fraud/data/neo4j/`.
+- Added deterministic MySQL schema/seed resources under `apps/fraud/data/mysql/`.
+- Added the generic read-only `MySQLBackend` behind `SQLKnowledgeSource`; the existing SQLite backend remains available.
+- Added `apps/fraud/real.py`, which composes real `customer_graph`, `fraud_graph`, and `business_db` resources without fake fallback.
+- Added live local integration tests that skip unless Neo4j/MySQL credentials are configured.
+- Updated the interactive runner and local setup documentation for real provider/resource modes.
+
 ### 3.1 RAG and Model Gateway Decoupling
 - Route all answer generation through the central `ModelGateway`.
 - Keep retrieval and answer generation as distinct capability responsibilities.

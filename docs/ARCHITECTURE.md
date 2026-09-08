@@ -29,6 +29,26 @@ resources, identities, and policy into this platform boundary; those concepts
 are not required by the core agent. Domain-specific fraud fixtures and policies
 live under `apps/fraud/`, while the generic runtime remains in `core/`.
 
+The real local fraud composition in `apps/fraud/real.py` registers
+`customer_graph` and `fraud_graph` through `KnowledgeGraphRegistry`, and
+`business_db` through `KnowledgeSourceRegistry`. The fraud app owns resource
+names, aliases, policy, schemas, seed data, and environment configuration;
+core owns contracts, routing, authorization enforcement, execution, evidence,
+and audit.
+
+Neo4j owns relationship-oriented entities and traversal. MySQL owns
+operational records such as transactions, alerts, investigations, and event
+metadata. SQLite and in-memory graphs remain available for deterministic tests
+and lightweight demos only.
+
+```text
+SQLKnowledgeSource -> backend contract -> MySQLBackend
+                   -> mysql-connector-python -> MySQL
+
+Agent -> ResourceRouter -> authorization -> ExecutionManager
+      -> registries -> adapters -> database -> evidence/audit
+```
+
 ## 2. The Three Conceptual Layers
 
 ```text

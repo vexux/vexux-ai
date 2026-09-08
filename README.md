@@ -91,8 +91,8 @@ RAG documents are read from `data/documents/`. The Qwen fallback uses the local 
 The project is developed with Python 3.11. From the repository root:
 
 ```powershell
-python -m venv venv
-.\venv\Scripts\Activate.ps1
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
 python -m pip install -r requirements.txt
 python -m pip install -r requirements-dev.txt
 ```
@@ -132,8 +132,9 @@ $env:NEO4J_GRAPH_NAME = "customer_graph"
 ```
 
 Each graph database backend requires its own adapter implementing the contract;
-the core does not expose arbitrary Cypher execution. A mixed registry can use
-`customer_graph` with Neo4j and `fraud_graph` with the in-memory backend.
+the core does not expose arbitrary Cypher execution. The real fraud
+composition registers both `customer_graph` and `fraud_graph` against local
+Neo4j. Its reproducible schema and seed are in `apps/fraud/data/neo4j/`.
 `python -m scripts.manual.neo4j_graph_demo` demonstrates registration and
 reports when Neo4j is not configured.
 
@@ -153,10 +154,10 @@ the real-backend portion is unavailable rather than claiming a successful run.
 ## SQL knowledge source
 
 `SQLKnowledgeSource` provides a contract-level adapter to relational data.
-The included `SQLiteBackend` proves the real read-only path without an
-external server. Configure an existing database with `SQL_DATABASE_PATH` to
-register it as a `business_db` source in the composition root. Only a single
-`SELECT` statement is accepted; values can be supplied as DB-API parameters.
+`SQLiteBackend` remains the lightweight test backend, while `MySQLBackend`
+uses `mysql-connector-python` for the real fraud application. Only a single
+`SELECT` statement is accepted and values are passed as DB-API parameters.
+The fraud schema and deterministic seed are in `apps/fraud/data/mysql/`.
 Authorization, audit events, and `structured_data` evidence use the existing
 knowledge-source flow.
 
@@ -179,6 +180,39 @@ interactive actor demonstration with
 `/run`, `/actor support_user`, and `/run`. Routing does not grant access:
 `support_user` is denied `fraud_graph`; queries without explicit resources keep
 the normal planner behavior and unknown explicit resources fail.
+
+## Real local fraud platform
+
+The real application requires local Neo4j and MySQL; it never falls back to
+the synthetic demo. Set these variables without committing credentials:
+
+```powershell
+$env:MODEL_PROVIDER = "mistral"
+$env:NEO4J_URI = "bolt://localhost:7687"
+$env:NEO4J_USERNAME = "neo4j"
+$env:NEO4J_PASSWORD = "<local Neo4j password>"
+$env:NEO4J_DATABASE = "neo4j"
+$env:MYSQL_HOST = "127.0.0.1"
+$env:MYSQL_PORT = "3306"
+$env:MYSQL_USER = "vexux_app"
+$env:MYSQL_PASSWORD = "<local MySQL password>"
+$env:MYSQL_DATABASE = "vexux_fraud"
+```
+
+Run `apps/fraud/data/mysql/schema.sql`, then `seed.sql`, against
+`vexux_fraud`. Run the Neo4j `schema.cypher`, then `seed.cypher`, in Neo4j
+Browser. Start the real interactive application with:
+
+```powershell
+python -m scripts.manual.run_agent
+```
+
+Live local integration tests are in `tests/live/test_fraud_databases.py` and
+run only when the required local credentials are configured:
+
+```powershell
+python -m pytest tests/live/test_fraud_databases.py -q
+```
 
 ## Model Provider Configuration
 
@@ -204,10 +238,11 @@ Qwen remains available through its existing local adapter path. The Mistral prov
 ## Running the Agent
 
 ```powershell
-python scripts/manual/run_agent.py
+python -m scripts.manual.run_agent
 ```
 
-This constructs the composition-root Agent and runs its sample request. It requires a configured Mistral key by default, or the Qwen environment configuration above.
+This starts the fraud application's real Neo4j/MySQL composition. It requires
+the local database variables above and a configured Mistral key by default.
 
 For the direct RAG demonstration:
 
