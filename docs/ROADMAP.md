@@ -17,6 +17,10 @@ FastAPI and observability
 Evaluation suite
 ```
 
+Phase 4 fraud investigation workflow is completed for the bounded,
+application-specific path. Generic multi-agent expansion and broader
+governance remain outside this phase.
+
 ## 2. Completed Capabilities
 
 ### 2.1 Core Agent Architecture
@@ -79,6 +83,14 @@ Evaluation suite
 - Added an interactive synthetic authorization demo for `investigator` and
   `support_user`; routing remains separate from authorization and does not add
   an LLM call, scheduler, or registry.
+
+### 2.12 Phase 4 - Agentic multi-step fraud investigation (Completed)
+- Added a structured fraud investigation plan with dependency validation,
+  bounded retries, bounded replanning, step status, and evidence.
+- Executes graph and SQL steps through the existing router, policy,
+  `ExecutionManager`, registries, and adapters.
+- Adds related-entity retrieval only after a suspicious relationship is observed.
+- Keeps factual signals in the deterministic Phase 3 investigation service.
 
 ### 2.6 Phase 24 — Resource-aware Authorization (Completed)
 A lightweight, resource-level authorization boundary was added to control access to sensitive resources while preserving the existing policy and security boundaries.

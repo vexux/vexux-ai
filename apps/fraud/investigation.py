@@ -32,53 +32,23 @@ class FraudInvestigationService:
     def _add_graph_evidence(evidence: EvidenceSet, source: str, value: Any, kind: str) -> None:
         evidence.add(Evidence(source, str(value), kind))
 
-    def investigate(self, customer_id: str, actor: str = "investigator") -> InvestigationResult:
-        if not isinstance(customer_id, str) or not customer_id.strip():
-            raise ValueError("customer_id must be a non-empty string.")
-        customer_id = customer_id.strip()
-        evidence = EvidenceSet()
-        consulted: list[str] = []
-
-        self._authorize(actor, "knowledge_graph", "customer_graph")
-        customer_graph = self.graph_registry.get("customer_graph")
-        customer_node = customer_graph.get_node(customer_id)
-        consulted.append("customer_graph")
-        self._add_graph_evidence(evidence, "customer_graph", customer_node, "graph_node")
+    def build_result(
+        self,
+        customer_node: dict[str, Any],
+        fraud_neighbors: list[dict[str, Any]],
+        transaction_rows: list[dict[str, Any]],
+        alert_rows: list[dict[str, Any]],
+        investigation_rows: list[dict[str, Any]],
+        evidence: EvidenceSet | None = None,
+        resources_consulted: list[str] | None = None,
+    ) -> InvestigationResult:
+        """Correlate already-authorized observations without performing I/O."""
         properties = customer_node.get("properties", {})
+        customer_id = customer_node.get("id")
+        if not isinstance(customer_id, str) or not customer_id.strip():
+            raise ValueError("customer_node must contain a non-empty id.")
         subject = Customer(customer_id, properties.get("name"), properties.get("risk"))
-
-        customer_neighbors = customer_graph.get_neighbors(customer_id, direction="both")
-        for item in customer_neighbors:
-            self._add_graph_evidence(evidence, "customer_graph", item, "graph_relationship")
-
-        self._authorize(actor, "knowledge_graph", "fraud_graph")
-        fraud_graph = self.graph_registry.get("fraud_graph")
-        fraud_neighbors = fraud_graph.get_neighbors(customer_id, direction="both")
-        consulted.append("fraud_graph")
-        for item in fraud_neighbors:
-            self._add_graph_evidence(evidence, "fraud_graph", item, "graph_relationship")
-
-        self._authorize(actor, "knowledge_source", "business_db")
-        business_db = self.source_registry.get("business_db")
-        transaction_rows = business_db.retrieve(
-            "SELECT transaction_id, account_id, customer_id, merchant_id, amount, currency, occurred_at, status "
-            "FROM transactions WHERE customer_id = %s ORDER BY occurred_at",
-            parameters=(customer_id,),
-        )
-        alert_rows = business_db.retrieve(
-            "SELECT alert_id, customer_id, transaction_id, alert_type, severity, status "
-            "FROM fraud_alerts WHERE customer_id = %s ORDER BY created_at",
-            parameters=(customer_id,),
-        )
-        investigation_rows = business_db.retrieve(
-            "SELECT investigation_id, customer_id, fraud_case_id, status "
-            "FROM investigations WHERE customer_id = %s ORDER BY opened_at",
-            parameters=(customer_id,),
-        )
-        consulted.append("business_db")
-        for row in transaction_rows + alert_rows + investigation_rows:
-            self._add_graph_evidence(evidence, "business_db", row, "structured_data")
-
+        evidence = evidence or EvidenceSet()
         transactions = [
             Transaction(
                 transaction_id=row["transaction_id"],
@@ -119,7 +89,8 @@ class FraudInvestigationService:
             signals.append("elevated_transaction_activity")
             findings.append("Transaction activity exceeds the deterministic investigation threshold.")
         shared_device = any(
-            item["relationship"].get("type") == "SHARES_DEVICE_WITH"
+            str(item.get("relationship", {}).get("type", "")).upper()
+            in {"SHARES_DEVICE_WITH", "SHARED_DEVICE", "LINKED_TO"}
             for item in fraud_neighbors
             if item.get("relationship")
         )
@@ -129,7 +100,6 @@ class FraudInvestigationService:
         if investigations:
             signals.append("active_investigation")
             findings.append("An investigation record is associated with the customer.")
-
         risk = "high" if len(signals) >= 2 or high_alerts else "medium" if signals else "low"
         return InvestigationResult(
             subject=subject,
@@ -137,6 +107,64 @@ class FraudInvestigationService:
             risk_assessment=risk,
             supporting_evidence=evidence,
             contributing_signals=signals,
-            resources_consulted=list(dict.fromkeys(consulted)),
-            metadata={"transaction_count": len(transactions), "alert_count": len(alerts), "investigation_count": len(investigations)},
+            resources_consulted=list(dict.fromkeys(resources_consulted or [])),
+            metadata={
+                "transaction_count": len(transactions),
+                "alert_count": len(alerts),
+                "investigation_count": len(investigations),
+            },
+        )
+
+    def investigate(self, customer_id: str, actor: str = "investigator") -> InvestigationResult:
+        if not isinstance(customer_id, str) or not customer_id.strip():
+            raise ValueError("customer_id must be a non-empty string.")
+        customer_id = customer_id.strip()
+        evidence = EvidenceSet()
+        consulted: list[str] = []
+
+        self._authorize(actor, "knowledge_graph", "customer_graph")
+        customer_graph = self.graph_registry.get("customer_graph")
+        customer_node = customer_graph.get_node(customer_id)
+        consulted.append("customer_graph")
+        self._add_graph_evidence(evidence, "customer_graph", customer_node, "graph_node")
+        customer_neighbors = customer_graph.get_neighbors(customer_id, direction="both")
+        for item in customer_neighbors:
+            self._add_graph_evidence(evidence, "customer_graph", item, "graph_relationship")
+
+        self._authorize(actor, "knowledge_graph", "fraud_graph")
+        fraud_graph = self.graph_registry.get("fraud_graph")
+        fraud_neighbors = fraud_graph.get_neighbors(customer_id, direction="both")
+        consulted.append("fraud_graph")
+        for item in fraud_neighbors:
+            self._add_graph_evidence(evidence, "fraud_graph", item, "graph_relationship")
+
+        self._authorize(actor, "knowledge_source", "business_db")
+        business_db = self.source_registry.get("business_db")
+        transaction_rows = business_db.retrieve(
+            "SELECT transaction_id, account_id, customer_id, merchant_id, amount, currency, occurred_at, status "
+            "FROM transactions WHERE customer_id = %s ORDER BY occurred_at",
+            parameters=(customer_id,),
+        )
+        alert_rows = business_db.retrieve(
+            "SELECT alert_id, customer_id, transaction_id, alert_type, severity, status "
+            "FROM fraud_alerts WHERE customer_id = %s ORDER BY created_at",
+            parameters=(customer_id,),
+        )
+        investigation_rows = business_db.retrieve(
+            "SELECT investigation_id, customer_id, fraud_case_id, status "
+            "FROM investigations WHERE customer_id = %s ORDER BY opened_at",
+            parameters=(customer_id,),
+        )
+        consulted.append("business_db")
+        for row in transaction_rows + alert_rows + investigation_rows:
+            self._add_graph_evidence(evidence, "business_db", row, "structured_data")
+
+        return self.build_result(
+            customer_node,
+            fraud_neighbors,
+            transaction_rows,
+            alert_rows,
+            investigation_rows,
+            evidence=evidence,
+            resources_consulted=consulted,
         )

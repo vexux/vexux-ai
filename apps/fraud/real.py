@@ -94,4 +94,24 @@ def create_real_investigation_service() -> FraudInvestigationService:
     )
 
 
-__all__ = ["create_real_agent", "create_real_investigation_service"]
+def create_real_investigation_workflow():
+    """Compose the bounded workflow with the real registered resources."""
+    from apps.fraud.workflow import FraudInvestigationWorkflow
+
+    agent = create_real_agent()
+    return FraudInvestigationWorkflow(
+        investigation_service=FraudInvestigationService(
+            graph_registry=agent.knowledge_graph_registry,
+            source_registry=agent.execution_manager.knowledge_source_registry,
+            policy=agent.policy,
+        ),
+        execution_manager=agent.execution_manager,
+        resource_router=agent.resource_router,
+    )
+
+
+__all__ = [
+    "create_real_agent",
+    "create_real_investigation_service",
+    "create_real_investigation_workflow",
+]

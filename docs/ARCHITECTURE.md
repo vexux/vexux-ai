@@ -49,6 +49,18 @@ Agent -> ResourceRouter -> authorization -> ExecutionManager
       -> registries -> adapters -> database -> evidence/audit
 ```
 
+The fraud application adds a bounded workflow on top of this same path:
+
+```text
+FraudInvestigationPlanner -> InvestigationPlan/Steps -> ExecutionManager
+        -> ResourceRouter -> authorization -> registries/adapters
+        -> Observer -> deterministic FraudInvestigationService -> InvestigationResult
+```
+
+The workflow owns conditional fraud-specific continuation and bounded
+replanning under `apps/fraud/`; it does not alter the generic Agent scheduler or
+move factual correlation into a model.
+
 ## 2. The Three Conceptual Layers
 
 ```text

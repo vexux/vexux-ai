@@ -49,6 +49,19 @@ source through the existing execution manager. Each source is authorized
 before its protected read, and evidence retains `customer_graph`,
 `fraud_graph`, or `business_db` provenance.
 
+## Fraud investigation workflow contracts
+
+`apps/fraud/workflow.py` defines the application-level
+`InvestigationPlan` and `InvestigationStep` contracts. Steps carry dependencies,
+resource names, structured inputs, bounded retries, status, and an
+`EvidenceSet`. Plans validate duplicate IDs, unknown dependencies, cycles, and
+maximum step counts before execution. `FraudInvestigationPlanner` creates the
+deterministic initial plan; `FraudInvestigationWorkflow` executes each step
+through the existing `ExecutionManager`, resource registries, and policy.
+Suspicious relationships may add one bounded continuation step, while the
+Phase 3 `FraudInvestigationService` remains the source of deterministic
+correlation facts.
+
 ---
 
 ## 1. Execution Contracts (`core/contracts/execution.py`)

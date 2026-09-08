@@ -8,7 +8,11 @@ from apps.fraud.composition import (
 )
 from apps.fraud.demo import DemoPolicy, create_demo_agent
 from apps.fraud.policy import FraudPolicy
-from apps.fraud.real import create_real_agent, create_real_investigation_service
+from apps.fraud.real import (
+    create_real_agent,
+    create_real_investigation_service,
+    create_real_investigation_workflow,
+)
 from apps.fraud.domain import (
     Account,
     Address,
@@ -23,12 +27,20 @@ from apps.fraud.domain import (
     Transaction,
 )
 from apps.fraud.investigation import FraudInvestigationService
+from apps.fraud.workflow import (
+    FraudInvestigationPlanner,
+    FraudInvestigationWorkflow,
+    InvestigationPlan,
+    InvestigationStep,
+    StepStatus,
+)
 
 __all__ = [
     "DemoPolicy",
     "FraudPolicy",
     "create_real_agent",
     "create_real_investigation_service",
+    "create_real_investigation_workflow",
     "Account",
     "Address",
     "Customer",
@@ -41,6 +53,11 @@ __all__ = [
     "Merchant",
     "Transaction",
     "FraudInvestigationService",
+    "FraudInvestigationWorkflow",
+    "FraudInvestigationPlanner",
+    "InvestigationPlan",
+    "InvestigationStep",
+    "StepStatus",
     "build_fraud_investigation_graphs",
     "create_customer_fraud_graphs",
     "create_demo_agent",
