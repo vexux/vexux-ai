@@ -12,6 +12,7 @@ from agent.decision import DecisionMaker, DecisionType
 from core.contracts.execution import Plan, Task
 from core.contracts.response import AgentResponse
 from core.context.context_manager import ContextManager
+from core.contracts.identity import SecurityContext
 from agent.response_synthesizer import ResponseSynthesizer
 
 class Agent:
@@ -70,6 +71,23 @@ class Agent:
         user_id: str | None = None,
         security_context=None,
     ):
+        if security_context is not None and not isinstance(security_context, SecurityContext):
+            return AgentResponse(
+                success=False,
+                error="Invalid security context.",
+                trace=[],
+            )
+        if (
+            security_context is not None
+            and security_context.actor_id is not None
+            and user_id is not None
+            and user_id != security_context.actor_id
+        ):
+            return AgentResponse(
+                success=False,
+                error="Actor identity conflicts with security context.",
+                trace=[],
+            )
         if user_id is None and security_context is not None:
             user_id = security_context.actor_id
 

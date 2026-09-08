@@ -62,6 +62,16 @@ Suspicious relationships may add one bounded continuation step, while the
 Phase 3 `FraudInvestigationService` remains the source of deterministic
 correlation facts.
 
+## Security and authorization
+
+`SecurityContext` is a frozen identity contract whose claims and attributes
+are copied into read-only mappings. `Agent.run()` rejects a conflicting legacy
+actor when a trusted context supplies an actor ID. `AuthorizationRequest`
+validates actor, resource, and action shape. The default policy rejects unknown
+resource types/actions, while application policies add domain-specific rules.
+Audit storage redacts sensitive metadata and credential-bearing strings before
+retaining events.
+
 ---
 
 ## 1. Execution Contracts (`core/contracts/execution.py`)

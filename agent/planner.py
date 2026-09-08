@@ -18,6 +18,7 @@ class Planner:
         model_gateway,
         tool_registry: ToolRegistry,
         knowledge_source_registry=None,
+        knowledge_graph_registry=None,
         workflow_registry=None,
     ):
 
@@ -25,6 +26,7 @@ class Planner:
         self.tool_registry = tool_registry
 
         self.knowledge_source_registry = knowledge_source_registry
+        self.knowledge_graph_registry = knowledge_graph_registry
         self.workflow_registry = workflow_registry
 
     def _tool_descriptions(self) -> str:
@@ -342,15 +344,23 @@ Field rules:
                     f"Task {index} requires a valid knowledge source name."
                 )
 
-            if self.knowledge_source_registry is None:
-                raise ValueError("Knowledge source selection is unavailable.")
-
-            try:
-                self.knowledge_source_registry.get(source_name)
-            except KeyError as exc:
+            found = False
+            if self.knowledge_source_registry is not None:
+                try:
+                    self.knowledge_source_registry.get(source_name)
+                    found = True
+                except KeyError:
+                    pass
+            if self.knowledge_graph_registry is not None:
+                try:
+                    self.knowledge_graph_registry.get(source_name)
+                    found = True
+                except KeyError:
+                    pass
+            if not found:
                 raise ValueError(
-                    f"Task {index} references unknown knowledge source: {source_name}"
-                ) from exc
+                    f"Task {index} references unknown knowledge resource: {source_name}"
+                )
 
         if capability == "workflow":
             workflow_name = task_input.get("workflow")

@@ -36,6 +36,12 @@ names, aliases, policy, schemas, seed data, and environment configuration;
 core owns contracts, routing, authorization enforcement, execution, evidence,
 and audit.
 
+Security contexts are immutable identity inputs at the execution boundary.
+Authorization decisions are made by policy before adapter calls, and audit
+events are centrally redacted before storage. Fraud-specific restrictions
+remain in `apps/fraud/`; the generic policy only rejects malformed or unknown
+resource/action requests.
+
 Neo4j owns relationship-oriented entities and traversal. MySQL owns
 operational records such as transactions, alerts, investigations, and event
 metadata. SQLite and in-memory graphs remain available for deterministic tests

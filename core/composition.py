@@ -202,6 +202,7 @@ def create_agent():
                     name=config.neo4j_graph_name,
                 )
             )
+    planner.knowledge_graph_registry = knowledge_graph_registry
 
     # Create the ExecutionManager after optional components have been configured
     execution_manager = ExecutionManager(

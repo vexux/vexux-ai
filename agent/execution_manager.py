@@ -297,6 +297,28 @@ class ExecutionManager:
                         decision = self.policy.authorize_resource(context.user_id if context is not None else None, "knowledge_graph", graph.name if hasattr(graph, "name") else kr.source, "read", {"task_id": task.id})
                     except Exception as exc:
                         return ExecutionResult(success=False, error=f"Authorization error: {exc}")
+                    try:
+                        from core.audit_logger import emit as emit_audit
+                        from core.contracts.audit import make_event
+                        emit_audit(make_event(
+                            event_type=(
+                                "authorization_allowed"
+                                if decision.allowed
+                                else "authorization_denied"
+                            ),
+                            request_id=context.request_id if context is not None else task.id,
+                            task_id=task.id,
+                            resource_type="knowledge_graph",
+                            resource_name=graph.name if hasattr(graph, "name") else kr.source,
+                            action="read",
+                            status="allowed" if decision.allowed else "denied",
+                            metadata={
+                                "policy": decision.policy_name,
+                                "reason": decision.reason,
+                            },
+                        ))
+                    except Exception:
+                        pass
                     if not decision.allowed:
                         return ExecutionResult(success=False, error=f"Unauthorized access to knowledge graph: {graph.name}", metadata={"policy": decision.policy_name, "reason": decision.reason})
 

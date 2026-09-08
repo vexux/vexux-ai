@@ -92,6 +92,15 @@ governance remain outside this phase.
 - Adds related-entity retrieval only after a suspicious relationship is observed.
 - Keeps factual signals in the deterministic Phase 3 investigation service.
 
+### 2.13 Phase 5 - Security and governance hardening (Completed)
+- Security contexts validate identity fields and expose immutable claims and
+  attributes.
+- Authorization rejects malformed/unknown resource actions and records denied
+  graph decisions before execution.
+- Planner/resource boundaries reject unregistered resources; audit storage
+  redacts credential-bearing metadata.
+- Prompt-injection strings remain data and cannot redefine actor or policy.
+
 ### 2.6 Phase 24 — Resource-aware Authorization (Completed)
 A lightweight, resource-level authorization boundary was added to control access to sensitive resources while preserving the existing policy and security boundaries.
 

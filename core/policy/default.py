@@ -36,6 +36,24 @@ class DefaultPolicy:
         The default policy is permissive to preserve backward compatibility. Implementations
         may override this to apply deterministic allow/deny rules.
         """
+        valid_actions = {
+            "knowledge_graph": {"read"},
+            "knowledge_source": {"read"},
+            "specialized_agent": {"use"},
+            "workflow": {"execute"},
+        }
+        if resource_type not in valid_actions:
+            return PolicyDecision(False, "Unknown resource type.", "authorization")
+        if action not in valid_actions[resource_type]:
+            return PolicyDecision(False, "Unknown resource action.", "authorization")
+        if not isinstance(resource_name, str) or not resource_name.strip():
+            return PolicyDecision(False, "Resource name is required.", "authorization")
+        if actor is not None and (
+            not isinstance(actor, str) or not actor.strip()
+        ):
+            return PolicyDecision(False, "Actor identity is invalid.", "authorization")
+        if context is not None and not isinstance(context, dict):
+            return PolicyDecision(False, "Authorization context is invalid.", "authorization")
         return PolicyDecision(True)
 
     def validate_output(self, output, context):
