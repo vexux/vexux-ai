@@ -168,7 +168,7 @@ def health():
 def ready():
     try:
         config = load_config_from_env()
-        supported = {"mistral", "qwen", "fake"}
+        supported = {"mistral", "qwen", "ollama", "fake"}
         if config.model_provider not in supported:
             raise ValueError(f"Unsupported MODEL_PROVIDER: {config.model_provider}")
         return {"status": "ready", "model_provider": config.model_provider}

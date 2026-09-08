@@ -64,3 +64,11 @@ def test_health_and_readiness_endpoints(monkeypatch):
     readiness = client.get("/ready")
     assert readiness.status_code == 200
     assert readiness.json()["status"] == "ready"
+
+
+def test_ollama_is_a_supported_readiness_provider(monkeypatch):
+    monkeypatch.setenv("MODEL_PROVIDER", "ollama")
+    response = TestClient(app).get("/ready")
+
+    assert response.status_code == 200
+    assert response.json() == {"status": "ready", "model_provider": "ollama"}

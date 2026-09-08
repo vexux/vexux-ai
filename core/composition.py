@@ -70,6 +70,14 @@ def create_agent():
             adapter_path="models/checkpoints",
         )
 
+    elif provider_name == "ollama":
+        from models.providers.ollama import OllamaProvider
+
+        provider = OllamaProvider(
+            model_name=config.ollama_model,
+            host=config.ollama_host,
+        )
+
     elif provider_name == "fake":
         # Deterministic fake provider for local testing and portability
         try:

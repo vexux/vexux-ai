@@ -55,6 +55,8 @@ def _parse_int(value: Optional[str], default: int, min_value: int = 1, max_value
 class Config:
     model_provider: str = "mistral"
     mistral_api_key: Optional[str] = None
+    ollama_host: str = "http://127.0.0.1:11434"
+    ollama_model: str = "llama3.2"
     autonomous_delegation_enabled: bool = False
     max_autonomous_delegations: int = 4
     max_parallel_tasks: int = 1
@@ -78,6 +80,8 @@ class Config:
         return (
             f"Config(model_provider={self.model_provider!r}, "
             f"mistral_api_key={'<set>' if self.mistral_api_key else None}, "
+            f"ollama_host={self.ollama_host!r}, "
+            f"ollama_model={self.ollama_model!r}, "
             f"autonomous_delegation_enabled={self.autonomous_delegation_enabled!r}, "
             f"max_autonomous_delegations={self.max_autonomous_delegations!r}, "
             f"max_parallel_tasks={self.max_parallel_tasks!r}, "
@@ -102,6 +106,8 @@ def load_config_from_env(prefix: str = "") -> Config:
 
     model_provider = e("MODEL_PROVIDER") or "mistral"
     mistral_api_key = e("MISTRAL_API_KEY") or None
+    ollama_host = e("OLLAMA_HOST") or "http://127.0.0.1:11434"
+    ollama_model = e("OLLAMA_MODEL") or "llama3.2"
 
     autonomous_delegation_enabled = _parse_bool(e("ENABLE_AUTONOMOUS_DELEGATION"))
 
@@ -128,6 +134,8 @@ def load_config_from_env(prefix: str = "") -> Config:
     return Config(
         model_provider=model_provider.lower(),
         mistral_api_key=mistral_api_key,
+        ollama_host=ollama_host,
+        ollama_model=ollama_model,
         autonomous_delegation_enabled=autonomous_delegation_enabled,
         max_autonomous_delegations=max_autonomous_delegations,
         max_parallel_tasks=max_parallel_tasks,
@@ -157,6 +165,8 @@ def _env_snapshot(prefix: str = "") -> tuple:
     keys = [
         "MODEL_PROVIDER",
         "MISTRAL_API_KEY",
+        "OLLAMA_HOST",
+        "OLLAMA_MODEL",
         "ENABLE_AUTONOMOUS_DELEGATION",
         "MAX_AUTONOMOUS_DELEGATIONS",
         "AGENT_MAX_PARALLEL_TASKS",

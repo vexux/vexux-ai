@@ -156,3 +156,18 @@ def test_dotenv_mistral_configuration_selects_mistral_provider(monkeypatch, tmp_
     agent = create_agent()
 
     assert agent.planner.model_gateway.provider.name == "mistral"
+
+
+def test_ollama_configuration_selects_ollama_provider(monkeypatch):
+    monkeypatch.setenv("MODEL_PROVIDER", "ollama")
+    monkeypatch.setenv("OLLAMA_HOST", "http://ollama.test:11434")
+    monkeypatch.setenv("OLLAMA_MODEL", "qwen2.5:0.5b")
+
+    from core.composition import create_agent
+
+    agent = create_agent()
+    provider = agent.planner.model_gateway.provider
+
+    assert provider.name == "ollama"
+    assert provider.host == "http://ollama.test:11434"
+    assert provider.model_name == "qwen2.5:0.5b"
