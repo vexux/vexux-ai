@@ -1,12 +1,3 @@
-import torch
-
-from transformers import (
-    AutoModelForCausalLM,
-    AutoTokenizer,
-)
-
-from peft import PeftModel
-
 from core.contracts.capabilities import ModelProviderContract
 
 
@@ -17,8 +8,14 @@ class QwenProvider:
         model_name: str,
         adapter_path: str,
     ):
+        # Keep the heavyweight ML stack out of module import and pytest
+        # collection; it is needed only when this provider is instantiated.
+        import torch
+        from peft import PeftModel
+        from transformers import AutoModelForCausalLM, AutoTokenizer
 
         self._name = "qwen"
+        self._torch = torch
 
         self.device = (
             "cuda"
@@ -130,7 +127,7 @@ class QwenProvider:
             self.model.generation_config.top_p = None
             self.model.generation_config.top_k = None    
 
-        with torch.no_grad():
+        with self._torch.no_grad():
 
             outputs = self.model.generate(
                 **inputs,

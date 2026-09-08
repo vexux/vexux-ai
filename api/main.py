@@ -1,4 +1,5 @@
 import logging
+import inspect
 from dataclasses import asdict
 from functools import lru_cache
 from typing import Any, Optional
@@ -104,11 +105,13 @@ def run_agent(
     request_id = str(uuid.uuid4())
     emit_audit(make_event("request_started", request_id=request_id, session_id=payload.session_id, status="started", metadata={"endpoint": "agent"}))
     try:
-        response = agent.run(
-            payload.query,
-            session_id=payload.session_id,
-            user_id=payload.user_id,
-        )
+        run_kwargs = {
+            "session_id": payload.session_id,
+            "user_id": payload.user_id,
+        }
+        if "request_id" in inspect.signature(agent.run).parameters:
+            run_kwargs["request_id"] = request_id
+        response = agent.run(payload.query, **run_kwargs)
     except Exception as exc:
         logger.exception(
             "api.agent.unhandled_error",

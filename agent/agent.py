@@ -13,6 +13,7 @@ from core.contracts.execution import Plan, Task
 from core.contracts.response import AgentResponse
 from core.context.context_manager import ContextManager
 from core.contracts.identity import SecurityContext
+from core.observability import log_event, metrics
 from agent.response_synthesizer import ResponseSynthesizer
 
 class Agent:
@@ -70,6 +71,7 @@ class Agent:
         session_id: str | None = None,
         user_id: str | None = None,
         security_context=None,
+        request_id: str | None = None,
     ):
         if security_context is not None and not isinstance(security_context, SecurityContext):
             return AgentResponse(
@@ -88,11 +90,12 @@ class Agent:
                 error="Actor identity conflicts with security context.",
                 trace=[],
             )
+        metrics.increment("requests")
         if user_id is None and security_context is not None:
             user_id = security_context.actor_id
 
         context = self.context_manager.create(
-            request_id=str(uuid.uuid4()),
+            request_id=request_id or str(uuid.uuid4()),
             session_id=session_id,
             user_id=user_id,
             security_context=security_context,
@@ -102,6 +105,14 @@ class Agent:
             decision = self.policy.validate_input(query)
             if not decision.allowed:
                 return AgentResponse(success=False, error=f"Policy denied input: {decision.reason}", trace=[], metadata={"request_id": context.request_id, "policy": decision.policy_name})
+
+        log_event(
+            "agent.request.started",
+            request_id=context.request_id,
+            session_id=context.session_id,
+            actor=context.user_id,
+            status="started",
+        )
 
         routed_plan = None
         if self.resource_router is not None:

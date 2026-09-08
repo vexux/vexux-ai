@@ -12,6 +12,13 @@ from core.audit_logger import emit
 from core.contracts.audit import make_event
 from core.contracts.evidence import Evidence, EvidenceSet
 from core.contracts.execution import AgentContext, ExecutionResult, Task
+from core.observability import (
+    classify_error,
+    duration_ms,
+    log_event,
+    metrics,
+    timed,
+)
 
 from apps.fraud.domain import InvestigationResult
 
@@ -205,6 +212,7 @@ class FraudInvestigationWorkflow:
 
     def _execute_step(self, step: InvestigationStep, context: AgentContext) -> None:
         step.status = StepStatus.RUNNING
+        start = timed()
         if self.resource_router is not None and step.resource is not None:
             selected = {item.name for item in self.resource_router.select(step.resource)}
             if step.resource not in selected:
@@ -227,23 +235,65 @@ class FraudInvestigationWorkflow:
                     "workflow_observation",
                     {"step_id": step.id, "attempt": step.attempts},
                 ))
+                metrics.increment("resource_executions")
+                log_event(
+                    "investigation.step.completed",
+                    request_id=context.request_id,
+                    actor=context.user_id,
+                    operation=step.action,
+                    resource=step.resource,
+                    status="completed",
+                    duration_ms=duration_ms(start),
+                    retry_count=step.attempts - 1,
+                )
                 return
             step.error = observation.error or "step execution failed"
             self._audit("step_execution", context.request_id, task_id=step.id, status="failed",
-                        resource_name=step.resource, metadata={"attempt": step.attempts, "error": step.error})
+                        resource_name=step.resource, duration_ms=duration_ms(start),
+                        metadata={"attempt": step.attempts, "error_class": classify_error(step.error)})
+            metrics.increment("resource_execution_failures")
             if attempt < step.max_retries:
+                metrics.increment("retries")
                 self._audit("step_retry", context.request_id, task_id=step.id, status="retrying")
+                log_event(
+                    "investigation.step.retry",
+                    request_id=context.request_id,
+                    actor=context.user_id,
+                    operation=step.action,
+                    resource=step.resource,
+                    status="retrying",
+                    retry_count=step.attempts,
+                    error_class=classify_error(step.error),
+                )
         step.status = StepStatus.FAILED
+        metrics.increment("retry_exhausted")
+        log_event(
+            "investigation.step.failed",
+            request_id=context.request_id,
+            actor=context.user_id,
+            operation=step.action,
+            resource=step.resource,
+            status="failed",
+            duration_ms=duration_ms(start),
+            retry_count=step.attempts - 1,
+            error_class=classify_error(step.error),
+        )
         raise RuntimeError(f"Investigation step '{step.id}' failed: {step.error}")
 
-    def run(self, customer_id: str, actor: str = "investigator") -> InvestigationResult:
+    def run(
+        self,
+        customer_id: str,
+        actor: str = "investigator",
+        request_id: str | None = None,
+    ) -> InvestigationResult:
         plan = self.create_plan(customer_id)
-        request_id = str(uuid.uuid4())
-        context = AgentContext(request_id=request_id, user_id=actor)
-        self._audit("investigation_started", request_id, status="started",
+        correlation_id = request_id or str(uuid.uuid4())
+        context = AgentContext(request_id=correlation_id, user_id=actor)
+        self._audit("investigation_started", correlation_id, status="started",
                     metadata={"subject_id": customer_id, "goal": plan.goal})
-        self._audit("plan_created", request_id, status="created",
+        self._audit("plan_created", correlation_id, status="created",
                     metadata={"step_count": len(plan.steps), "max_replans": plan.max_replans})
+        start = timed()
         outputs: dict[str, Any] = {}
         replans = 0
         try:
@@ -257,11 +307,11 @@ class FraudInvestigationWorkflow:
                 ):
                     step.status = StepStatus.BLOCKED
                     raise RuntimeError(f"Investigation step '{step.id}' is blocked by a failed dependency.")
-                self._audit("step_execution", request_id, task_id=step.id, status="started",
+                self._audit("step_execution", correlation_id, task_id=step.id, status="started",
                             resource_name=step.resource)
                 self._execute_step(step, context)
                 outputs[step.id] = step.output
-                self._audit("step_execution", request_id, task_id=step.id, status="completed",
+                self._audit("step_execution", correlation_id, task_id=step.id, status="completed",
                             resource_name=step.resource)
                 if step.id == "fraud_context" and self._has_suspicious_relationship(step.output):
                     if replans >= plan.max_replans:
@@ -281,8 +331,17 @@ class FraudInvestigationWorkflow:
                         raise RuntimeError("Investigation step limit exhausted during replanning.")
                     plan.steps.insert(index + 1, related)
                     plan.validate()
-                    self._audit("replan", request_id, status="created",
+                    metrics.increment("replans")
+                    self._audit("replan", correlation_id, status="created",
                                 metadata={"replan_count": replans, "reason": "suspicious_relationship"})
+                    log_event(
+                        "investigation.replan",
+                        request_id=correlation_id,
+                        actor=actor,
+                        status="created",
+                        replan_count=replans,
+                        reason="suspicious_relationship",
+                    )
                 index += 1
             evidence = EvidenceSet()
             for step in plan.steps:
@@ -301,12 +360,17 @@ class FraudInvestigationWorkflow:
                     if step.status == StepStatus.SUCCEEDED and step.resource
                 ],
             )
-            self._audit("investigation_completed", request_id, status="completed",
-                        metadata={"risk_assessment": result.risk_assessment})
+            metrics.increment("successful_investigations")
+            self._audit("investigation_completed", correlation_id, status="completed",
+                        duration_ms=duration_ms(start),
+                        metadata={"risk_assessment": result.risk_assessment,
+                                  "replan_count": replans})
             return result
         except Exception as exc:
-            self._audit("investigation_failed", request_id, status="failed",
-                        metadata={"error": str(exc), "replans": replans})
+            metrics.increment("failed_investigations")
+            self._audit("investigation_failed", correlation_id, status="failed",
+                        duration_ms=duration_ms(start),
+                        metadata={"error_class": classify_error(exc), "replans": replans})
             raise
 
 

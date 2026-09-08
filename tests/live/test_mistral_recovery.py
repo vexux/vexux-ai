@@ -1,16 +1,20 @@
 """Test the recovery task ID preservation fix with actual Mistral API."""
 
+import os
 import sys
 import pytest
 from core.config import get_config
 
-# Skip this live Mistral test at import time when the API key is not set.
-# Using pytest.skip keeps pytest collection stable while preserving the
-# original behavior (the test is only executed when MISTRAL_API_KEY is set).
+# Live provider tests require explicit opt-in so ordinary pytest remains
+# deterministic even when a developer has credentials in the environment.
 MISTRAL_API_KEY = get_config().mistral_api_key
 
-if not MISTRAL_API_KEY:
-    pytest.skip("MISTRAL_API_KEY not set. Skipping live Mistral test.", allow_module_level=True)
+if not MISTRAL_API_KEY or os.getenv("RUN_LIVE_MISTRAL_TESTS") != "1":
+    pytest.skip(
+        "Live Mistral test requires MISTRAL_API_KEY and "
+        "RUN_LIVE_MISTRAL_TESTS=1.",
+        allow_module_level=True,
+    )
 
 try:
     from models.providers.mistral import MistralProvider
