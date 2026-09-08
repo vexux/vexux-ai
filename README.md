@@ -4,6 +4,17 @@ Vexux-AI is a modular agent platform built around a small language model, struct
 
 The architecture separates model reasoning from capability execution, retrieval, tools, request state, failure handling, and response synthesis.
 
+The generic execution path is:
+
+```text
+Agent -> Planner -> ResourceRouter -> Authorization -> ExecutionManager
+      -> registered adapter -> Evidence/Audit/Observability
+```
+
+The fraud application adds its domain entities, deterministic investigation
+service, bounded workflow, fraud policy, Neo4j graph resources, and MySQL
+business-data resource without moving factual signals into the model.
+
 ## Architecture
 
 ```text
@@ -64,7 +75,7 @@ flowchart TD
 - Grounded response synthesis for retrieval and multi-task results.
 - Bounded in-memory conversation state by `session_id`.
 - FastAPI API and structured task observability.
-- 54 automated tests and 44 deterministic evaluation cases.
+- Deterministic pytest coverage and a 44-case evaluation suite.
 
 ## Repository Structure
 
@@ -86,40 +97,23 @@ test_*.py                 Pytest unit and integration tests
 
 RAG documents are read from `data/documents/`. The Qwen fallback uses the local adapter at `models/checkpoints`.
 
-## Installation
+## Local setup
 
 The project is developed with Python 3.11. From the repository root:
+
+Follow [the authoritative local setup guide](docs/SETUP.md). In brief:
 
 ```powershell
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
-python -m pip install -r requirements.txt
-python -m pip install -r requirements-dev.txt
-```
-
-Runtime dependencies include the official `mistralai` SDK, PyTorch, Transformers, PEFT, Sentence Transformers, FAISS, and FastAPI.
-
-The default generation provider is `mistral` and requires `MISTRAL_API_KEY`.
-Use `MODEL_PROVIDER=fake` for deterministic tests. Retrieval is independent
-of answer generation; local causal-model RAG generation is disabled unless
-`ENABLE_LOCAL_RAG_INFERENCE=1` is explicitly configured.
-
-The default model is `mistral-small-latest`, accessed through the Mistral API. The first RAG use may download embedding assets. The local Qwen path requires the checkpoint files under `models/checkpoints`.
-
-For reproducible setup, install both dependency files with:
-
-```powershell
 python -m pip install -r requirements.txt -r requirements-dev.txt
+Copy-Item .env.example .env
 ```
 
-CI uses `MODEL_PROVIDER=fake` for deterministic tests without external
-credentials. The live Mistral test is isolated from the normal CI job and only
-runs when explicitly enabled with a configured API key.
-
-For local development, copy `.env.example` to `.env` and fill in local
-credentials. The centralized configuration loader reads the repository `.env`
-without overwriting explicitly supplied process environment variables. `.env`
-is ignored by Git; `.env.example` is tracked as a template.
+The centralized loader reads the repository `.env`; explicit process
+environment variables take precedence. Use `MODEL_PROVIDER=fake` for
+credential-free deterministic tests. Ollama, Mistral, and Qwen are optional
+provider paths; no provider service or model download is required for tests.
 
 ## Knowledge graph backends
 
@@ -140,8 +134,7 @@ Each graph database backend requires its own adapter implementing the contract;
 the core does not expose arbitrary Cypher execution. The real fraud
 composition registers both `customer_graph` and `fraud_graph` against local
 Neo4j. Its reproducible schema and seed are in `apps/fraud/data/neo4j/`.
-`python -m scripts.manual.neo4j_graph_demo` demonstrates registration and
-reports when Neo4j is not configured.
+The repeatable schema and seed commands are documented in [docs/SETUP.md](docs/SETUP.md).
 
 The heterogeneous investigation proof uses the same registry and execution
 path for both backends:
@@ -166,25 +159,9 @@ The fraud schema and deterministic seed are in `apps/fraud/data/mysql/`.
 Authorization, audit events, and `structured_data` evidence use the existing
 knowledge-source flow.
 
-Run the self-contained demonstration with:
-
-```powershell
-python -m scripts.manual.sql_backend_demo
-```
-
-The combined synthetic investigation is available with
-`python -m scripts.manual.multi_source_investigation_demo`. It always uses
-SQLite and the in-memory fraud graph; the customer graph is reported as
-unavailable unless an explicitly configured Neo4j backend is supplied, so the
-demo never claims a heterogeneous run when that backend is absent.
-
-Explicit mentions of registered resources are routed deterministically from
-registry metadata into the existing retrieval and authorization path. Try the
-interactive actor demonstration with
-`python -m scripts.manual.resource_routing_authorization_demo`, then use
-`/run`, `/actor support_user`, and `/run`. Routing does not grant access:
-`support_user` is denied `fraud_graph`; queries without explicit resources keep
-the normal planner behavior and unknown explicit resources fail.
+The repeatable real-resource bootstrap and verification commands are in
+[docs/SETUP.md](docs/SETUP.md). Historical demonstrations are retained under
+`scripts/history/` and are not authoritative entry points.
 
 ## Real local fraud platform
 
@@ -204,9 +181,8 @@ $env:MYSQL_PASSWORD = "<local MySQL password>"
 $env:MYSQL_DATABASE = "vexux_fraud"
 ```
 
-Run `apps/fraud/data/mysql/schema.sql`, then `seed.sql`, against
-`vexux_fraud`. Run the Neo4j `schema.cypher`, then `seed.cypher`, in Neo4j
-Browser. Start the real interactive application with:
+Run the schema and seed files using the commands in [docs/SETUP.md](docs/SETUP.md).
+Start the real interactive application with:
 
 ```powershell
 python -m scripts.manual.run_agent
@@ -229,7 +205,9 @@ $env:MISTRAL_MODEL = "mistral-small-latest"
 $env:MISTRAL_API_KEY = "your-key-from-mistral"
 ```
 
-The key is read only from `MISTRAL_API_KEY`. Never hardcode, log, or commit API keys. `.env` and `.env.*` files are ignored, but the project does not load dotenv files automatically.
+The key is read only from `MISTRAL_API_KEY`. Never hardcode, log, or commit API keys. `.env` and `.env.*` files are ignored. The centralized configuration loader
+reads `.env` automatically and never overrides explicit process environment
+variables.
 
 To use local Qwen instead:
 
@@ -239,6 +217,10 @@ $env:QWEN_MODEL = "Qwen/Qwen2.5-0.5B-Instruct"
 ```
 
 Qwen remains available through its existing local adapter path. The Mistral provider never uses `adapter_path` or the Qwen checkpoint.
+
+Provider roles are intentionally explicit: `fake` is for deterministic tests,
+Ollama is the zero-budget local runtime option, Mistral is an optional external
+provider, and Qwen is an optional existing local provider.
 
 ## Running the Agent
 
@@ -413,7 +395,9 @@ Run the complete test suite:
 python -m pytest -q
 ```
 
-Verified result: **56 passed**.
+The deterministic suite is the canonical offline validation path. Its current
+verified result is reported by the command; live provider/database tests are
+separate and opt-in or credential-gated.
 
 Run the system evaluation suite:
 
@@ -421,7 +405,8 @@ Run the system evaluation suite:
 python -m evaluation
 ```
 
-Verified result: **44/44 passed**, **100% pass rate**.
+The evaluation suite uses deterministic doubles and does not make real model
+API calls.
 
 The evaluation suite reports total, passed, failed, pass rate, category-level results, and failure details. It uses deterministic doubles and does not make real model API calls.
 

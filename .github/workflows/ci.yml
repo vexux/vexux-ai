@@ -41,6 +41,7 @@ jobs:
     env:
       MISTRAL_API_KEY: ${{ secrets.MISTRAL_API_KEY }}
       MODEL_PROVIDER: mistral
+      RUN_LIVE_MISTRAL_TESTS: "1"
     steps:
       - name: Check out repository
         uses: actions/checkout@v4

@@ -12,6 +12,8 @@ bitsandbytes==0.47.0
 
 sentencepiece==0.2.0
 huggingface_hub==0.34.4
+sentence-transformers==5.6.1
+faiss-cpu==1.15.0
 pyyaml==6.0.2
 fastapi==0.116.1
 mistralai==2.9.3
