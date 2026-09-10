@@ -3,6 +3,7 @@
 import logging
 
 from apps.fraud.real import create_real_agent
+from apps.fraud.identity import DEFAULT_ACTOR, validate_actor
 from core.config import get_config
 
 
@@ -34,7 +35,7 @@ def _provider_error_message(error: RuntimeError) -> str:
 
 def main():
     agent = create_real_agent()
-    actor = "investigator"
+    actor = DEFAULT_ACTOR
     session_id = "terminal-session"
 
     print("=" * 60)
@@ -51,7 +52,12 @@ def main():
             break
 
         if query.lower().startswith("/actor "):
-            actor = query.split(None, 1)[1].strip()
+            requested_actor = query.split(None, 1)[1].strip()
+            try:
+                actor = validate_actor(requested_actor)
+            except ValueError as exc:
+                print(f"Actor error: {exc}")
+                continue
             print(f"Actor: {actor}")
             continue
 

@@ -12,11 +12,13 @@ class _Agent:
         self.resource_router = self
         self.result = result
         self.error = error
+        self.run_kwargs = []
 
     def route(self, _query):
         return _Route()
 
     def run(self, _query, **_kwargs):
+        self.run_kwargs.append(_kwargs)
         if self.error:
             raise self.error
         return self.result
@@ -70,3 +72,24 @@ def test_interactive_runner_handles_rate_limit_error(monkeypatch, capsys):
 
     assert "temporarily unavailable or rate limited" in output
     assert "Traceback" not in output
+
+
+def test_interactive_runner_rejects_unknown_actor(monkeypatch, capsys):
+    monkeypatch.setattr(run_agent, "create_real_agent", lambda: _Agent(result=_Result()))
+    inputs = iter(("/actor investigater", "question", "exit"))
+    monkeypatch.setattr("builtins.input", lambda _prompt: next(inputs))
+
+    output = run_agent.main()
+
+    assert "Unknown actor 'investigater'" in capsys.readouterr().out
+
+
+def test_interactive_runner_uses_least_privileged_default_actor(monkeypatch, capsys):
+    agent = _Agent(result=_Result())
+    monkeypatch.setattr(run_agent, "create_real_agent", lambda: agent)
+    inputs = iter(("question", "exit"))
+    monkeypatch.setattr("builtins.input", lambda _prompt: next(inputs))
+
+    run_agent.main()
+
+    assert agent.run_kwargs[0]["user_id"] == "support_user"

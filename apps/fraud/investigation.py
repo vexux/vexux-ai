@@ -122,7 +122,14 @@ class FraudInvestigationService:
         evidence = EvidenceSet()
         consulted: list[str] = []
 
-        self._authorize(actor, "knowledge_graph", "customer_graph")
+        # Authorize every protected resource before performing any I/O.
+        for resource_type, resource_name in (
+            ("knowledge_graph", "customer_graph"),
+            ("knowledge_graph", "fraud_graph"),
+            ("knowledge_source", "business_db"),
+        ):
+            self._authorize(actor, resource_type, resource_name)
+
         customer_graph = self.graph_registry.get("customer_graph")
         customer_node = customer_graph.get_node(customer_id)
         consulted.append("customer_graph")
@@ -131,14 +138,12 @@ class FraudInvestigationService:
         for item in customer_neighbors:
             self._add_graph_evidence(evidence, "customer_graph", item, "graph_relationship")
 
-        self._authorize(actor, "knowledge_graph", "fraud_graph")
         fraud_graph = self.graph_registry.get("fraud_graph")
         fraud_neighbors = fraud_graph.get_neighbors(customer_id, direction="both")
         consulted.append("fraud_graph")
         for item in fraud_neighbors:
             self._add_graph_evidence(evidence, "fraud_graph", item, "graph_relationship")
 
-        self._authorize(actor, "knowledge_source", "business_db")
         business_db = self.source_registry.get("business_db")
         transaction_rows = business_db.retrieve(
             "SELECT transaction_id, account_id, customer_id, merchant_id, amount, currency, occurred_at, status "

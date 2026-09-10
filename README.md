@@ -318,6 +318,14 @@ python -m evaluation
 
 These are the canonical deterministic validation commands used by CI.
 
+### Fraud application actor identities
+
+The local fraud terminal accepts only the exact trusted actor identifiers
+`investigator` and `support_user`. An omitted `/actor` command uses the
+least-privileged `support_user` default; it never defaults to `investigator`.
+Unknown identifiers are rejected before planning or resource execution, and
+text in a natural-language query cannot change the selected actor.
+
 ## Example Scenarios
 
 ### Retrieval

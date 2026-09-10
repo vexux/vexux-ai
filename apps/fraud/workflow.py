@@ -194,9 +194,16 @@ class FraudInvestigationWorkflow:
         self.max_retries_per_step = max_retries_per_step
 
     def execute(self, workflow_input: dict[str, Any], context: AgentContext) -> InvestigationResult:
+        actor = context.user_id or "investigator"
+        for resource_type, resource_name in (
+            ("knowledge_graph", "customer_graph"),
+            ("knowledge_graph", "fraud_graph"),
+            ("knowledge_source", "business_db"),
+        ):
+            self.service._authorize(actor, resource_type, resource_name)
         return self.run(
             workflow_input["customer_id"],
-            actor=context.user_id or "investigator",
+            actor=actor,
             request_id=context.request_id,
         )
 

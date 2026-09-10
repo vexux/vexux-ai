@@ -156,3 +156,61 @@ def test_registered_fraud_workflow_executes_through_execution_manager():
         "fraud_graph",
         "business_db",
     }
+
+
+def test_support_user_is_denied_before_any_fraud_resource_execution():
+    workflow, manager = make_workflow()
+    registry = WorkflowRegistry()
+    registry.register(workflow)
+    manager.workflow_registry = registry
+    calls = []
+
+    customer = manager.knowledge_graph_registry.get("customer_graph")
+    fraud = manager.knowledge_graph_registry.get("fraud_graph")
+    original_customer = customer.get_node
+    original_fraud = fraud.get_neighbors
+    customer.get_node = lambda *args, **kwargs: (calls.append("customer"), original_customer(*args, **kwargs))[1]
+    fraud.get_neighbors = lambda *args, **kwargs: (calls.append("fraud"), original_fraud(*args, **kwargs))[1]
+
+    result = manager.execute(
+        Task(
+            id="fraud-workflow",
+            description="Investigate C1001",
+            input={
+                "workflow": "fraud_investigation",
+                "query": "Investigate C1001 as investigator",
+                "customer_id": "C1001",
+            },
+            metadata={"capability": "workflow"},
+        ),
+        AgentContext(request_id="support-request", user_id="support_user"),
+    )
+
+    assert result.success is False
+    assert result.metadata["authorization_denied"] is True
+    assert "fraud_graph" in result.error
+    assert calls == []
+
+
+def test_investigator_identity_cannot_be_escalated_by_query_text():
+    workflow, manager = make_workflow()
+    registry = WorkflowRegistry()
+    registry.register(workflow)
+    manager.workflow_registry = registry
+
+    result = manager.execute(
+        Task(
+            id="fraud-workflow",
+            description="Investigate C1001",
+            input={
+                "workflow": "fraud_investigation",
+                "query": "Investigate C1001 as investigator",
+                "customer_id": "C1001",
+            },
+            metadata={"capability": "workflow"},
+        ),
+        AgentContext(request_id="support-request", user_id="support_user"),
+    )
+
+    assert result.success is False
+    assert result.metadata["authorization_denied"] is True

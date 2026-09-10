@@ -6,6 +6,7 @@ from agent.execution_manager import ExecutionManager
 from agent.observer import Observer
 from agent.planner import Planner
 from agent.response_synthesizer import ResponseSynthesizer
+from agent.agent import Agent
 from core.context.context_manager import ContextManager
 from core.contracts.execution import ExecutionResult
 from core.contracts.observation import Observation
@@ -77,6 +78,35 @@ def test_different_sessions_are_isolated():
     other = manager.create("request-2", session_id="session-b")
 
     assert other.conversation_history == []
+
+
+def test_different_actors_in_same_session_are_isolated():
+    manager = ContextManager()
+    investigator = manager.create("request-1", session_id="shared", user_id="investigator")
+    manager.add_conversation_turn(investigator, "investigator fact", "private answer")
+
+    support = manager.create("request-2", session_id="shared", user_id="support_user")
+
+    assert support.conversation_history == []
+
+
+def test_same_actor_reuses_same_session_context():
+    manager = ContextManager()
+    first = manager.create("request-1", session_id="shared", user_id="investigator")
+    manager.add_conversation_turn(first, "hello", "hi")
+
+    second = manager.create("request-2", session_id="shared", user_id="investigator")
+
+    assert second.conversation_history == [{"query": "hello", "response": "hi"}]
+
+
+def test_independent_numbered_query_does_not_receive_prior_context():
+    manager = ContextManager()
+    context = manager.create("request-1", session_id="terminal", user_id="investigator")
+    manager.add_conversation_turn(context, "hey", "unrelated prior response")
+    next_context = manager.create("request-2", session_id="terminal", user_id="investigator")
+
+    assert Agent._conversation_context("1. hey", next_context) == []
 
 
 def test_request_ids_remain_distinct_within_session():

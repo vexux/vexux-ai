@@ -1,4 +1,5 @@
 import logging
+import re
 import time
 import uuid
 
@@ -65,6 +66,21 @@ class Agent:
         self.max_parallel_tasks = max(1, int(max_parallel_tasks or 1))
         self.resource_router = resource_router
 
+    @staticmethod
+    def _conversation_context(query: str, context) -> list[dict]:
+        """Avoid stale history for independent resource and numbered requests."""
+        normalized = query.strip().lower()
+        if (
+            re.match(r"^\s*\d+[.)]\s*", query)
+            or any(term in normalized for term in (
+                "investigate", "suspicious activity", "fraud_graph",
+                "customer_graph", "business_db", "mysql", "neo4j",
+            ))
+            or re.fullmatch(r"(?:hi|hello|hey|good morning|good afternoon|good evening)[!. ]*", normalized)
+        ):
+            return []
+        return context.conversation_history
+
     def run(
         self,
         query: str,
@@ -102,6 +118,20 @@ class Agent:
         )
 
         if self.policy is not None:
+            validate_actor = getattr(self.policy, "validate_actor", None)
+            if callable(validate_actor):
+                actor_decision = validate_actor(context.user_id)
+                if not actor_decision.allowed:
+                    return AgentResponse(
+                        success=False,
+                        error=f"Policy denied actor: {actor_decision.reason}",
+                        trace=[],
+                        metadata={
+                            "request_id": context.request_id,
+                            "policy": actor_decision.policy_name,
+                            "actor_id": context.user_id,
+                        },
+                    )
             decision = self.policy.validate_input(query)
             if not decision.allowed:
                 return AgentResponse(success=False, error=f"Policy denied input: {decision.reason}", trace=[], metadata={"request_id": context.request_id, "policy": decision.policy_name})
@@ -113,6 +143,7 @@ class Agent:
             actor=context.user_id,
             status="started",
         )
+        conversation_context = self._conversation_context(query, context)
 
         routed_plan = None
         if self.resource_router is not None:
@@ -220,7 +251,7 @@ class Agent:
                 if retry_count == 0:
                     plan = routed_plan or self.planner.create_plan(
                         query,
-                        conversation_context=context.conversation_history,
+                        conversation_context=conversation_context,
                     )
 
                 else:
@@ -236,7 +267,7 @@ class Agent:
                             query,
                             context.observations[-1],
                             context.current_task,
-                            conversation_context=context.conversation_history,
+                            conversation_context=conversation_context,
                         )
 
                     # Collect any remaining tasks from the previous plan that have not run yet
@@ -547,6 +578,20 @@ class Agent:
                         observation = self.observer.observe(result, task)
                         self.context_manager.add_observation(context, observation)
 
+                        if observation.metadata.get("authorization_denied"):
+                            return AgentResponse(
+                                success=False,
+                                output=None,
+                                error=observation.error,
+                                trace=context.observations,
+                                metadata={
+                                    "request_id": context.request_id,
+                                    "session_id": context.session_id,
+                                    "user_id": context.user_id,
+                                    "authorization_denied": True,
+                                },
+                            )
+
                         if observation.success:
                             executed.add(task.id)
                             self.context_manager.add_completed_task(context, task)
@@ -768,7 +813,7 @@ class Agent:
                 final_output = self.response_synthesizer.synthesize(
                     query,
                     context.observations,
-                    conversation_context=context.conversation_history,
+                    conversation_context=conversation_context,
                 )
 
                 if self.policy is not None:

@@ -126,7 +126,14 @@ class ExecutionManager:
                 error=f"Workflow '{workflow_name}' is not executable.",
             )
 
-        output = execute(task.input, context)
+        try:
+            output = execute(task.input, context)
+        except PermissionError as exc:
+            return ExecutionResult(
+                success=False,
+                error=str(exc),
+                metadata={"capability": "workflow", "workflow": workflow_name, "authorization_denied": True},
+            )
         return ExecutionResult(
             success=True,
             output=output,
@@ -209,7 +216,15 @@ class ExecutionManager:
                     except Exception:
                         pass
                     if not decision.allowed:
-                        return ExecutionResult(success=False, error=f"Unauthorized access to knowledge graph: {name}", metadata={"policy": decision.policy_name, "reason": decision.reason})
+                        return ExecutionResult(
+                            success=False,
+                            error=f"Unauthorized access to knowledge graph: {name}",
+                            metadata={
+                                "policy": decision.policy_name,
+                                "reason": decision.reason,
+                                "authorization_denied": True,
+                            },
+                        )
             try:
                 result = self._execute_multi_graph_request(task, graph_requests)
                 # emit request_completed
@@ -353,7 +368,7 @@ class ExecutionManager:
                     except Exception:
                         pass
                     if not decision.allowed:
-                        return ExecutionResult(success=False, error=f"Unauthorized access to knowledge graph: {graph.name}", metadata={"policy": decision.policy_name, "reason": decision.reason})
+                        return ExecutionResult(success=False, error=f"Unauthorized access to knowledge graph: {graph.name}", metadata={"policy": decision.policy_name, "reason": decision.reason, "authorization_denied": True})
 
                 operation = kr.operation or kr.params.get("operation") if hasattr(kr, "params") else kr.operation
                 params = kr.params if hasattr(kr, "params") else {}

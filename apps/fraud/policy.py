@@ -1,4 +1,5 @@
 from core.policy.default import DefaultPolicy, PolicyDecision
+from apps.fraud.identity import TRUSTED_ACTORS
 
 
 class FraudPolicy(DefaultPolicy):
@@ -11,6 +12,11 @@ class FraudPolicy(DefaultPolicy):
     def __init__(self, deny_map=None):
         super().__init__()
         self.deny_map = deny_map or {}
+
+    def validate_actor(self, actor):
+        if actor not in TRUSTED_ACTORS:
+            return PolicyDecision(False, "Actor identity is not registered.", "identity")
+        return PolicyDecision(True, policy_name="identity")
 
     def authorize_resource(self, actor, resource_type, resource_name, action, context=None):
         if resource_type == "knowledge_graph":
