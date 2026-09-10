@@ -303,6 +303,10 @@ class Agent:
                         if missing:
                             raise ValueError(f"Workflow '{workflow_name}' missing required inputs: {missing}")
 
+                        if callable(getattr(workflow, "execute", None)):
+                            expanded_tasks.append(task)
+                            continue
+
                         # Build tasks from workflow
                         wf_tasks = workflow.build_tasks(task.input)
 

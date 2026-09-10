@@ -206,11 +206,13 @@ def create_agent():
 
     # Create the ExecutionManager after optional components have been configured
     execution_manager = ExecutionManager(
+        retrieval=rag,
         tool_registry=tool_registry,
         model_gateway=model_gateway,
         knowledge_source_registry=knowledge_sources,
         knowledge_graph_registry=knowledge_graph_registry,
         policy=policy,
+        workflow_registry=workflows,
     )
     resource_router = ResourceRouter(
         knowledge_source_registry=knowledge_sources,

@@ -12,6 +12,7 @@ from core.knowledge.sql_source import SQLKnowledgeSource
 
 from apps.fraud.policy import FraudPolicy
 from apps.fraud.investigation import FraudInvestigationService
+from apps.fraud.workflow import FraudInvestigationWorkflow
 
 
 def _required(value: str | None, name: str) -> str:
@@ -81,6 +82,16 @@ def create_real_agent():
     agent.knowledge_graph_registry = graphs
     agent.policy = policy
     agent.execution_manager.policy = policy
+    fraud_workflow = FraudInvestigationWorkflow(
+        investigation_service=FraudInvestigationService(
+            graph_registry=graphs,
+            source_registry=sources,
+            policy=policy,
+        ),
+        execution_manager=agent.execution_manager,
+        resource_router=agent.resource_router,
+    )
+    agent.workflow_registry.register(fraud_workflow)
     return agent
 
 
@@ -96,18 +107,8 @@ def create_real_investigation_service() -> FraudInvestigationService:
 
 def create_real_investigation_workflow():
     """Compose the bounded workflow with the real registered resources."""
-    from apps.fraud.workflow import FraudInvestigationWorkflow
-
     agent = create_real_agent()
-    return FraudInvestigationWorkflow(
-        investigation_service=FraudInvestigationService(
-            graph_registry=agent.knowledge_graph_registry,
-            source_registry=agent.execution_manager.knowledge_source_registry,
-            policy=agent.policy,
-        ),
-        execution_manager=agent.execution_manager,
-        resource_router=agent.resource_router,
-    )
+    return agent.workflow_registry.get("fraud_investigation")
 
 
 __all__ = [

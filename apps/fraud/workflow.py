@@ -164,6 +164,10 @@ class FraudInvestigationPlanner:
 class FraudInvestigationWorkflow:
     """Execute a deterministic fraud plan through the existing execution path."""
 
+    name = "fraud_investigation"
+    description = "Investigate a customer for suspicious activity using registered fraud resources."
+    input_schema = {"type": "object", "required": ["query", "customer_id"]}
+
     def __init__(
         self,
         investigation_service,
@@ -188,6 +192,13 @@ class FraudInvestigationWorkflow:
         self.max_steps = max_steps
         self.max_replans = max_replans
         self.max_retries_per_step = max_retries_per_step
+
+    def execute(self, workflow_input: dict[str, Any], context: AgentContext) -> InvestigationResult:
+        return self.run(
+            workflow_input["customer_id"],
+            actor=context.user_id or "investigator",
+            request_id=context.request_id,
+        )
 
     def create_plan(self, customer_id: str, goal: str | None = None) -> InvestigationPlan:
         return self.planner.create_plan(customer_id, goal)

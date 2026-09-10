@@ -35,6 +35,26 @@ def test_ollama_provider_contract_and_configured_request():
     }]
 
 
+def test_ollama_provider_requests_json_format_when_requested():
+    client = FakeOllamaClient(
+        {"message": {"content": '{"tasks": []}'}}
+    )
+    provider = OllamaProvider(client=client)
+
+    assert provider.generate("plan", response_format="json") == '{"tasks": []}'
+    assert client.calls[0]["format"] == "json"
+
+
+def test_ollama_provider_does_not_request_format_for_normal_generation():
+    client = FakeOllamaClient(
+        {"message": {"content": "free-form response"}}
+    )
+    provider = OllamaProvider(client=client)
+
+    assert provider.generate("hello") == "free-form response"
+    assert "format" not in client.calls[0]
+
+
 def test_ollama_client_is_created_lazily(monkeypatch):
     client = FakeOllamaClient({"message": {"content": "generated"}})
     created = []

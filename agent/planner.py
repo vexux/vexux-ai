@@ -1,4 +1,5 @@
 import json
+import re
 
 from core.contracts.execution import Intent, Plan, Task
 from core.tools.registry import ToolRegistry
@@ -53,6 +54,66 @@ class Planner:
 
         return json.dumps(workflows, indent=2) if workflows else "No workflows are registered."
 
+    def _deterministic_plan(self, query: str) -> Plan | None:
+        """Select unambiguous capabilities without relying on model formatting."""
+        if self.workflow_registry is None:
+            return None
+
+        has_customer_workflow = any(
+            "customer_id" in set(item.get("input_schema", {}).get("required", []))
+            for item in self.workflow_registry.describe_workflows()
+        )
+        if not has_customer_workflow:
+            return None
+
+        normalized = query.strip().lower()
+        if re.fullmatch(r"(?:hi|hello|hey|good morning|good afternoon|good evening)[!. ]*", normalized):
+            return Plan(tasks=[Task(
+                id="task_1",
+                description="Answer the user's greeting",
+                input={"query": query},
+                metadata={"capability": "model"},
+            )])
+
+        if re.match(r"^(?:what is|what are|who is|where is|when did|define|explain)\b", normalized):
+            return Plan(tasks=[Task(
+                id="task_1",
+                description="Retrieve factual information",
+                input={"query": query},
+                metadata={"capability": "retrieval"},
+            )])
+
+        if self.workflow_registry is not None and re.search(
+            r"\binvestigat(?:e|ion|ing)\b|\bsuspicious activity\b",
+            normalized,
+        ):
+            identifier_match = re.search(r"\b[A-Z]\d+\b", query)
+            if identifier_match is not None:
+                workflow_name = None
+                for metadata in self.workflow_registry.describe_workflows():
+                    required = set(metadata.get("input_schema", {}).get("required", []))
+                    if "customer_id" in required:
+                        workflow_name = metadata["name"]
+                        break
+                if workflow_name is not None:
+                    return Plan(tasks=[Task(
+                        id="task_1",
+                        description="Run the registered customer investigation workflow",
+                        input={
+                            "workflow": workflow_name,
+                            "query": query,
+                            "customer_id": identifier_match.group(0),
+                        },
+                        metadata={"capability": "workflow", "workflow": workflow_name},
+                    )])
+
+        return None
+
+    def _workflow_guardrail(self, query: str, plan: Plan) -> Plan:
+        """Correct unambiguous model misclassification using registered metadata."""
+        deterministic = self._deterministic_plan(query)
+        return deterministic or plan
+
     def understand_intent(
         self,
         query: str,
@@ -72,6 +133,7 @@ User: {query}
             prompt,
             max_new_tokens=100,
             do_sample=False,
+            response_format="json",
         ).strip()
 
         if response.startswith("```"):
@@ -200,6 +262,11 @@ Multi-task example:
 }}
 
 Field rules:
+- General conversation, greetings, and social messages MUST use capability "model".
+- Generic factual or document questions MUST use capability "retrieval".
+- An explicitly supported customer investigation MUST use the registered workflow
+  whose input schema requires "customer_id"; do not use generic retrieval.
+- Arithmetic or another registered operation MUST use capability "tool".
 - Retrieval input MUST contain a string field named "query".
 - Retrieval input may include "source" only when it exactly matches a registered knowledge source; omit it to use the default source.
 - Model input MUST contain a string field named "query".
@@ -219,13 +286,18 @@ Field rules:
         conversation_context=None,
     ) -> Plan:
 
+        deterministic = self._deterministic_plan(query)
+        if deterministic is not None:
+            return deterministic
+
         response = self.model_gateway.generate(
             self._planning_prompt(query, conversation_context),
             max_new_tokens=500,
             do_sample=False,
+            response_format="json",
         )
 
-        return self._parse_plan(response)
+        return self._workflow_guardrail(query, self._parse_plan(response))
 
     def _parse_plan(self, response: str) -> Plan:
 
@@ -512,6 +584,7 @@ CRITICAL REQUIREMENTS:
             prompt,
             max_new_tokens=300,
             do_sample=False,
+            response_format="json",
         )
 
         plan = self._parse_plan(response)

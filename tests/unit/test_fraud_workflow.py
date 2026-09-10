@@ -14,6 +14,8 @@ from core.knowledge.graph_registry import KnowledgeGraphRegistry
 from core.knowledge.inmemory_graph import InMemoryKnowledgeGraph
 from core.knowledge.registry import KnowledgeSourceRegistry
 from core.knowledge.resource_router import ResourceRouter
+from core.workflows.registry import WorkflowRegistry
+from core.contracts.execution import AgentContext, Task
 
 
 class Source:
@@ -125,3 +127,32 @@ def test_missing_customer_and_source_failure_are_observable():
     workflow, _ = make_workflow(source=failing)
     with pytest.raises(RuntimeError, match="transactions"):
         workflow.run("C1001")
+
+
+def test_registered_fraud_workflow_executes_through_execution_manager():
+    workflow, manager = make_workflow()
+    registry = WorkflowRegistry()
+    registry.register(workflow)
+    manager.workflow_registry = registry
+
+    result = manager.execute(
+        Task(
+            id="fraud-workflow",
+            description="Investigate C1001",
+            input={
+                "workflow": "fraud_investigation",
+                "query": "Investigate C1001 for suspicious activity.",
+                "customer_id": "C1001",
+            },
+            metadata={"capability": "workflow"},
+        ),
+        AgentContext(request_id="test-request", user_id="investigator"),
+    )
+
+    assert result.success is True
+    assert result.metadata["workflow"] == "fraud_investigation"
+    assert set(result.output.resources_consulted) == {
+        "customer_graph",
+        "fraud_graph",
+        "business_db",
+    }

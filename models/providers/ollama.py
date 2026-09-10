@@ -53,6 +53,8 @@ class OllamaProvider:
         }
         if "options" in kwargs:
             request["options"] = kwargs["options"]
+        if kwargs.get("response_format") == "json":
+            request["format"] = "json"
 
         try:
             response = self._get_client().chat(**request)

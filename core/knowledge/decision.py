@@ -88,8 +88,14 @@ class KnowledgeDecision:
             # silently fallback to another capability.
             raise KeyError(f"Unknown or unavailable knowledge source: {name}")
 
-        # No explicit source: use discovery/default behavior in a deterministic order
-        # 1) If a KnowledgeSourceRegistry has a default, prefer it (preserves existing behavior)
+        # No explicit source: prefer generic RAG when available. Registered
+        # structured sources require an explicit source or validated query.
+        # 1) If RAG is available, use it as the generic fallback.
+        if self.rag is not None:
+            return KnowledgeRequest(kind="rag", query=query, source="rag", operation=operation, params=params)
+
+        # 2) If a KnowledgeSourceRegistry has a default, use it only when no
+        # generic RAG capability is available.
         if self.knowledge_source_registry is not None:
             try:
                 default = self.knowledge_source_registry.get()
@@ -97,10 +103,6 @@ class KnowledgeDecision:
             except KeyError:
                 # no registered sources available — continue discovery
                 pass
-
-        # 2) If RAG is available, use it as a fallback default
-        if self.rag is not None:
-            return KnowledgeRequest(kind="rag", query=query, source="rag", operation=operation, params=params)
 
         # 3) If a knowledge graph registry has a default graph, use it
         if self.knowledge_graph_registry is not None:

@@ -21,6 +21,7 @@ class ExecutionManager:
         knowledge_source_registry=None,
         knowledge_graph_registry=None,
         policy=None,
+        workflow_registry=None,
     ):
 
         self.retrieval = retrieval
@@ -35,6 +36,7 @@ class ExecutionManager:
         self.knowledge_graph_registry = knowledge_graph_registry
 
         self.policy = policy
+        self.workflow_registry = workflow_registry
 
         # Create a KnowledgeDecision helper to normalize retrieval requests.
         try:
@@ -85,6 +87,9 @@ class ExecutionManager:
                     context.conversation_history,
                 )
 
+            if capability == "workflow":
+                return self._execute_workflow(task, context)
+
             return ExecutionResult(
                 success=False,
                 error=(
@@ -99,6 +104,34 @@ class ExecutionManager:
                 success=False,
                 error=str(exc),
             )
+
+    def _execute_workflow(
+        self,
+        task: Task,
+        context: AgentContext,
+    ) -> ExecutionResult:
+        if self.workflow_registry is None:
+            return ExecutionResult(success=False, error="Workflow capability unavailable")
+
+        workflow_name = task.input.get("workflow")
+        try:
+            workflow = self.workflow_registry.get(workflow_name)
+        except KeyError as exc:
+            return ExecutionResult(success=False, error=str(exc))
+
+        execute = getattr(workflow, "execute", None)
+        if not callable(execute):
+            return ExecutionResult(
+                success=False,
+                error=f"Workflow '{workflow_name}' is not executable.",
+            )
+
+        output = execute(task.input, context)
+        return ExecutionResult(
+            success=True,
+            output=output,
+            metadata={"capability": "workflow", "workflow": workflow_name},
+        )
 
     def _execute_retrieval(
         self,
