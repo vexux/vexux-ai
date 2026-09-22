@@ -36,6 +36,12 @@ repository root. Explicit process environment variables take precedence over
 $env:MODEL_PROVIDER = "fake"
 ```
 
+`MODEL_PROVIDER` is required and must be one of `fake`, `ollama`, `mistral`, or
+`qwen`. Missing or invalid values produce a configuration error; Vexux never
+falls back to an unexpected remote provider. `FAKE_MODEL`, `MISTRAL_MODEL`,
+`OLLAMA_MODEL`, `QWEN_MODEL`, and `QWEN_ADAPTER_PATH` are also resolved by the
+same centralized loader.
+
 `fake` is the deterministic, credential-free provider. `ollama` is a
 zero-budget local option but requires an already-running local Ollama server
 and model. `mistral` requires `MISTRAL_API_KEY` and is not used by deterministic
@@ -103,7 +109,13 @@ with C1002 and open fraud-case context.
 $env:MODEL_PROVIDER = "fake"
 python -m pytest -q
 python -m evaluation
+python -m evaluation.benchmark --json
 ```
+
+The benchmark uses one stable scenario set for each configured provider and
+reports capability/intent, selected resources, structured-output validity,
+authorization outcomes, latency, and error category. Model/planning failures
+are distinct from deterministic authorization and identity rejection results.
 
 The live database tests are separate and are skipped unless their local
 credentials are configured:

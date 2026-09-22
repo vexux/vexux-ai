@@ -15,6 +15,8 @@ class QwenProvider:
         from transformers import AutoModelForCausalLM, AutoTokenizer
 
         self._name = "qwen"
+        self.model_name = model_name
+        self.adapter_path = adapter_path
         self._torch = torch
 
         self.device = (
@@ -48,6 +50,15 @@ class QwenProvider:
     def name(self) -> str:
 
         return self._name
+
+    @property
+    def metadata(self) -> dict[str, str]:
+        return {
+            "provider": self.name,
+            "model": self.model_name,
+            "adapter_path": self.adapter_path,
+            "runtime_mode": "local",
+        }
 
     def generate(
         self,

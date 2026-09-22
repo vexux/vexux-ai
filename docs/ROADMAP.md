@@ -21,6 +21,23 @@ Phase 4 fraud investigation workflow is completed for the bounded,
 application-specific path. Generic multi-agent expansion and broader
 governance remain outside this phase.
 
+## 1.1 Remaining delivery roadmap
+
+### PHASE 1 — Runtime & Evaluation Foundation
+- Explicit provider/model configuration with safe runtime diagnostics.
+- Reusable, provider-neutral benchmark scenarios and structured metrics.
+
+### PHASE 2 — Model Baseline & Agent Quality
+- Compare approved local model baselines and improve planning quality using
+  the Phase 1 benchmark without changing the security boundary.
+
+### PHASE 3 — Domain Adaptation / QLoRA
+- Evaluate domain adaptation and QLoRA only after the baseline is accepted.
+
+### PHASE 4 — Final Production Acceptance
+- Complete operational, security, quality, and reproducibility acceptance for
+  the production-oriented reference platform.
+
 ## 2. Completed Capabilities
 
 ### 2.1 Core Agent Architecture

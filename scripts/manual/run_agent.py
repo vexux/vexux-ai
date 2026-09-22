@@ -4,7 +4,7 @@ import logging
 
 from apps.fraud.real import create_real_agent
 from apps.fraud.identity import DEFAULT_ACTOR, validate_actor
-from core.config import get_config
+from core.config import get_config, provider_diagnostic
 
 
 LOGGER = logging.getLogger(__name__)
@@ -42,6 +42,7 @@ def main():
     print("Vexux AI Interactive Terminal")
     print("Type 'exit' or 'quit' to stop. Use '/actor investigator' or '/actor support_user'.")
     print("Resource-aware fraud queries use the real Neo4j and MySQL resources.")
+    print("Runtime:", provider_diagnostic(get_config()))
     print("=" * 60)
 
     while True:

@@ -30,6 +30,10 @@ class MistralProvider:
     def name(self) -> str:
         return self._name
 
+    @property
+    def metadata(self) -> dict[str, str]:
+        return {"provider": self.name, "model": self.model_name, "runtime_mode": "remote"}
+
     def generate(
         self,
         prompt: str,

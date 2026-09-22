@@ -12,7 +12,7 @@ from core.composition import create_agent
 from core.orchestrator import Orchestrator
 from core.audit_logger import get_events
 from core.audit_logger import emit as emit_audit
-from core.config import load_config_from_env
+from core.config import SUPPORTED_MODEL_PROVIDERS, load_config_from_env
 from core.contracts.audit import make_event
 from core.contracts.response import AgentResponse
 from core.security.redaction import redact_sensitive_data
@@ -171,8 +171,7 @@ def health():
 def ready():
     try:
         config = load_config_from_env()
-        supported = {"mistral", "qwen", "ollama", "fake"}
-        if config.model_provider not in supported:
+        if config.model_provider not in SUPPORTED_MODEL_PROVIDERS:
             raise ValueError(f"Unsupported MODEL_PROVIDER: {config.model_provider}")
         return {"status": "ready", "model_provider": config.model_provider}
     except ValueError as exc:

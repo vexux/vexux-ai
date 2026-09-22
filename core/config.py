@@ -13,6 +13,7 @@ from dotenv import dotenv_values
 
 
 _ENV_FILE = Path(__file__).resolve().parents[1] / ".env"
+SUPPORTED_MODEL_PROVIDERS = frozenset({"fake", "ollama", "mistral", "qwen"})
 
 
 def _local_env_values() -> dict[str, str]:
@@ -53,10 +54,14 @@ def _parse_int(value: Optional[str], default: int, min_value: int = 1, max_value
 
 @dataclass
 class Config:
-    model_provider: str = "mistral"
+    model_provider: str = "fake"
+    fake_model: str = "fake-model"
+    mistral_model: str = "mistral-small-latest"
     mistral_api_key: Optional[str] = None
     ollama_host: str = "http://127.0.0.1:11434"
     ollama_model: str = "llama3.2"
+    qwen_model: str = "Qwen/Qwen2.5-0.5B-Instruct"
+    qwen_adapter_path: str = "models/checkpoints"
     autonomous_delegation_enabled: bool = False
     max_autonomous_delegations: int = 4
     max_parallel_tasks: int = 1
@@ -79,9 +84,12 @@ class Config:
     def __repr__(self) -> str:  # pragma: no cover - trivial
         return (
             f"Config(model_provider={self.model_provider!r}, "
+            f"fake_model={self.fake_model!r}, "
+            f"mistral_model={self.mistral_model!r}, "
             f"mistral_api_key={'<set>' if self.mistral_api_key else None}, "
             f"ollama_host={self.ollama_host!r}, "
             f"ollama_model={self.ollama_model!r}, "
+            f"qwen_model={self.qwen_model!r}, "
             f"autonomous_delegation_enabled={self.autonomous_delegation_enabled!r}, "
             f"max_autonomous_delegations={self.max_autonomous_delegations!r}, "
             f"max_parallel_tasks={self.max_parallel_tasks!r}, "
@@ -104,10 +112,27 @@ def load_config_from_env(prefix: str = "") -> Config:
             return process_value
         return local_values.get(key)
 
-    model_provider = e("MODEL_PROVIDER") or "mistral"
+    model_provider_value = e("MODEL_PROVIDER")
+    if not model_provider_value or not model_provider_value.strip():
+        raise ValueError(
+            "MODEL_PROVIDER must be explicitly configured as one of: "
+            + ", ".join(sorted(SUPPORTED_MODEL_PROVIDERS))
+            + ". Set it in the process environment or repository .env."
+        )
+    model_provider = model_provider_value.strip().lower()
+    if model_provider not in SUPPORTED_MODEL_PROVIDERS:
+        raise ValueError(
+            f"Unsupported MODEL_PROVIDER '{model_provider_value}'. Expected one of: "
+            + ", ".join(sorted(SUPPORTED_MODEL_PROVIDERS))
+            + "."
+        )
+    fake_model = e("FAKE_MODEL") or "fake-model"
+    mistral_model = e("MISTRAL_MODEL") or "mistral-small-latest"
     mistral_api_key = e("MISTRAL_API_KEY") or None
     ollama_host = e("OLLAMA_HOST") or "http://127.0.0.1:11434"
     ollama_model = e("OLLAMA_MODEL") or "llama3.2"
+    qwen_model = e("QWEN_MODEL") or "Qwen/Qwen2.5-0.5B-Instruct"
+    qwen_adapter_path = e("QWEN_ADAPTER_PATH") or "models/checkpoints"
 
     autonomous_delegation_enabled = _parse_bool(e("ENABLE_AUTONOMOUS_DELEGATION"))
 
@@ -132,10 +157,14 @@ def load_config_from_env(prefix: str = "") -> Config:
     local_rag_inference_enabled = _parse_bool(e("ENABLE_LOCAL_RAG_INFERENCE"))
 
     return Config(
-        model_provider=model_provider.lower(),
+        model_provider=model_provider,
+        fake_model=fake_model,
+        mistral_model=mistral_model,
         mistral_api_key=mistral_api_key,
         ollama_host=ollama_host,
         ollama_model=ollama_model,
+        qwen_model=qwen_model,
+        qwen_adapter_path=qwen_adapter_path,
         autonomous_delegation_enabled=autonomous_delegation_enabled,
         max_autonomous_delegations=max_autonomous_delegations,
         max_parallel_tasks=max_parallel_tasks,
@@ -164,9 +193,13 @@ _cached_env_snapshot: Optional[tuple] = None
 def _env_snapshot(prefix: str = "") -> tuple:
     keys = [
         "MODEL_PROVIDER",
+        "FAKE_MODEL",
+        "MISTRAL_MODEL",
         "MISTRAL_API_KEY",
         "OLLAMA_HOST",
         "OLLAMA_MODEL",
+        "QWEN_MODEL",
+        "QWEN_ADAPTER_PATH",
         "ENABLE_AUTONOMOUS_DELEGATION",
         "MAX_AUTONOMOUS_DELEGATIONS",
         "AGENT_MAX_PARALLEL_TASKS",
@@ -204,3 +237,29 @@ def get_config() -> Config:
     _cached_config = cfg
     _cached_env_snapshot = snapshot
     return cfg
+
+
+def provider_diagnostic(config: Config | None = None) -> dict[str, str]:
+    """Return safe runtime provider metadata; never include credentials."""
+    active = config or get_config()
+    diagnostic = {
+        "provider": active.model_provider,
+        "runtime_mode": (
+            "deterministic"
+            if active.model_provider == "fake"
+            else "local"
+            if active.model_provider in {"ollama", "qwen"}
+            else "remote"
+        ),
+    }
+    if active.model_provider == "fake":
+        diagnostic["model"] = getattr(active, "fake_model", "fake-model")
+    elif active.model_provider == "ollama":
+        diagnostic["model"] = getattr(active, "ollama_model", "llama3.2")
+        diagnostic["host"] = getattr(active, "ollama_host", "http://127.0.0.1:11434")
+    elif active.model_provider == "mistral":
+        diagnostic["model"] = getattr(active, "mistral_model", "mistral-small-latest")
+    elif active.model_provider == "qwen":
+        diagnostic["model"] = getattr(active, "qwen_model", "Qwen/Qwen2.5-0.5B-Instruct")
+        diagnostic["adapter_path"] = getattr(active, "qwen_adapter_path", "models/checkpoints")
+    return diagnostic

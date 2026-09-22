@@ -46,16 +46,13 @@ def create_agent():
     # Load centralized configuration
     from core.config import get_config
     config = get_config()
-    provider_name = (config.model_provider or "mistral").lower()
+    provider_name = config.model_provider
 
     if provider_name == "mistral":
         from models.providers.mistral import MistralProvider
 
         provider = MistralProvider(
-            model_name=os.getenv(
-                "MISTRAL_MODEL",
-                "mistral-small-latest",
-            ),
+            model_name=config.mistral_model,
             api_key=config.mistral_api_key,
         )
 
@@ -63,11 +60,8 @@ def create_agent():
         from models.providers.qwen import QwenProvider
 
         provider = QwenProvider(
-            model_name=os.getenv(
-                "QWEN_MODEL",
-                "Qwen/Qwen2.5-0.5B-Instruct",
-            ),
-            adapter_path="models/checkpoints",
+            model_name=config.qwen_model,
+            adapter_path=config.qwen_adapter_path,
         )
 
     elif provider_name == "ollama":
@@ -82,7 +76,7 @@ def create_agent():
         # Deterministic fake provider for local testing and portability
         try:
             from models.providers.fake import FakeProvider
-            provider = FakeProvider(model_name=os.getenv("FAKE_MODEL", "fake-model"))
+            provider = FakeProvider(model_name=config.fake_model)
         except Exception as exc:
             raise ValueError(f"Failed to initialize fake provider: {exc}") from exc
 

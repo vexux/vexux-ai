@@ -25,6 +25,15 @@ class OllamaProvider:
     def name(self) -> str:
         return self._name
 
+    @property
+    def metadata(self) -> dict[str, str]:
+        return {
+            "provider": self.name,
+            "model": self.model_name,
+            "host": self.host,
+            "runtime_mode": "local",
+        }
+
     def _get_client(self) -> Any:
         if self._client is None:
             try:

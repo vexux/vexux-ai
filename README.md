@@ -111,9 +111,12 @@ Copy-Item .env.example .env
 ```
 
 The centralized loader reads the repository `.env`; explicit process
-environment variables take precedence. Use `MODEL_PROVIDER=fake` for
-credential-free deterministic tests. Ollama, Mistral, and Qwen are optional
-provider paths; no provider service or model download is required for tests.
+environment variables take precedence. `MODEL_PROVIDER` is required and must
+be one of `fake`, `ollama`, `mistral`, or `qwen`; invalid or missing values
+fail configuration instead of selecting a remote provider implicitly. Use
+`MODEL_PROVIDER=fake` for credential-free deterministic tests. Ollama, Mistral,
+and Qwen are optional provider paths; no provider service or model download is
+required for tests.
 
 ## Knowledge graph backends
 
@@ -197,7 +200,19 @@ python -m pytest tests/live/test_fraud_databases.py -q
 
 ## Model Provider Configuration
 
-Mistral is the default provider:
+Provider selection is explicit. The active provider and non-secret model
+metadata can be checked with:
+
+```powershell
+$env:MODEL_PROVIDER = "fake"
+Invoke-RestMethod http://127.0.0.1:8000/ready
+```
+
+The response never includes API keys, passwords, or tokens. Model settings are
+read centrally from `.env` or process variables, with process variables taking
+precedence.
+
+For Mistral:
 
 ```powershell
 $env:MODEL_PROVIDER = "mistral"
@@ -221,6 +236,17 @@ Qwen remains available through its existing local adapter path. The Mistral prov
 Provider roles are intentionally explicit: `fake` is for deterministic tests,
 Ollama is the zero-budget local runtime option, Mistral is an optional external
 provider, and Qwen is an optional existing local provider.
+
+The reusable benchmark runs the same scenario set against the configured
+provider/model:
+
+```powershell
+python -m evaluation.benchmark --json
+```
+
+It records structured planning, routing, authorization, and latency metrics.
+Provider/model failures are reported separately from deterministic
+authorization failures.
 
 ## Running the Agent
 

@@ -39,3 +39,12 @@ class ModelGateway:
             duration_ms=duration_ms(start),
         )
         return result
+
+    def provider_metadata(self) -> dict[str, str]:
+        """Return non-secret metadata for the active provider."""
+        metadata = getattr(self.provider, "metadata", None)
+        if isinstance(metadata, dict):
+            allowed = {"provider", "model", "runtime_mode", "host", "adapter_path"}
+            return {key: str(value) for key, value in metadata.items() if key in allowed}
+        name = self.provider.name
+        return {"provider": name() if callable(name) else name, "runtime_mode": "unknown"}
