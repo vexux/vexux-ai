@@ -5,11 +5,13 @@ import core.config as config_module
 
 
 def test_default_config(monkeypatch):
-    # Ensure no env variables
+    # Keep this test independent of the repository's private .env.
+    monkeypatch.setenv("MODEL_PROVIDER", "fake")
     for k in ["MODEL_PROVIDER","ENABLE_AUTONOMOUS_DELEGATION","MAX_AUTONOMOUS_DELEGATIONS","AGENT_MAX_PARALLEL_TASKS","PERSISTENT_MEMORY_DB","ENABLE_KNOWLEDGE_GRAPH","ENABLE_LOCAL_RAG_INFERENCE"]:
-        monkeypatch.delenv(k, raising=False)
+        if k != "MODEL_PROVIDER":
+            monkeypatch.delenv(k, raising=False)
     cfg = load_config_from_env()
-    assert cfg.model_provider == "mistral"
+    assert cfg.model_provider == "fake"
     assert cfg.autonomous_delegation_enabled is False
     assert cfg.max_autonomous_delegations == 4
     assert cfg.max_parallel_tasks == 1
@@ -114,10 +116,13 @@ def test_fresh_process_loads_dotenv_configuration(tmp_path):
     import subprocess
     import sys
 
+    child_env = os.environ.copy()
+    child_env.pop("MODEL_PROVIDER", None)
     result = subprocess.run(
         [sys.executable, "-c", script],
         capture_output=True,
         text=True,
+        env=child_env,
         check=True,
     )
 

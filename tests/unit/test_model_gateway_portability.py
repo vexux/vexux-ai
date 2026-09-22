@@ -1,10 +1,8 @@
-import os
-
 from core.model_gateway.gateway import ModelGateway
 
 
-def test_fake_provider_integration():
-    os.environ.setdefault("MODEL_PROVIDER", "fake")
+def test_fake_provider_integration(monkeypatch):
+    monkeypatch.setenv("MODEL_PROVIDER", "fake")
     # Import composition to build provider via env
     from core.composition import create_agent
     agent = create_agent()

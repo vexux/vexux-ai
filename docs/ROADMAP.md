@@ -23,11 +23,11 @@ governance remain outside this phase.
 
 ## 1.1 Remaining delivery roadmap
 
-### PHASE 1 — Runtime & Evaluation Foundation
+### PHASE 1 — Runtime & Evaluation Foundation — COMPLETE
 - Explicit provider/model configuration with safe runtime diagnostics.
 - Reusable, provider-neutral benchmark scenarios and structured metrics.
 
-### PHASE 2 — Model Baseline & Agent Quality
+### PHASE 2 — Model Baseline & Agent Quality — COMPLETE
 - Completed a controlled local Ollama comparison using `phi3:latest` and
   `qwen3:4b` against the same 13 benchmark scenarios and two repetitions.
 - Both models passed 26/26 expected scenario outcomes with zero deterministic
@@ -40,12 +40,13 @@ governance remain outside this phase.
   and quality should be revisited with a broader approved workload before
   domain adaptation.
 
-### PHASE 3 — Domain Adaptation / QLoRA
-- Evaluate domain adaptation and QLoRA only after the baseline is accepted.
-
-### PHASE 4 — Final Production Acceptance
-- Complete operational, security, quality, and reproducibility acceptance for
-  the production-oriented reference platform.
+### PHASE 3 — Final Production Acceptance & Freeze — COMPLETE
+- Configuration tests are independent of private `.env` values.
+- Offline regression, evaluation, security, identity, authorization, and
+  deterministic fraud workflow validation are complete.
+- Local Ollama with `phi3:latest` is the manual development runtime.
+- Live Neo4j/MySQL checks remain dependent on the corresponding local services.
+- Authentication remains outside the Vexux application boundary.
 
 ## 2. Completed Capabilities
 

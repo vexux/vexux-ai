@@ -27,8 +27,9 @@ API or local caller
         -> ToolRegistry / tools
         -> KnowledgeSourceRegistry -> RAGKnowledgeSource -> RAGPipeline.retrieve()
         -> ModelGateway
-            -> MistralProvider (default)
-            -> QwenProvider (local fallback)
+            -> OllamaProvider (local development runtime)
+            -> MistralProvider (optional remote provider)
+            -> QwenProvider (optional local path)
     -> Observer
     -> DecisionMaker
     -> Replanner when necessary
@@ -172,7 +173,8 @@ The real application requires local Neo4j and MySQL; it never falls back to
 the synthetic demo. Set these variables without committing credentials:
 
 ```powershell
-$env:MODEL_PROVIDER = "mistral"
+$env:MODEL_PROVIDER = "ollama"
+$env:OLLAMA_MODEL = "phi3:latest"
 $env:NEO4J_URI = "bolt://localhost:7687"
 $env:NEO4J_USERNAME = "neo4j"
 $env:NEO4J_PASSWORD = "<local Neo4j password>"
@@ -190,6 +192,10 @@ Start the real interactive application with:
 ```powershell
 python -m scripts.manual.run_agent
 ```
+
+The repository's local development configuration uses Ollama with
+`phi3:latest`. Mistral remains supported as an explicitly selected provider,
+but is not the local manual-agent default and has no automatic fallback path.
 
 Live local integration tests are in `tests/live/test_fraud_databases.py` and
 run only when the required local credentials are configured:

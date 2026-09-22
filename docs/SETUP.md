@@ -42,10 +42,12 @@ falls back to an unexpected remote provider. `FAKE_MODEL`, `MISTRAL_MODEL`,
 `OLLAMA_MODEL`, `QWEN_MODEL`, and `QWEN_ADAPTER_PATH` are also resolved by the
 same centralized loader.
 
-`fake` is the deterministic, credential-free provider. `ollama` is a
-zero-budget local option but requires an already-running local Ollama server
-and model. `mistral` requires `MISTRAL_API_KEY` and is not used by deterministic
-tests. `qwen` requires the existing local adapter/model files and is optional.
+`fake` is the deterministic, credential-free provider. The repository's local
+development `.env` selects `ollama` with `OLLAMA_MODEL=phi3:latest`; this
+requires an already-running local Ollama server and installed model. `mistral`
+requires `MISTRAL_API_KEY` and remains an explicitly selected optional remote
+provider, with no automatic fallback. `qwen` requires the existing local
+adapter/model files and is optional.
 
 The live Mistral test is opt-in only:
 

@@ -97,7 +97,7 @@ move factual correlation into a model.
 │                     DATA / CAPABILITY LAYER                     │
 │                                                                 │
 │  - RAG Pipeline (DocumentLoader, Chunker, Embedder, FAISS, ...) │
-│  - Model Providers (QwenProvider with PEFT LoRA adapter)        │
+│  - Model Providers (Ollama, Mistral, and optional Qwen adapter) │
 │  - Training & Fine-Tuning (SFTTrainer, LoRAManager, Datasets)   │
 │  - Concrete Tools (CalculatorTool)                              │
 └─────────────────────────────────────────────────────────────────┘
