@@ -45,6 +45,15 @@ def test_ollama_provider_requests_json_format_when_requested():
     assert client.calls[0]["format"] == "json"
 
 
+def test_ollama_provider_maps_generation_bounds_to_local_options():
+    client = FakeOllamaClient({"message": {"content": "bounded"}})
+    provider = OllamaProvider(client=client)
+
+    provider.generate("plan", max_new_tokens=80, do_sample=False)
+
+    assert client.calls[0]["options"] == {"num_predict": 80, "temperature": 0}
+
+
 def test_ollama_provider_does_not_request_format_for_normal_generation():
     client = FakeOllamaClient(
         {"message": {"content": "free-form response"}}

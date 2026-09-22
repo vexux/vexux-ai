@@ -28,8 +28,17 @@ governance remain outside this phase.
 - Reusable, provider-neutral benchmark scenarios and structured metrics.
 
 ### PHASE 2 — Model Baseline & Agent Quality
-- Compare approved local model baselines and improve planning quality using
-  the Phase 1 benchmark without changing the security boundary.
+- Completed a controlled local Ollama comparison using `phi3:latest` and
+  `qwen3:4b` against the same 13 benchmark scenarios and two repetitions.
+- Both models passed 26/26 expected scenario outcomes with zero deterministic
+  or intermittent failures in the repeatability run.
+- Targeted deterministic guardrails now cover greetings, arithmetic, factual
+  retrieval, and registered fraud investigation workflow selection.
+- The SQLite fixture accepts the MySQL-style placeholders used by the shared
+  fraud workflow; this is a backend compatibility fix, not a security change.
+- No model was selected as superior on this bounded result; measured latency
+  and quality should be revisited with a broader approved workload before
+  domain adaptation.
 
 ### PHASE 3 — Domain Adaptation / QLoRA
 - Evaluate domain adaptation and QLoRA only after the baseline is accepted.

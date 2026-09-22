@@ -58,7 +58,6 @@ class Planner:
         """Select unambiguous capabilities without relying on model formatting."""
         if self.workflow_registry is None:
             return None
-
         has_customer_workflow = any(
             "customer_id" in set(item.get("input_schema", {}).get("required", []))
             for item in self.workflow_registry.describe_workflows()
@@ -69,15 +68,30 @@ class Planner:
         normalized = query.strip().lower()
         if re.fullmatch(r"(?:hi|hello|hey|good morning|good afternoon|good evening)[!. ]*", normalized):
             return Plan(tasks=[Task(
-                id="task_1",
+                id="task-1",
                 description="Answer the user's greeting",
                 input={"query": query},
                 metadata={"capability": "model"},
             )])
 
+        calculation = re.fullmatch(
+            r"(?:calculate|compute|what is)\s+([0-9\s()+\-*/%.]+)[?.! ]*",
+            normalized,
+        )
+        if calculation and re.search(r"\d", calculation.group(1)):
+            return Plan(tasks=[Task(
+                id="task-1",
+                description="Calculate the requested expression",
+                input={
+                    "tool": "calculator",
+                    "arguments": {"expression": calculation.group(1).strip()},
+                },
+                metadata={"capability": "tool"},
+            )])
+
         if re.match(r"^(?:what is|what are|who is|where is|when did|define|explain)\b", normalized):
             return Plan(tasks=[Task(
-                id="task_1",
+                id="task-1",
                 description="Retrieve factual information",
                 input={"query": query},
                 metadata={"capability": "retrieval"},
@@ -97,7 +111,7 @@ class Planner:
                         break
                 if workflow_name is not None:
                     return Plan(tasks=[Task(
-                        id="task_1",
+                        id="task-1",
                         description="Run the registered customer investigation workflow",
                         input={
                             "workflow": workflow_name,

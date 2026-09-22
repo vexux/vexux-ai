@@ -60,8 +60,17 @@ class OllamaProvider:
             "model": self.model_name,
             "messages": [{"role": "user", "content": prompt}],
         }
-        if "options" in kwargs:
-            request["options"] = kwargs["options"]
+        options = dict(kwargs.get("options") or {})
+        if "max_new_tokens" in kwargs:
+            options.setdefault("num_predict", kwargs["max_new_tokens"])
+        elif "max_tokens" in kwargs:
+            options.setdefault("num_predict", kwargs["max_tokens"])
+        if "temperature" in kwargs:
+            options.setdefault("temperature", kwargs["temperature"])
+        elif kwargs.get("do_sample") is False:
+            options.setdefault("temperature", 0)
+        if options:
+            request["options"] = options
         if kwargs.get("response_format") == "json":
             request["format"] = "json"
 

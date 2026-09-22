@@ -116,6 +116,15 @@ The benchmark uses one stable scenario set for each configured provider and
 reports capability/intent, selected resources, structured-output validity,
 authorization outcomes, latency, and error category. Model/planning failures
 are distinct from deterministic authorization and identity rejection results.
+For the Phase 2 local comparison, run:
+
+```powershell
+python -m evaluation.benchmark --models phi3:latest qwen3:4b `
+  --repetitions 2 --json --output phase2-results.json
+```
+
+The deterministic demo composition supplies the graph and SQLite fixtures.
+Use `--composition real` only when local Neo4j and MySQL are running.
 
 The live database tests are separate and are skipped unless their local
 credentials are configured:

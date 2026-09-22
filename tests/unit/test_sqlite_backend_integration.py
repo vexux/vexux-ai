@@ -108,3 +108,13 @@ def test_sql_authorization_denies_before_backend_execution(tmp_path):
     )
     assert result.success is False
     assert "Unauthorized access to knowledge source" in result.error
+
+
+def test_sqlite_backend_accepts_mysql_style_positional_placeholders(tmp_path):
+    database = tmp_path / "business.db"
+    build_database(database)
+    rows = SQLiteBackend(str(database)).execute(
+        "SELECT customer_id FROM customers WHERE customer_id = %s",
+        ("C1001",),
+    )
+    assert rows == [{"customer_id": "C1001"}]

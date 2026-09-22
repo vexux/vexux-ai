@@ -25,7 +25,10 @@ class SQLiteBackend:
         connection = self._connect()
         try:
             connection.row_factory = sqlite3.Row
-            cursor = connection.execute(query, parameters or {})
+            # The fraud workflow uses MySQL-style positional placeholders;
+            # normalize them for the deterministic SQLite fixture.
+            sqlite_query = query.replace("%s", "?")
+            cursor = connection.execute(sqlite_query, parameters or {})
             return [dict(row) for row in cursor.fetchall()]
         except sqlite3.Error as exc:
             raise RuntimeError("SQLite query failed.") from exc

@@ -241,12 +241,15 @@ The reusable benchmark runs the same scenario set against the configured
 provider/model:
 
 ```powershell
-python -m evaluation.benchmark --json
+python -m evaluation.benchmark --models phi3:latest qwen3:4b `
+  --repetitions 2 --json --output phase2-results.json
 ```
 
 It records structured planning, routing, authorization, and latency metrics.
 Provider/model failures are reported separately from deterministic
-authorization failures.
+authorization failures. The Phase 2 local comparison uses the deterministic
+fraud demo composition; use `--composition real` only when local Neo4j and
+MySQL are available.
 
 ## Running the Agent
 
