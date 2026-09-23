@@ -3,6 +3,7 @@ import traceback
 
 from core.contracts.evidence import Evidence, EvidenceSet
 from core.knowledge.multi_graph import execute_multi_graph_request
+from core.observability import classify_error, duration_ms, log_event, timed
 
 from core.contracts.execution import (
     AgentContext,
@@ -51,6 +52,32 @@ class ExecutionManager:
         ) if KnowledgeDecision is not None else None
 
     def execute(
+        self,
+        task: Task,
+        context: AgentContext,
+    ) -> ExecutionResult:
+        start = timed()
+        result = self._execute_internal(task, context)
+        metadata = result.metadata if isinstance(result.metadata, dict) else {}
+        resource = task.metadata.get("resource") or task.input.get("source")
+        log_event(
+            "execution.completed",
+            request_id=context.request_id,
+            session_id=context.session_id,
+            actor=context.user_id,
+            task_id=task.id,
+            capability=task.metadata.get("capability"),
+            resource=resource,
+            action=task.input.get("operation") or task.input.get("action") or "execute",
+            success=result.success,
+            duration_ms=duration_ms(start),
+            error_category=classify_error(result.error) if result.error else None,
+            authorization_decision="denied" if metadata.get("authorization_denied") else None,
+            error=result.error,
+        )
+        return result
+
+    def _execute_internal(
         self,
         task: Task,
         context: AgentContext,

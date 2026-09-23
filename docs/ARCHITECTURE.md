@@ -42,6 +42,14 @@ events are centrally redacted before storage. Fraud-specific restrictions
 remain in `apps/fraud/`; the generic policy only rejects malformed or unknown
 resource/action requests.
 
+Observability consists of live structured logging and in-memory execution
+state, audit events, trace data, and a local SQLite store containing sanitized
+records plus derived runtime metrics. This is local persistent observability,
+not a distributed OpenTelemetry, ELK, or Grafana platform.
+The path is configured with `OBSERVABILITY_DB_PATH` and defaults to
+`data/observability/vexux_observability.db`; writes are best-effort and cannot
+interrupt agent execution.
+
 Neo4j owns relationship-oriented entities and traversal. MySQL owns
 operational records such as transactions, alerts, investigations, and event
 metadata. SQLite and in-memory graphs remain available for deterministic tests

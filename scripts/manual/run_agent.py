@@ -5,9 +5,44 @@ import logging
 from apps.fraud.real import create_real_agent
 from apps.fraud.identity import DEFAULT_ACTOR, validate_actor
 from core.config import get_config, provider_diagnostic
+from core.observability_store import get_observability_store
 
 
 LOGGER = logging.getLogger(__name__)
+
+
+def _handle_observability_command(query: str, store) -> bool:
+    command = query.lower()
+    if command not in {"/trace", "/audit", "/metrics"}:
+        return False
+    if command == "/trace":
+        rows = store.recent(10, event_type="execution.completed")
+        for row in rows:
+            outcome = "success" if row["success"] else "failure"
+            print(
+                f"{row['request_id'] or '-'} | {row['task_id'] or '-'} | "
+                f"{row['capability'] or '-'} | {row['resource'] or '-'} | "
+                f"{outcome} | {row['duration_ms'] or 0}ms"
+            )
+    elif command == "/audit":
+        rows = store.recent(10)
+        for row in rows:
+            if row["event_type"].startswith("execution."):
+                continue
+            print(
+                f"{row['timestamp']} | {row['actor'] or '-'} | "
+                f"{row['resource'] or '-'} | {row['action'] or '-'} | "
+                f"{row['authorization_decision'] or '-'}"
+            )
+    else:
+        values = store.aggregate_metrics()
+        print(
+            f"requests={values['total_requests']} "
+            f"successes={values['successes']} failures={values['failures']} "
+            f"authorization_denials={values['authorization_denials']} "
+            f"average_duration_ms={values['average_duration_ms']}"
+        )
+    return True
 
 
 def _provider_error_message(error: RuntimeError) -> str:
@@ -37,6 +72,9 @@ def main():
     agent = create_real_agent()
     actor = DEFAULT_ACTOR
     session_id = "terminal-session"
+    store = get_observability_store(
+        getattr(get_config(), "observability_db_path", None)
+    )
 
     print("=" * 60)
     print("Vexux AI Interactive Terminal")
@@ -51,6 +89,9 @@ def main():
         if query.lower() in {"exit", "quit"}:
             print("Exiting...")
             break
+
+        if _handle_observability_command(query, store):
+            continue
 
         if query.lower().startswith("/actor "):
             requested_actor = query.split(None, 1)[1].strip()

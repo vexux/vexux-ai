@@ -64,6 +64,11 @@ def log_event(event: str, **fields: Any) -> None:
     """Emit bounded, redacted structured fields without prompts or payloads."""
     safe = redact_sensitive_data(fields)
     logger.info(event, extra={"event": event, **safe})
+    try:
+        from core.observability_store import get_observability_store
+        get_observability_store().persist(event, **safe)
+    except Exception as exc:
+        logger.warning("Observability persistence unavailable: %s", type(exc).__name__)
 
 
 def timed() -> float:

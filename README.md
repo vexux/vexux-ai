@@ -76,6 +76,14 @@ flowchart TD
 - Grounded response synthesis for retrieval and multi-task results.
 - Bounded in-memory conversation state by `session_id`.
 - FastAPI API and structured task observability.
+- Local persistent SQLite observability for sanitized audit events, execution
+  traces, and derived metrics. This is not a distributed OpenTelemetry,
+  ELK, or Grafana platform.
+
+Set `OBSERVABILITY_DB_PATH` to change the local store location; the default is
+`data/observability/vexux_observability.db`. The manual runner provides
+`/audit`, `/trace`, and `/metrics` commands for compact inspection across
+process restarts.
 - Deterministic pytest coverage and a 44-case evaluation suite.
 
 ## Repository Structure

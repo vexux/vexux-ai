@@ -66,6 +66,7 @@ class Config:
     max_autonomous_delegations: int = 4
     max_parallel_tasks: int = 1
     persistent_memory_db: Optional[str] = None
+    observability_db_path: str = "data/observability/vexux_observability.db"
     knowledge_graph_enabled: bool = False
     neo4j_uri: Optional[str] = None
     neo4j_username: Optional[str] = None
@@ -141,6 +142,7 @@ def load_config_from_env(prefix: str = "") -> Config:
     max_parallel_tasks = _parse_int(e("AGENT_MAX_PARALLEL_TASKS"), default=1, min_value=1, max_value=32)
 
     persistent_memory_db = e("PERSISTENT_MEMORY_DB") or None
+    observability_db_path = e("OBSERVABILITY_DB_PATH") or "data/observability/vexux_observability.db"
 
     knowledge_graph_enabled = _parse_bool(e("ENABLE_KNOWLEDGE_GRAPH"))
     neo4j_uri = e("NEO4J_URI") or None
@@ -169,6 +171,7 @@ def load_config_from_env(prefix: str = "") -> Config:
         max_autonomous_delegations=max_autonomous_delegations,
         max_parallel_tasks=max_parallel_tasks,
         persistent_memory_db=persistent_memory_db,
+        observability_db_path=observability_db_path,
         knowledge_graph_enabled=knowledge_graph_enabled,
         neo4j_uri=neo4j_uri,
         neo4j_username=neo4j_username,
@@ -204,6 +207,7 @@ def _env_snapshot(prefix: str = "") -> tuple:
         "MAX_AUTONOMOUS_DELEGATIONS",
         "AGENT_MAX_PARALLEL_TASKS",
         "PERSISTENT_MEMORY_DB",
+        "OBSERVABILITY_DB_PATH",
         "ENABLE_KNOWLEDGE_GRAPH",
         "NEO4J_URI",
         "NEO4J_USERNAME",
