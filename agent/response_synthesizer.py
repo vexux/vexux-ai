@@ -48,6 +48,9 @@ class ResponseSynthesizer:
             and not conversation_context
             and not has_structured_retrieval
         ):
+            formatter = getattr(successful_outputs[0], "to_user_text", None)
+            if callable(formatter):
+                return formatter(one_line="one line" in query.lower())
             return str(
                 successful_outputs[0]
             )

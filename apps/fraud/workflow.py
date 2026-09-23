@@ -12,6 +12,7 @@ from core.audit_logger import emit
 from core.contracts.audit import make_event
 from core.contracts.evidence import Evidence, EvidenceSet
 from core.contracts.execution import AgentContext, ExecutionResult, Task
+from core.contracts.workflow import WorkflowExecutionError
 from core.observability import (
     classify_error,
     duration_ms,
@@ -201,11 +202,23 @@ class FraudInvestigationWorkflow:
             ("knowledge_source", "business_db"),
         ):
             self.service._authorize(actor, resource_type, resource_name)
-        return self.run(
-            workflow_input["customer_id"],
-            actor=actor,
-            request_id=context.request_id,
-        )
+        try:
+            return self.run(
+                workflow_input["customer_id"],
+                actor=actor,
+                request_id=context.request_id,
+            )
+        except PermissionError:
+            raise
+        except Exception as exc:
+            raise WorkflowExecutionError(
+                "Fraud investigation could not be completed because the required "
+                "fraud data source is unavailable.",
+                terminal=True,
+                retryable=False,
+                authoritative=True,
+                failure_category="infrastructure",
+            ) from exc
 
     def create_plan(self, customer_id: str, goal: str | None = None) -> InvestigationPlan:
         return self.planner.create_plan(customer_id, goal)

@@ -4,6 +4,7 @@ import traceback
 from core.contracts.evidence import Evidence, EvidenceSet
 from core.knowledge.multi_graph import execute_multi_graph_request
 from core.observability import classify_error, duration_ms, log_event, timed
+from core.contracts.workflow import WorkflowExecutionError
 
 from core.contracts.execution import (
     AgentContext,
@@ -160,6 +161,19 @@ class ExecutionManager:
                 success=False,
                 error=str(exc),
                 metadata={"capability": "workflow", "workflow": workflow_name, "authorization_denied": True},
+            )
+        except WorkflowExecutionError as exc:
+            return ExecutionResult(
+                success=False,
+                error=str(exc),
+                metadata={
+                    "capability": "workflow",
+                    "workflow": workflow_name,
+                    "terminal": exc.terminal,
+                    "retryable": exc.retryable,
+                    "authoritative": exc.authoritative,
+                    "failure_category": exc.failure_category,
+                },
             )
         return ExecutionResult(
             success=True,

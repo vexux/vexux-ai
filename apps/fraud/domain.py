@@ -158,3 +158,20 @@ class InvestigationResult:
                 for item in self.supporting_evidence.items
             ],
         }
+
+    def to_user_text(self, *, one_line: bool = False) -> str:
+        """Render authoritative investigation facts without model synthesis."""
+        title = f"{self.subject.customer_id} Investigation"
+        risk = f"Risk: {self.risk_assessment.upper()}"
+        findings = list(self.findings)
+        resources = ", ".join(self.resources_consulted) or "none"
+        if one_line:
+            finding_text = "; ".join(
+                finding.rstrip(".") for finding in findings
+            ) if findings else "No findings"
+            return f"{title}: {risk.removeprefix('Risk: ')}; {finding_text}. Resources: {resources}"
+        finding_lines = "\n".join(f"- {finding}" for finding in findings) or "- No findings"
+        return (
+            f"{title}\n\n{risk}\n\nFindings:\n{finding_lines}\n\n"
+            f"Resources consulted:\n{resources}"
+        )

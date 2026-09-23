@@ -592,6 +592,22 @@ class Agent:
                                 },
                             )
 
+                        if observation.metadata.get("terminal"):
+                            return AgentResponse(
+                                success=False,
+                                output=None,
+                                error=observation.error,
+                                trace=context.observations,
+                                metadata={
+                                    "request_id": context.request_id,
+                                    "session_id": context.session_id,
+                                    "user_id": context.user_id,
+                                    "terminal": True,
+                                    "authoritative": observation.metadata.get("authoritative", False),
+                                    "failure_category": observation.metadata.get("failure_category"),
+                                },
+                            )
+
                         if observation.success:
                             executed.add(task.id)
                             self.context_manager.add_completed_task(context, task)
@@ -745,6 +761,22 @@ class Agent:
                     observation = self.observer.observe(res, task)
                     self.context_manager.add_observation(context, observation)
                     obs_map[tid] = observation
+
+                    if observation.metadata.get("terminal"):
+                        return AgentResponse(
+                            success=False,
+                            output=None,
+                            error=observation.error,
+                            trace=context.observations,
+                            metadata={
+                                "request_id": context.request_id,
+                                "session_id": context.session_id,
+                                "user_id": context.user_id,
+                                "terminal": True,
+                                "authoritative": observation.metadata.get("authoritative", False),
+                                "failure_category": observation.metadata.get("failure_category"),
+                            },
+                        )
 
                     if observation.success:
                         executed.add(tid)
