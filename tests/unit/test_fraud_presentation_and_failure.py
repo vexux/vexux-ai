@@ -148,6 +148,29 @@ def test_unavailable_fraud_resource_is_terminal_and_not_model_synthesized(monkey
     assert response.metadata["failure_category"] == "infrastructure"
 
 
+def test_missing_customer_is_not_misreported_as_infrastructure_failure(monkeypatch):
+    with create_demo_agent() as agent:
+        monkeypatch.setattr(
+            agent.planner.model_gateway,
+            "generate",
+            lambda *args, **kwargs: "The customer is high risk.",
+        )
+        response = agent.run(
+            "Investigate C9999",
+            session_id="missing-customer",
+            user_id="investigator",
+        )
+
+    assert response.success is False
+    assert response.output is None
+    assert response.error == (
+        "The requested customer was not found in the authoritative customer graph."
+    )
+    assert response.metadata["terminal"] is True
+    assert response.metadata["authoritative"] is True
+    assert response.metadata["failure_category"] == "not_found"
+
+
 def test_generic_terminal_workflow_failure_is_not_replanned():
     planner = _Planner()
     agent = Agent(

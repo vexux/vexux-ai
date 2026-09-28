@@ -104,7 +104,10 @@ docs/                     Architecture, contracts, and roadmap documentation
 test_*.py                 Pytest unit and integration tests
 ```
 
-RAG documents are read from `data/documents/`. The Qwen fallback uses the local adapter at `models/checkpoints`.
+Generic RAG documents are read from `data/documents/`; the fraud application
+loads its reference-only corpus from `apps/fraud/knowledge/`. RAG uses the
+existing local BGE/FAISS pipeline and does not replace operational fraud
+evidence. The Qwen fallback uses the local adapter at `models/checkpoints`.
 
 ## Local setup
 

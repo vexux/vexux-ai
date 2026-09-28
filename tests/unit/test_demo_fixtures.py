@@ -1,4 +1,5 @@
 from apps.fraud.demo import create_demo_agent
+from apps.fraud.demo import FRAUD_KNOWLEDGE_DIR
 from types import SimpleNamespace
 import sqlite3
 from pathlib import Path
@@ -62,15 +63,17 @@ def test_demo_provider_defaults_only_when_environment_is_absent(monkeypatch):
         knowledge_graph_registry=None,
     )
 
-    def fake_create_agent():
-        observed.append(__import__("os").environ.get("MODEL_PROVIDER"))
+    def fake_create_agent(**kwargs):
+        observed.append(
+            (__import__("os").environ.get("MODEL_PROVIDER"), kwargs["rag_documents_path"])
+        )
         return fake_agent
 
     monkeypatch.setattr("apps.fraud.demo.composition.create_agent", fake_create_agent)
     monkeypatch.delenv("MODEL_PROVIDER", raising=False)
     with create_demo_agent():
         pass
-    assert observed == ["fake"]
+    assert observed == [("fake", FRAUD_KNOWLEDGE_DIR)]
     assert "MODEL_PROVIDER" not in __import__("os").environ
 
 
@@ -82,15 +85,17 @@ def test_demo_provider_respects_explicit_environment(monkeypatch):
         knowledge_graph_registry=None,
     )
 
-    def fake_create_agent():
-        observed.append(__import__("os").environ.get("MODEL_PROVIDER"))
+    def fake_create_agent(**kwargs):
+        observed.append(
+            (__import__("os").environ.get("MODEL_PROVIDER"), kwargs["rag_documents_path"])
+        )
         return fake_agent
 
     monkeypatch.setattr("apps.fraud.demo.composition.create_agent", fake_create_agent)
     monkeypatch.setenv("MODEL_PROVIDER", "qwen")
     with create_demo_agent():
         pass
-    assert observed == ["qwen"]
+    assert observed == [("qwen", FRAUD_KNOWLEDGE_DIR)]
     assert __import__("os").environ["MODEL_PROVIDER"] == "qwen"
 
 

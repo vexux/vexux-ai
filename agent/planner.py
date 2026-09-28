@@ -110,7 +110,10 @@ class Planner:
             or not self.workflow_registry.supports_query_planning()
         ):
             return None
-        workflow_task = self.workflow_registry.plan_query(query)
+        workflow_plan = self.workflow_registry.plan_query(query)
+        if isinstance(workflow_plan, Plan):
+            return workflow_plan
+        workflow_task = workflow_plan
         return Plan(tasks=[workflow_task]) if workflow_task is not None else None
 
     def is_independent_request(self, query: str) -> bool:

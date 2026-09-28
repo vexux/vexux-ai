@@ -151,7 +151,8 @@ python -m evaluation.benchmark --models phi3:latest qwen3:4b `
   --repetitions 2 --json --output phase2-results.json
 ```
 
-The deterministic demo composition supplies the graph and SQLite fixtures.
+The deterministic demo composition supplies synthetic graph and SQLite
+fixtures and uses the same RAG pipeline with the fraud reference corpus.
 Use `--composition real` only when local Neo4j and MySQL are running.
 
 The live database tests are separate and are skipped unless their local
@@ -161,7 +162,55 @@ credentials are configured:
 python -m pytest tests/live/test_fraud_databases.py -q
 ```
 
-## 5. Start the application
+## 5. Fraud policy knowledge (local RAG)
+
+The fraud reference corpus lives in `apps/fraud/knowledge/` and contains
+project-authored guidance on investigation policy, alert handling, transaction
+monitoring, and shared devices. These files are not official bank policy and
+contain no customer records. The fraud application's composition selects this
+corpus for both the deterministic demo and real fraud composition; generic
+applications continue using `data/documents/`.
+
+The loader reads local Markdown and text files in stable path order. Markdown
+sections are chunked independently using a 600-character sliding window with
+100 characters of overlap. Each chunk keeps its source path, document name,
+section title, and zero-based chunk index. On first retrieval, the existing
+`sentence-transformers` embedder lazily loads `BAAI/bge-small-en-v1.5`,
+normalizes vectors, and builds an in-memory FAISS flat inner-product index.
+The index is reproducibly rebuilt from the source files and is not saved or
+committed. Runtime dependencies are already listed in `requirements.txt`;
+the BGE model must be present in the local Hugging Face cache or available to
+download on first use. Retrieval defaults to three results and filters
+similarities below 0.5.
+
+Run a production-embedder smoke retrieval:
+
+```powershell
+python -m scripts.rag_smoke "What should investigators consider when customers share a device?"
+```
+
+Run the separate no-network RAG evaluation:
+
+```powershell
+python -m evaluation.rag
+```
+
+The RAG evaluation uses a deterministic lexical stand-in for embeddings to
+test corpus loading, FAISS indexing, relevance handling, and routing without
+downloading a model. It does not replace the production BGE smoke test.
+
+General policy questions may use RAG, with the retrieved document and section
+shown as source attribution. Queries for a customer's transactions, alerts,
+accounts, connections, investigations, or comparisons are routed to the
+fraud workflow and its authoritative MySQL/Neo4j sources. RAG is not used to
+create customer-specific evidence or determine a risk assessment. A mixed
+request that explicitly asks for customer records runs the deterministic
+operational workflow first, followed by policy retrieval only when a separate
+policy clause is recognized. The policy retrieval depends on successful
+operational execution, so authorization or workflow failure prevents the
+supplemental RAG task from running.
+
+## 6. Start the application
 
 Credential-free API smoke run:
 

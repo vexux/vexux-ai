@@ -1,4 +1,4 @@
-from core.contracts.execution import Task
+from core.contracts.execution import Plan, Task
 
 
 class WorkflowRegistry:
@@ -18,7 +18,7 @@ class WorkflowRegistry:
     def describe_workflows(self):
         return [{"name": item.name, "description": item.description, "input_schema": item.input_schema} for item in self._workflows.values()]
 
-    def plan_query(self, query: str) -> Task | None:
+    def plan_query(self, query: str) -> Task | Plan | None:
         """Ask registered workflows whether they own deterministic query matching."""
         for workflow in self._workflows.values():
             planner = getattr(workflow, "plan_query", None)
@@ -26,9 +26,26 @@ class WorkflowRegistry:
                 continue
             task = planner(query)
             if task is not None:
+                if isinstance(task, Plan):
+                    if (
+                        not task.tasks
+                        or not all(isinstance(item, Task) for item in task.tasks)
+                    ):
+                        raise TypeError(
+                            f"Workflow '{workflow.name}' plan_query must return "
+                            "a non-empty Plan containing only Tasks."
+                        )
+                    ids = [item.id for item in task.tasks]
+                    if len(ids) != len(set(ids)):
+                        raise TypeError(
+                            f"Workflow '{workflow.name}' plan_query must return "
+                            "a Plan with unique Task IDs."
+                        )
+                    return task
                 if not isinstance(task, Task):
                     raise TypeError(
-                        f"Workflow '{workflow.name}' plan_query must return a Task or None."
+                        f"Workflow '{workflow.name}' plan_query must return "
+                        "a Task, Plan, or None."
                     )
                 return task
         return None

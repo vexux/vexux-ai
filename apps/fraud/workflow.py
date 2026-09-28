@@ -12,7 +12,7 @@ from agent.observer import Observer
 from core.audit_logger import emit
 from core.contracts.audit import make_event
 from core.contracts.evidence import Evidence, EvidenceSet
-from core.contracts.execution import AgentContext, ExecutionResult, Task
+from core.contracts.execution import AgentContext, ExecutionResult, Plan, Task
 from core.contracts.workflow import WorkflowExecutionError
 from core.observability import (
     classify_error,
@@ -234,6 +234,14 @@ class FraudInvestigationWorkflow:
         except PermissionError:
             raise
         except Exception as exc:
+            if "Node not found:" in str(exc):
+                raise WorkflowExecutionError(
+                    "The requested customer was not found in the authoritative customer graph.",
+                    terminal=True,
+                    retryable=False,
+                    authoritative=True,
+                    failure_category="not_found",
+                ) from exc
             raise WorkflowExecutionError(
                 "Fraud investigation could not be completed because the required "
                 "fraud data source is unavailable.",
@@ -293,7 +301,7 @@ class FraudInvestigationWorkflow:
             resources_consulted=[source],
         )
 
-    def plan_query(self, query: str) -> Task | None:
+    def plan_query(self, query: str) -> Task | Plan | None:
         identifiers = re.findall(r"\b[A-Z]\d+\b", query, re.IGNORECASE)
         customer_ids = list(dict.fromkeys(item.upper() for item in identifiers))
         normalized = query.lower()
@@ -318,12 +326,18 @@ class FraudInvestigationWorkflow:
             if query_kind == "comparison":
                 inputs["customer_ids"] = customer_ids[:2]
             inputs["customer_id"] = customer_ids[0]
-            return Task(
+            workflow_task = Task(
                 id="task-1",
                 description=f"Retrieve deterministic {query_kind} information",
                 input=inputs,
                 metadata={"capability": "workflow", "workflow": self.name},
             )
+            return self._with_policy_context(query, workflow_task)
+
+        if not customer_ids:
+            policy_task = self._policy_query_task(query)
+            if policy_task is not None:
+                return policy_task
 
         investigation_request = re.search(
             r"\binvestigat(?:e|ion|ing)\b|\bsuspicious activity\b",
@@ -348,7 +362,7 @@ class FraudInvestigationWorkflow:
             return None
         if score_request:
             investigation_request = True
-        return Task(
+        workflow_task = Task(
             id="task-1",
             description="Run the registered investigation workflow",
             input={
@@ -358,6 +372,63 @@ class FraudInvestigationWorkflow:
                 "query_kind": "investigation",
             },
             metadata={"capability": "workflow", "workflow": self.name},
+        )
+        return self._with_policy_context(query, workflow_task)
+
+    @staticmethod
+    def _policy_query_task(query: str) -> Task | None:
+        if not re.search(
+            r"\b(?:what is|what are|what does|what should|what evidence|how should|why|"
+            r"define|explain|describe)\b",
+            query,
+            re.IGNORECASE,
+        ):
+            return None
+        if not re.search(
+            r"\b(?:fraud|investigat|alert|transaction|velocity|shared|device|"
+            r"evidence|escalat|monitoring)\w*\b",
+            query,
+            re.IGNORECASE,
+        ):
+            return None
+
+        policy_query = re.sub(r"\b[A-Z]\d+\b", "", query, flags=re.IGNORECASE)
+        return Task(
+            id="task-1",
+            description="Retrieve fraud policy and domain reference guidance",
+            input={"query": policy_query.strip()},
+            metadata={"capability": "retrieval"},
+        )
+
+    @staticmethod
+    def _with_policy_context(query: str, workflow_task: Task) -> Task | Plan:
+        clauses = re.split(r",?\s+(?:and|also)\s+", query, maxsplit=1, flags=re.IGNORECASE)
+        if len(clauses) < 2:
+            return workflow_task
+        policy_clause = re.sub(r"\b[A-Z]\d+\b", "", clauses[1], flags=re.IGNORECASE).strip()
+        if not re.search(
+            r"\b(?:explain|what does|what should|how should|why|define)\b",
+            policy_clause,
+            re.IGNORECASE,
+        ) or not re.search(
+            r"\b(?:alert|device|evidence|escalat|guideline|investigation|"
+            r"monitoring|policy|transaction|velocity)\w*\b",
+            policy_clause,
+            re.IGNORECASE,
+        ):
+            return workflow_task
+
+        return Plan(
+            tasks=[
+                workflow_task,
+                Task(
+                    id="policy-context",
+                    description="Retrieve general fraud reference guidance",
+                    input={"query": policy_clause},
+                    metadata={"capability": "retrieval"},
+                    depends_on=[workflow_task.id],
+                ),
+            ]
         )
 
     def create_plan(self, customer_id: str, goal: str | None = None) -> InvestigationPlan:

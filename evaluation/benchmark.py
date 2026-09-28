@@ -103,7 +103,11 @@ def default_scenarios() -> list[BenchmarkScenario]:
     """Return the stable scenario set shared by every provider run."""
     return [
         BenchmarkScenario("general-conversation", "hey", "general response"),
-        BenchmarkScenario("knowledge-rag", "What is EC2?", "knowledge retrieval"),
+        BenchmarkScenario(
+            "knowledge-rag",
+            "What does transaction velocity mean in fraud monitoring?",
+            "fraud policy knowledge retrieval",
+        ),
         BenchmarkScenario("tool-use", "Calculate 24 * 7", "calculator result"),
         BenchmarkScenario("customer-graph", "Use customer_graph for C1001", "customer graph retrieval", expected_resource="customer_graph"),
         BenchmarkScenario("fraud-graph", "Use fraud_graph for C1001", "fraud graph retrieval", "investigator", "fraud_graph"),

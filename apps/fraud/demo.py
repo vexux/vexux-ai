@@ -20,21 +20,7 @@ from apps.fraud.workflow import FraudInvestigationWorkflow
 
 
 DemoPolicy = FraudPolicy
-
-
-class _DemoRAGPipeline:
-    """Avoid loading the optional local embedding model for resource demos."""
-
-    def __init__(self, *args, **kwargs):
-        pass
-
-    def retrieve(self, query, k=None):
-        if "ec2" in query.lower():
-            return [{
-                "score": 1.0,
-                "document": "Amazon EC2 provides resizable compute capacity in the cloud.",
-            }]
-        return []
+FRAUD_KNOWLEDGE_DIR = Path(__file__).parent / "knowledge"
 
 
 @contextmanager
@@ -45,12 +31,7 @@ def create_demo_agent():
     if not provider_was_set:
         os.environ["MODEL_PROVIDER"] = "fake"
     try:
-        original_rag_pipeline = composition.RAGPipeline
-        composition.RAGPipeline = _DemoRAGPipeline
-        try:
-            agent = composition.create_agent()
-        finally:
-            composition.RAGPipeline = original_rag_pipeline
+        agent = composition.create_agent(rag_documents_path=FRAUD_KNOWLEDGE_DIR)
     finally:
         if provider_was_set:
             os.environ["MODEL_PROVIDER"] = previous_provider

@@ -22,6 +22,10 @@ _FOLLOW_UP_PATTERNS = (
         re.compile(r"^\s*summarize\s+(?:that|this|it|the\s+above)\b", re.IGNORECASE),
     ),
     (
+        "summarize",
+        re.compile(r"^\s*summarize\s+the\s+[\w-]+(?:\s+[\w-]+){0,3}\b", re.IGNORECASE),
+    ),
+    (
         "expand",
         re.compile(r"^\s*expand\s+(?:on\s+)?(?:the\s+)?previous\s+result\b", re.IGNORECASE),
     ),
@@ -29,6 +33,22 @@ _FOLLOW_UP_PATTERNS = (
         "reference",
         re.compile(
             r"^\s*what\s+about\s+(?:the\s+)?(?:second|last|first|next|previous|that|those|it)\b",
+            re.IGNORECASE,
+        ),
+    ),
+    (
+        "reference",
+        re.compile(r"^\s*what\s+about\s+the\s+[\w-]+(?:\s+[\w-]+){0,3}\b", re.IGNORECASE),
+    ),
+    (
+        "reference",
+        re.compile(r"^\s*show\s+(?:me\s+)?the\s+[\w-]+(?:\s+[\w-]+){0,2}\b", re.IGNORECASE),
+    ),
+    (
+        "reference",
+        re.compile(
+            r"^\s*compare\s+(?:that|this|it|the\s+(?:previous|prior|last)\s+[\w-]+)"
+            r"\s+with\b",
             re.IGNORECASE,
         ),
     ),

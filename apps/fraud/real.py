@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import core.composition as core_composition
 from core.config import get_config
 from core.knowledge.graph_registry import KnowledgeGraphRegistry
@@ -36,7 +38,9 @@ def create_real_agent():
     mysql_password = _required(config.mysql_password, "MYSQL_PASSWORD")
     mysql_database = _required(config.mysql_database, "MYSQL_DATABASE")
 
-    agent = core_composition.create_agent()
+    agent = core_composition.create_agent(
+        rag_documents_path=Path(__file__).parent / "knowledge"
+    )
 
     graphs = KnowledgeGraphRegistry()
     for name, aliases in (

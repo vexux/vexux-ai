@@ -37,7 +37,7 @@ from core.specialized_agents.llm_delegation_planner import LLMDelegationPlanner
 from pathlib import Path
 
 
-def create_agent():
+def create_agent(rag_documents_path=None):
 
     # -------------------------
     # Model
@@ -94,7 +94,13 @@ def create_agent():
     # RAG
     # -------------------------
 
-    rag = RAGPipeline(enable_inference=config.local_rag_inference_enabled)
+    if rag_documents_path is None:
+        rag = RAGPipeline(enable_inference=config.local_rag_inference_enabled)
+    else:
+        rag = RAGPipeline(
+            enable_inference=config.local_rag_inference_enabled,
+            documents_path=rag_documents_path,
+        )
 
     knowledge_sources = KnowledgeSourceRegistry()
 

@@ -321,10 +321,16 @@ def test_follow_up_detection_supports_generic_reference_phrases():
         "explain that",
         "give me more information",
         "summarize that",
+        "Summarize the investigation",
+        "What about the shared device?",
+        "Show the transactions",
+        "Compare that with C1002",
         "expand the previous result",
         "what about the second one?",
     ):
-        assert interpret_follow_up(query, history) is not None
+        interpreted = interpret_follow_up(query, history)
+        assert interpreted is not None
+        assert interpreted.base_query == "Compare the results"
 
 
 def test_progress_event_creation_contains_generic_metadata():
