@@ -12,6 +12,7 @@ from core.knowledge.sql_source import SQLKnowledgeSource
 
 from apps.fraud.policy import FraudPolicy
 from apps.fraud.investigation import FraudInvestigationService
+from apps.fraud.graph_correlation import process_investigation_graph_results
 from apps.fraud.workflow import FraudInvestigationWorkflow
 
 
@@ -33,6 +34,7 @@ def create_real_agent():
     password = _required(config.neo4j_password, "NEO4J_PASSWORD")
     database = config.neo4j_database
     mysql_password = _required(config.mysql_password, "MYSQL_PASSWORD")
+    mysql_database = _required(config.mysql_database, "MYSQL_DATABASE")
 
     agent = core_composition.create_agent()
 
@@ -59,7 +61,7 @@ def create_real_agent():
             port=config.mysql_port,
             user=config.mysql_user,
             password=mysql_password,
-            database=config.mysql_database,
+            database=mysql_database,
         ),
         default_query=(
             "SELECT transaction_id, account_id, customer_id, merchant_id, "
@@ -75,6 +77,7 @@ def create_real_agent():
     agent.resource_router.knowledge_graph_registry = graphs
     agent.resource_router.knowledge_source_registry = sources
     agent.execution_manager.knowledge_graph_registry = graphs
+    agent.execution_manager.graph_result_processor = process_investigation_graph_results
     agent.execution_manager.knowledge_source_registry = sources
     if agent.execution_manager.knowledge_decision is not None:
         agent.execution_manager.knowledge_decision.knowledge_graph_registry = graphs

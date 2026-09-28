@@ -50,6 +50,15 @@ The path is configured with `OBSERVABILITY_DB_PATH` and defaults to
 `data/observability/vexux_observability.db`; writes are best-effort and cannot
 interrupt agent execution.
 
+Conversation follow-ups are interpreted only when the current request explicitly
+references available session history. The interpreter supplies generic prior
+turn context to planning; standalone requests remain isolated. Agent progress is
+published as generic `ProgressEvent` callbacks, independent of terminal
+rendering, and includes measured phase durations where available.
+Structured outputs may provide an optional follow-up formatter that receives a
+generic follow-up kind and the previous response, keeping deterministic
+continuation presentation with the result-owning application.
+
 Neo4j owns relationship-oriented entities and traversal. MySQL owns
 operational records such as transactions, alerts, investigations, and event
 metadata. SQLite and in-memory graphs remain available for deterministic tests
@@ -74,6 +83,10 @@ FraudInvestigationPlanner -> InvestigationPlan/Steps -> ExecutionManager
 The workflow owns conditional fraud-specific continuation and bounded
 replanning under `apps/fraud/`; it does not alter the generic Agent scheduler or
 move factual correlation into a model.
+
+The generic multi-graph executor returns registered graph results and evidence.
+Application-specific result correlation and presentation are injected by the
+application composition; core does not infer domain schemas or entity meanings.
 
 ## 2. The Three Conceptual Layers
 
@@ -126,6 +139,7 @@ Contains the cognitive and control-loop primitives. This layer is responsible fo
 Provides structural boundaries, data contracts, and dependency mediation.
 - **Contracts** (`core/contracts/`): Strict dataclasses and `typing.Protocol` interfaces defining execution payloads, observations, capabilities, and agent responses.
 - **ContextManager** (`core/context/context_manager.py`): Maintains state, tracks historical execution traces, records completed tasks, and isolates session/request metadata.
+- **Progress events** (`core/contracts/progress.py`): Publishes typed, domain-neutral lifecycle events through an optional callback for terminal, API, and other consumers.
 - **ModelGateway** (`core/model_gateway/gateway.py`): Mediates LLM/SLM generation behind a standardized interface (`ModelProviderContract`).
 - **ToolRegistry** (`core/tools/registry.py`): In-memory registry for discovering and executing tools implementing `ToolContract`.
 - **ExecutionManager** (`agent/execution_manager.py`): Dispatches execution tasks to RAG, tools, or direct model calls. It also supports explicit multi-graph retrieval tasks by executing multiple graph requests in parallel and aggregating the results with preserved graph provenance.
@@ -133,10 +147,10 @@ Provides structural boundaries, data contracts, and dependency mediation.
 - **Specialized Agent Registry** (`core/specialized_agents/`): Optional discovery/lookup registry for role-specific adapters. The current reference implementation is a thin `ResearchAgent` wrapper around the existing Agent.
 - **Composition Root** (`core/composition.py`): Factory module (`create_agent()`) that wires concrete instances and handles dependency injection; optional orchestrator helpers can register specialized agents without changing the default Agent path.
 - **Knowledge Graph Registry** (`core/knowledge/graph_registry.py`): Tracks independently registered graph implementations through `KnowledgeGraphContract`. The in-memory backend and optional `Neo4jKnowledgeGraph` adapter can coexist; each external backend requires an adapter and the core remains vendor-agnostic.
-- **Heterogeneous multi-graph execution**: A single multi-graph request may route `customer_graph` to `Neo4jKnowledgeGraph` and `fraud_graph` to `InMemoryKnowledgeGraph`. Both use the existing `ExecutionManager`, bounded execution, cross-graph correlation, evidence, authorization, and audit boundaries.
+- **Heterogeneous multi-graph execution**: A single multi-graph request can route registered graph resources to different backends using the existing `ExecutionManager`, bounded execution, evidence, authorization, and audit boundaries. Domain-specific correlation is supplied by the application.
 - **FastAPI API** (`api/main.py`): Thin HTTP boundary delegating requests to the composition-root Agent.
 - **SQL knowledge source** (`core/knowledge/sql_source.py`): Contract-level adapter to relational data. `SQLiteBackend` is an optional real backend selected through `SQL_DATABASE_PATH`; the core remains vendor-agnostic and accepts only read-only single statements.
-- **Multi-source investigation**: Existing graph and knowledge-source registries can be used together for independent retrievals. Results retain source-specific evidence and are correlated only by explicit identifiers; no new fusion engine is introduced.
+- **Multi-source investigation**: Existing graph and knowledge-source registries can be used together for independent retrievals. Results retain source-specific evidence; an application may correlate them using its own domain schema.
 - **Evaluation Suite** (`evaluation/`): Deterministic system-level evaluation runner with 44 scenarios.
 
 ### Authorization Boundary (Phase 24)
@@ -315,7 +329,8 @@ sequenceDiagram
 - **Responsibilities**:
   - Initializes request context via `ContextManager`.
   - Executes the outer retry loop (bounded by `max_retries = 2`).
-  - Dispatches tasks sequentially from the active `Plan`.
+  - Dispatches ready tasks from the active `Plan` sequentially by default;
+    configured parallel execution may run independent ready tasks concurrently.
   - Invokes `Observer` and `DecisionMaker` after every task.
   - On task success, records the task into `context.completed_tasks`.
   - On task failure, triggers `Planner.replan()` with the failed task and preserves remaining unexecuted tasks without repeating completed tasks.
@@ -352,7 +367,9 @@ sequenceDiagram
 - **Class**: `ResponseSynthesizer`
 - **Responsibilities**:
   - Collects outputs from all successful observations in the request trace.
-  - Invokes `ModelGateway.generate()` to compose a cohesive, clean user-facing response combining multi-task outputs without revealing internal agent execution details.
+  - Uses deterministic formatters when a result provides one and invokes
+    `ModelGateway.generate()` when synthesis across outputs is needed; it does
+    not replace authoritative structured results with generated output.
 
 ### 5.7 Context Manager (`core/context/context_manager.py`)
 - **Class**: `ContextManager`
@@ -363,11 +380,15 @@ sequenceDiagram
 
 ### 5.8 Model Gateway & Providers (`core/model_gateway/`, `models/providers/`)
 - **`ModelGateway`**: Dispatches generation prompts to any implementation of `ModelProviderContract`.
+- The composition root selects the configured `fake`, `ollama`, `mistral`, or
+  `qwen` provider; provider selection does not silently fall back.
 - **`QwenProvider`**: Implements `ModelProviderContract` using Hugging Face's `AutoTokenizer` and `AutoModelForCausalLM` combined with a PEFT LoRA adapter loaded from `models/checkpoints`. Supports greedy decoding (`do_sample=False`) and sampling (`temperature`, `top_p`, `top_k`).
 
 ### 5.12 API and Observability
 - **FastAPI** (`api/main.py`): Exposes `POST /api/v1/agent/run`, validates requests, delegates to `Agent.run()`, and serializes `AgentResponse`.
-- **Structured observability** (`agent/agent.py`): Logs request/session/task identifiers, capability, execution outcome, and duration for each task.
+- **Observability**: Publishes generic progress callbacks, structured logs,
+  audit events, and traces; sanitized records and derived metrics are also
+  persisted in the local SQLite observability store.
 - The API does not contain planning, execution, observation, or retry orchestration logic.
 
 ### 5.9 Tool Registry & Concrete Tools (`core/tools/`)
@@ -381,20 +402,28 @@ sequenceDiagram
 - **`VectorStore`**: Manages a FAISS `IndexFlatIP` index with document metadata storage.
 - **`Retriever`**: Takes raw text queries, encodes them via `Embedder`, and searches `VectorStore`.
 - **`PromptBuilder`**: Constructs context-augmented prompts for answer generation.
-- **`RAGPipeline`**: Orchestrates loading, indexing, retrieval, and invokes `InferencePipeline` to answer questions.
+- **`RAGPipeline`**: Orchestrates loading, indexing, and retrieval; optional
+  local inference is controlled by runtime configuration.
 - **`RAGKnowledgeSource`**: Adapts `RAGPipeline.retrieve()` to the generic `KnowledgeSourceContract` without changing RAG behavior.
 
 ### 5.11 Knowledge Sources (`core/knowledge/`)
-- **`KnowledgeSourceRegistry`**: Registers and describes domain-agnostic sources, with the first registered source serving existing retrieval tasks by default.
-- **Current source**: `RAGKnowledgeSource` only. SQL, knowledge graph, API documentation, and external knowledge sources are not implemented, and no planner-based source routing exists.
-- **Knowledge Decision (Phase 11)**: A small, domain-agnostic decision/normalization layer (`core/knowledge/decision.py`) determines which knowledge capability should be used for a request (RAG, registered knowledge source, or knowledge graph). This component only expresses and validates the decision — it does not execute retrievals and does not perform multi-source fusion. It is intentionally conservative: explicit source requests are validated and will error if the source is unavailable; no silent fallback occurs when a user names a specific source.
-- **Explicit resource routing (Phase 36)**: `ResourceRouter` discovers registered graph/source metadata and converts explicit natural-language resource mentions into existing structured retrieval tasks. Routing is deterministic and separate from authorization: unknown explicit resources fail, while queries without resource mentions retain normal planner/RAG behavior. No LLM routing or automatic discovery is performed.
+- **`KnowledgeSourceRegistry`**: Registers and describes domain-agnostic sources,
+  including RAG and SQL-backed sources; graph resources are registered through
+  `KnowledgeGraphRegistry`.
+- **Knowledge decision and routing**: `KnowledgeDecision` normalizes supported
+  retrieval capabilities. `ResourceRouter` deterministically resolves explicit
+  mentions against registered resources before execution; routing remains
+  separate from authorization, unknown explicit resources fail, and no LLM
+  routing or automatic discovery is performed.
 
 ### 5.12 Composition Root (`core/composition.py`)
 - **Function**: `create_agent()`
 - **Responsibilities**:
   - Wires all subsystems together via dependency injection.
-  - Instantiates `QwenProvider` -> `ModelGateway` -> `RAGPipeline` -> `RAGKnowledgeSource` -> `KnowledgeSourceRegistry` -> `ToolRegistry` -> `ExecutionManager` -> `Planner` -> `Observer` -> `DecisionMaker` -> `ContextManager` -> `ResponseSynthesizer` -> `Agent`.
+  - Selects the configured model provider, then wires `ModelGateway`,
+    `RAGPipeline`, registered knowledge sources and tools, `ExecutionManager`,
+    `Planner`, `Observer`, `DecisionMaker`, `ContextManager`,
+    `ResponseSynthesizer`, and `Agent`.
 
 ### Persistent Memory (Phase 9)
 - **Optional**: A minimal persistent-memory layer is available and is disabled by default. Enable by setting the environment variable `PERSISTENT_MEMORY_DB` to a filesystem path.

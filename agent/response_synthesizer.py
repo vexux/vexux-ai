@@ -1,3 +1,6 @@
+from core.context.follow_up import interpret_follow_up
+
+
 class ResponseSynthesizer:
 
     def __init__(
@@ -22,6 +25,7 @@ class ResponseSynthesizer:
     ) -> str:
 
         conversation_context = conversation_context or []
+        follow_up = interpret_follow_up(query, conversation_context)
 
         successful_outputs = [
             observation.output
@@ -35,6 +39,18 @@ class ResponseSynthesizer:
                 "The request could not be completed."
             )
 
+        if follow_up is not None and len(successful_outputs) == 1:
+            follow_up_formatter = getattr(
+                successful_outputs[0],
+                "to_follow_up_text",
+                None,
+            )
+            if callable(follow_up_formatter):
+                return follow_up_formatter(
+                    kind=follow_up.kind,
+                    previous_response=follow_up.previous_turn.get("response", ""),
+                )
+
         # No need to call the model when there is
         # only one result.
         has_structured_retrieval = (
@@ -45,7 +61,9 @@ class ResponseSynthesizer:
 
         if (
             len(successful_outputs) == 1
-            and not conversation_context
+            and (not conversation_context or callable(
+                getattr(successful_outputs[0], "to_user_text", None)
+            ))
             and not has_structured_retrieval
         ):
             formatter = getattr(successful_outputs[0], "to_user_text", None)

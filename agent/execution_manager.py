@@ -24,6 +24,7 @@ class ExecutionManager:
         knowledge_graph_registry=None,
         policy=None,
         workflow_registry=None,
+        graph_result_processor=None,
     ):
 
         self.retrieval = retrieval
@@ -39,6 +40,7 @@ class ExecutionManager:
 
         self.policy = policy
         self.workflow_registry = workflow_registry
+        self.graph_result_processor = graph_result_processor
 
         # Create a KnowledgeDecision helper to normalize retrieval requests.
         try:
@@ -58,7 +60,41 @@ class ExecutionManager:
         context: AgentContext,
     ) -> ExecutionResult:
         start = timed()
+        reporter = getattr(self, "progress_reporter", None)
+        capability = task.metadata.get("capability")
+        if reporter is not None and self.policy is not None:
+            reporter.emit(
+                "authorization_started",
+                "authorization",
+                "Checking execution permission.",
+                task_id=task.id,
+                capability=capability,
+                status="started",
+            )
         result = self._execute_internal(task, context)
+        if reporter is not None:
+            metadata = result.metadata if isinstance(result.metadata, dict) else {}
+            if self.policy is not None and (
+                "authorization_denied" in metadata or result.success or result.error
+            ):
+                reporter.emit(
+                    "authorization_completed",
+                    "authorization",
+                    "Execution permission check completed.",
+                    task_id=task.id,
+                    capability=capability,
+                    status="denied" if metadata.get("authorization_denied") else "completed",
+                )
+            reporter.emit(
+                "execution_progress",
+                "execution",
+                "Task execution completed.",
+                task_id=task.id,
+                capability=capability,
+                resource=task.metadata.get("resource") or task.input.get("source"),
+                status="completed" if result.success else "failed",
+                duration_ms=duration_ms(start),
+            )
         metadata = result.metadata if isinstance(result.metadata, dict) else {}
         resource = task.metadata.get("resource") or task.input.get("source")
         log_event(
@@ -266,8 +302,31 @@ class ExecutionManager:
                                 "authorization_denied": True,
                             },
                         )
+                    reporter = getattr(self, "progress_reporter", None)
+                    if reporter is not None:
+                        reporter.emit(
+                            "execution_progress",
+                            "execution",
+                            "Registered resource access authorized.",
+                            task_id=task.id,
+                            capability="retrieval",
+                            resource=name,
+                            status="authorized",
+                        )
             try:
                 result = self._execute_multi_graph_request(task, graph_requests)
+                reporter = getattr(self, "progress_reporter", None)
+                if reporter is not None:
+                    for item in result.output.get("results", []):
+                        reporter.emit(
+                            "execution_progress",
+                            "execution",
+                            "Registered resource execution completed.",
+                            task_id=task.id,
+                            capability="retrieval",
+                            resource=item.get("graph_name"),
+                            status="completed",
+                        )
                 # emit request_completed
                 try:
                     from core.contracts.audit import make_event as _make_event
@@ -504,11 +563,16 @@ class ExecutionManager:
                 request["parameters"] = request.get("params")
             requests.append(request)
 
-        customer_id = task.input.get("customer_id")
         try:
-            result = execute_multi_graph_request(self.knowledge_graph_registry, requests, customer_id=customer_id)
+            result = execute_multi_graph_request(self.knowledge_graph_registry, requests)
         except Exception as exc:
             raise ValueError(str(exc)) from exc
+
+        if self.graph_result_processor is not None:
+            processed = self.graph_result_processor(task.input, result)
+            if not isinstance(processed, dict):
+                raise TypeError("Graph result processor must return a dictionary.")
+            result.update(processed)
 
         evidence = result.get("evidence")
         output = {
@@ -517,9 +581,12 @@ class ExecutionManager:
             "context_found": result.get("context_found", bool(result.get("results"))),
             "source": "multi_graph",
             "evidence": evidence,
-            "summary": result.get("summary", {}),
-            "facts": result.get("facts", []),
         }
+        output.update({
+            key: value
+            for key, value in result.items()
+            if key not in {"query", "results", "context_found", "source", "evidence"}
+        })
         return ExecutionResult(success=True, output=output, metadata={"capability": "retrieval", "source": "multi_graph"})
 
     def _execute_retrieval_source(
@@ -548,6 +615,17 @@ class ExecutionManager:
             from core.contracts.audit import make_event
             from core.audit_logger import emit as emit_audit
             try:
+                reporter = getattr(self, "progress_reporter", None)
+                if reporter is not None:
+                    reporter.emit(
+                        "authorization_started",
+                        "authorization",
+                        "Checking registered source access.",
+                        task_id=task.id,
+                        capability="retrieval",
+                        resource=getattr(source, "name", None),
+                        status="started",
+                    )
                 decision = self.policy.authorize_resource(
                     context.user_id if context is not None else None,
                     "knowledge_source",
@@ -577,6 +655,17 @@ class ExecutionManager:
                 pass
             if not decision.allowed:
                 return ExecutionResult(success=False, error=f"Unauthorized access to knowledge source: {getattr(source, 'name', None)}", metadata={"policy": decision.policy_name, "reason": decision.reason})
+            reporter = getattr(self, "progress_reporter", None)
+            if reporter is not None:
+                reporter.emit(
+                    "authorization_completed",
+                    "authorization",
+                    "Registered source access authorized.",
+                    task_id=task.id,
+                    capability="retrieval",
+                    resource=getattr(source, "name", None),
+                    status="allowed",
+                )
 
         # emit resource_accessed (start)
         try:

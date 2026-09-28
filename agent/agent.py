@@ -14,6 +14,8 @@ from core.contracts.execution import Plan, Task
 from core.contracts.response import AgentResponse
 from core.context.context_manager import ContextManager
 from core.contracts.identity import SecurityContext
+from core.contracts.progress import ProgressReporter
+from core.context.follow_up import interpret_follow_up
 from core.observability import log_event, metrics
 from agent.response_synthesizer import ResponseSynthesizer
 
@@ -34,6 +36,7 @@ class Agent:
         # Maximum number of tasks to run in parallel. Default 1 preserves sequential behavior.
         max_parallel_tasks: int = 1,
         resource_router=None,
+        progress_callback=None,
     ):
 
         self.execution_manager = (
@@ -65,17 +68,39 @@ class Agent:
         # default is 1 to preserve previous sequential behavior unless configured
         self.max_parallel_tasks = max(1, int(max_parallel_tasks or 1))
         self.resource_router = resource_router
+        self.progress_reporter = ProgressReporter(progress_callback)
+        self.execution_manager.progress_reporter = self.progress_reporter
+
+    def _emit_progress(self, event_type: str, phase: str, message: str, **kwargs):
+        return self.progress_reporter.emit(event_type, phase, message, **kwargs)
 
     @staticmethod
-    def _conversation_context(query: str, context) -> list[dict]:
+    def _conversation_context(
+        query: str,
+        context,
+        resource_router=None,
+        workflow_registry=None,
+        planner=None,
+    ) -> list[dict]:
         """Avoid stale history for independent resource and numbered requests."""
         normalized = query.strip().lower()
+        if interpret_follow_up(query, context.conversation_history) is not None:
+            return context.conversation_history
         if (
             re.match(r"^\s*\d+[.)]\s*", query)
-            or any(term in normalized for term in (
-                "investigate", "suspicious activity", "fraud_graph",
-                "customer_graph", "business_db", "mysql", "neo4j",
-            ))
+            or (
+                resource_router is not None
+                and resource_router.mentions_registered_resource(query)
+            )
+            or (
+                workflow_registry is not None
+                and workflow_registry.plan_query(query) is not None
+            )
+            or (
+                planner is not None
+                and callable(getattr(planner, "is_independent_request", None))
+                and planner.is_independent_request(query)
+            )
             or re.fullmatch(r"(?:hi|hello|hey|good morning|good afternoon|good evening)[!. ]*", normalized)
         ):
             return []
@@ -106,9 +131,12 @@ class Agent:
                 error="Actor identity conflicts with security context.",
                 trace=[],
             )
+        request_started = time.perf_counter()
         metrics.increment("requests")
         if user_id is None and security_context is not None:
             user_id = security_context.actor_id
+        if user_id is None and self.policy is not None:
+            user_id = getattr(self.policy, "default_actor", None)
 
         context = self.context_manager.create(
             request_id=request_id or str(uuid.uuid4()),
@@ -143,7 +171,22 @@ class Agent:
             actor=context.user_id,
             status="started",
         )
-        conversation_context = self._conversation_context(query, context)
+        self._emit_progress(
+            "request_received",
+            "request",
+            "Request received.",
+            status="started",
+            metadata={"request_id": context.request_id},
+        )
+        conversation_context = self._conversation_context(
+            query,
+            context,
+            self.resource_router,
+            self.workflow_registry,
+            self.planner,
+        )
+        follow_up = interpret_follow_up(query, conversation_context)
+        planning_query = follow_up.planning_query if follow_up is not None else query
 
         routed_plan = None
         if self.resource_router is not None:
@@ -181,6 +224,12 @@ class Agent:
                         trace=[],
                         metadata={"request_id": context.request_id, "user_id": user_id},
                     )
+                self._emit_progress(
+                    "authorization_started",
+                    "authorization",
+                    "Checking access to registered resources.",
+                    status="started",
+                )
                 decisions = [
                     self.policy.authorize_resource(
                         request.actor,
@@ -191,6 +240,16 @@ class Agent:
                     )
                     for request in requests
                 ]
+                self._emit_progress(
+                    "authorization_completed",
+                    "authorization",
+                    "Resource access check completed.",
+                    status="allowed" if all(item.allowed for item in decisions) else "denied",
+                    metadata={
+                        "resource_count": len(requests),
+                        "allowed_count": sum(item.allowed for item in decisions),
+                    },
+                )
                 return AgentResponse(
                     success=all(decision.allowed for decision in decisions),
                     output=self.response_synthesizer.synthesize_authorization(requests, decisions),
@@ -200,6 +259,9 @@ class Agent:
                         "request_id": context.request_id,
                         "user_id": user_id,
                         "authorization_check": True,
+                        "timings_ms": {
+                            "total": round((time.perf_counter() - request_started) * 1000.0, 2),
+                        },
                     },
                 )
             try:
@@ -243,15 +305,33 @@ class Agent:
 
         retry_count = 0
         logger = logging.getLogger(__name__)
+        planning_duration_ms = 0.0
+        execution_duration_ms = 0.0
 
         while retry_count <= self.max_retries:
 
             try:
 
                 if retry_count == 0:
+                    self._emit_progress(
+                        "planning_started",
+                        "planning",
+                        "Creating execution plan.",
+                        status="started",
+                    )
+                    planning_started = time.perf_counter()
                     plan = routed_plan or self.planner.create_plan(
-                        query,
+                        planning_query,
                         conversation_context=conversation_context,
+                    )
+                    planning_duration_ms += (time.perf_counter() - planning_started) * 1000.0
+                    self._emit_progress(
+                        "planning_completed",
+                        "planning",
+                        "Execution plan created.",
+                        status="completed",
+                        duration_ms=planning_duration_ms,
+                        metadata={"task_count": len(plan.tasks)},
                     )
 
                 else:
@@ -560,8 +640,31 @@ class Agent:
 
                         self.context_manager.set_task(context, task)
                         started_at = time.perf_counter()
+                        self._emit_progress(
+                            "execution_started",
+                            "execution",
+                            "Executing planned task.",
+                            task_id=task.id,
+                            capability=task.metadata.get("capability"),
+                            resource=task.metadata.get("resource") or exec_task.input.get("source"),
+                            status="started",
+                        )
                         result = self.execution_manager.execute(exec_task, context)
                         duration_ms = (time.perf_counter() - started_at) * 1000
+                        execution_duration_ms += duration_ms
+                        self._emit_progress(
+                            "execution_completed",
+                            "execution",
+                            "Task execution completed.",
+                            task_id=task.id,
+                            capability=task.metadata.get("capability"),
+                            resource=(
+                                task.metadata.get("resource")
+                                or exec_task.input.get("source")
+                            ),
+                            status="completed" if result.success else "failed",
+                            duration_ms=duration_ms,
+                        )
                         logger.info(
                             "agent.task.execution",
                             extra={
@@ -577,6 +680,14 @@ class Agent:
 
                         observation = self.observer.observe(result, task)
                         self.context_manager.add_observation(context, observation)
+                        self._emit_progress(
+                            "observation_created",
+                            "observation",
+                            "Execution result observed.",
+                            task_id=task.id,
+                            capability=task.metadata.get("capability"),
+                            status="success" if observation.success else "failure",
+                        )
 
                         if observation.metadata.get("authorization_denied"):
                             return AgentResponse(
@@ -593,6 +704,23 @@ class Agent:
                             )
 
                         if observation.metadata.get("terminal"):
+                            self._emit_progress(
+                                "workflow_failed",
+                                "execution",
+                                "A terminal workflow failure stopped further planning.",
+                                task_id=task.id,
+                                capability=task.metadata.get("capability"),
+                                status="failed",
+                                metadata={
+                                    "authoritative": observation.metadata.get(
+                                        "authoritative",
+                                        False,
+                                    ),
+                                    "failure_category": observation.metadata.get(
+                                        "failure_category",
+                                    ),
+                                },
+                            )
                             return AgentResponse(
                                 success=False,
                                 output=None,
@@ -622,6 +750,14 @@ class Agent:
 
                             # Decision: continue
                             decision = self.decision_maker.decide(observation)
+                            self._emit_progress(
+                                "decision_made",
+                                "decision",
+                                "Execution decision completed.",
+                                task_id=task.id,
+                                capability=task.metadata.get("capability"),
+                                status=decision.value,
+                            )
                             if decision == DecisionType.REPLAN:
                                 should_replan = True
                                 break
@@ -712,6 +848,15 @@ class Agent:
                         # Submit worker; worker must not mutate shared AgentContext
                         exec_task = type(task)(**{k: getattr(task, k) for k in ("id", "description", "input", "metadata", "depends_on")})
                         exec_task.input = resolved_input
+                        self._emit_progress(
+                            "execution_started",
+                            "execution",
+                            "Executing planned task.",
+                            task_id=task.id,
+                            capability=task.metadata.get("capability"),
+                            resource=task.metadata.get("resource") or exec_task.input.get("source"),
+                            status="started",
+                        )
                         futures[pool.submit(_exec_task, exec_task)] = task.id
 
                     if should_replan:
@@ -742,6 +887,17 @@ class Agent:
                 failed_replan_ids = []
 
                 for tid, res, duration_ms, task in completed_batch:
+                    execution_duration_ms += duration_ms
+                    self._emit_progress(
+                        "execution_completed",
+                        "execution",
+                        "Task execution completed.",
+                        task_id=task.id,
+                        capability=task.metadata.get("capability"),
+                        resource=task.metadata.get("resource") or task.input.get("source"),
+                        status="completed" if res.success else "failed",
+                        duration_ms=duration_ms,
+                    )
                     logger.info(
                         "agent.task.execution",
                         extra={
@@ -761,8 +917,33 @@ class Agent:
                     observation = self.observer.observe(res, task)
                     self.context_manager.add_observation(context, observation)
                     obs_map[tid] = observation
+                    self._emit_progress(
+                        "observation_created",
+                        "observation",
+                        "Execution result observed.",
+                        task_id=task.id,
+                        capability=task.metadata.get("capability"),
+                        status="success" if observation.success else "failure",
+                    )
 
                     if observation.metadata.get("terminal"):
+                        self._emit_progress(
+                            "workflow_failed",
+                            "execution",
+                            "A terminal workflow failure stopped further planning.",
+                            task_id=task.id,
+                            capability=task.metadata.get("capability"),
+                            status="failed",
+                            metadata={
+                                "authoritative": observation.metadata.get(
+                                    "authoritative",
+                                    False,
+                                ),
+                                "failure_category": observation.metadata.get(
+                                    "failure_category",
+                                ),
+                            },
+                        )
                         return AgentResponse(
                             success=False,
                             output=None,
@@ -792,6 +973,14 @@ class Agent:
 
                         # record decision for successful task
                         decision = self.decision_maker.decide(observation)
+                        self._emit_progress(
+                            "decision_made",
+                            "decision",
+                            "Execution decision completed.",
+                            task_id=task.id,
+                            capability=task.metadata.get("capability"),
+                            status=decision.value,
+                        )
                         if decision == DecisionType.REPLAN:
                             # schedule replanning - select this as candidate
                             failed_replan_ids.append(tid)
@@ -842,10 +1031,26 @@ class Agent:
 
             if not should_replan:
 
+                self._emit_progress(
+                    "response_started",
+                    "response",
+                    "Preparing response.",
+                    status="started",
+                )
+                response_started = time.perf_counter()
                 final_output = self.response_synthesizer.synthesize(
                     query,
                     context.observations,
                     conversation_context=conversation_context,
+                )
+                response_duration_ms = (time.perf_counter() - response_started) * 1000.0
+                total_duration_ms = (time.perf_counter() - request_started) * 1000.0
+                self._emit_progress(
+                    "response_completed",
+                    "response",
+                    "Response ready.",
+                    status="completed",
+                    duration_ms=response_duration_ms,
                 )
 
                 if self.policy is not None:
@@ -867,6 +1072,12 @@ class Agent:
                     metadata={
                         "request_id": context.request_id,
                         "session_id": context.session_id,
+                        "timings_ms": {
+                            "planning": round(planning_duration_ms, 2),
+                            "execution": round(execution_duration_ms, 2),
+                            "response": round(response_duration_ms, 2),
+                            "total": round(total_duration_ms, 2),
+                        },
                     },
                 )
 

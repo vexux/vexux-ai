@@ -13,6 +13,7 @@ from apps.fraud.domain import (
     InvestigationResult,
     Transaction,
 )
+from apps.fraud.identity import DEFAULT_ACTOR
 
 
 class FraudInvestigationService:
@@ -115,7 +116,7 @@ class FraudInvestigationService:
             },
         )
 
-    def investigate(self, customer_id: str, actor: str = "investigator") -> InvestigationResult:
+    def investigate(self, customer_id: str, actor: str = DEFAULT_ACTOR) -> InvestigationResult:
         if not isinstance(customer_id, str) or not customer_id.strip():
             raise ValueError("customer_id must be a non-empty string.")
         customer_id = customer_id.strip()

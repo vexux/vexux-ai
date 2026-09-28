@@ -59,6 +59,13 @@ class ResourceRouter:
             raise ValueError(f"Unknown or unavailable knowledge resource: {unknown[0]}")
         return selected
 
+    def mentions_registered_resource(self, query: str) -> bool:
+        lowered = query.lower()
+        return any(
+            any(term in lowered for term in self._terms(resource))
+            for resource in self._resources()
+        )
+
     @staticmethod
     def is_authorization_query(query: str) -> bool:
         return bool(re.search(

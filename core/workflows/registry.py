@@ -1,3 +1,6 @@
+from core.contracts.execution import Task
+
+
 class WorkflowRegistry:
     def __init__(self):
         self._workflows = {}
@@ -14,3 +17,24 @@ class WorkflowRegistry:
 
     def describe_workflows(self):
         return [{"name": item.name, "description": item.description, "input_schema": item.input_schema} for item in self._workflows.values()]
+
+    def plan_query(self, query: str) -> Task | None:
+        """Ask registered workflows whether they own deterministic query matching."""
+        for workflow in self._workflows.values():
+            planner = getattr(workflow, "plan_query", None)
+            if not callable(planner):
+                continue
+            task = planner(query)
+            if task is not None:
+                if not isinstance(task, Task):
+                    raise TypeError(
+                        f"Workflow '{workflow.name}' plan_query must return a Task or None."
+                    )
+                return task
+        return None
+
+    def supports_query_planning(self) -> bool:
+        return any(
+            callable(getattr(workflow, "plan_query", None))
+            for workflow in self._workflows.values()
+        )

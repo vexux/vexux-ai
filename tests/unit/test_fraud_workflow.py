@@ -91,7 +91,7 @@ def test_plan_validates_dependencies_and_bounds():
 
 def test_workflow_branches_replans_and_preserves_structured_evidence():
     workflow, _ = make_workflow()
-    result = workflow.run("C1001")
+    result = workflow.run("C1001", actor="investigator")
     assert result.risk_assessment == "high"
     assert "shared_device_relationship" in result.contributing_signals
     assert "business_db" in result.supporting_evidence.sources()
@@ -115,7 +115,7 @@ def test_support_user_denial_happens_before_fraud_graph_execution():
 def test_missing_customer_and_source_failure_are_observable():
     workflow, _ = make_workflow()
     with pytest.raises(RuntimeError, match="resolve_subject"):
-        workflow.run("C9999")
+        workflow.run("C9999", actor="investigator")
 
     failing = Source({"transactions": [], "alerts": [], "investigations": []})
     def fail_retrieve(*args, **kwargs):
@@ -126,7 +126,7 @@ def test_missing_customer_and_source_failure_are_observable():
     failing.retrieve = fail_retrieve
     workflow, _ = make_workflow(source=failing)
     with pytest.raises(RuntimeError, match="transactions"):
-        workflow.run("C1001")
+        workflow.run("C1001", actor="investigator")
 
 
 def test_registered_fraud_workflow_executes_through_execution_manager():

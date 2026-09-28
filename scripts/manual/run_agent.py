@@ -11,6 +11,48 @@ from core.observability_store import get_observability_store
 LOGGER = logging.getLogger(__name__)
 
 
+def _render_progress_event(event) -> None:
+    labels = {
+        "request": "Request",
+        "planning": "Planning",
+        "authorization": "Authorization",
+        "execution": "Execution",
+        "observation": "Observation",
+        "decision": "Decision",
+        "response": "Response",
+    }
+    label = labels.get(event.phase, event.phase.title())
+    if event.event_type == "execution_progress" and event.resource:
+        if event.status == "completed":
+            print(f"[{label}] {event.resource} [OK]")
+        elif event.status == "authorized":
+            print(f"[{label}] {event.resource} authorized")
+        return
+    if event.phase == "authorization":
+        if event.resource:
+            if event.status in {"allowed", "authorized"}:
+                print(f"[{label}] {event.resource} authorized")
+            elif event.status == "denied":
+                print(f"[{label}] {event.resource} denied")
+            elif event.event_type == "authorization_started":
+                print(f"[{label}] {event.message}")
+            return
+        if event.event_type == "authorization_started":
+            print(f"[{label}] {event.message}")
+        return
+    if event.event_type in {
+        "request_received",
+        "planning_started",
+        "planning_completed",
+        "authorization_started",
+        "authorization_completed",
+        "execution_started",
+        "response_started",
+        "response_completed",
+    }:
+        print(f"[{label}] {event.message}")
+
+
 def _handle_observability_command(query: str, store) -> bool:
     command = query.lower()
     if command not in {"/trace", "/audit", "/metrics"}:
@@ -70,6 +112,8 @@ def _provider_error_message(error: RuntimeError) -> str:
 
 def main():
     agent = create_real_agent()
+    if hasattr(agent, "progress_reporter"):
+        agent.progress_reporter.callback = _render_progress_event
     actor = DEFAULT_ACTOR
     session_id = "terminal-session"
     store = get_observability_store(
@@ -80,7 +124,9 @@ def main():
     print("Vexux AI Interactive Terminal")
     print("Type 'exit' or 'quit' to stop. Use '/actor investigator' or '/actor support_user'.")
     print("Resource-aware fraud queries use the real Neo4j and MySQL resources.")
-    print("Runtime:", provider_diagnostic(get_config()))
+    runtime = provider_diagnostic(get_config())
+    print(f"Model: {runtime.get('model', runtime['provider'])}")
+    print(f"Runtime: {runtime['runtime_mode']}")
     print("=" * 60)
 
     while True:
@@ -143,6 +189,14 @@ def main():
             print("Sources:", sorted(sources_used))
         print("\nSuccess:", result.success)
         print("Trace length:", len(result.trace))
+        timings = getattr(result, "metadata", {}).get("timings_ms", {})
+        if timings:
+            print(
+                "Timing: "
+                f"Planning {timings.get('planning', 0) / 1000:.2f}s | "
+                f"Execution {timings.get('execution', 0) / 1000:.2f}s | "
+                f"Total {timings.get('total', 0) / 1000:.2f}s"
+            )
 
 
 if __name__ == "__main__":

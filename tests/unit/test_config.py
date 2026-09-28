@@ -20,6 +20,60 @@ def test_default_config(monkeypatch):
     assert cfg.local_rag_inference_enabled is False
 
 
+def test_mysql_database_has_no_application_specific_default(monkeypatch, tmp_path):
+    env_file = tmp_path / ".env"
+    env_file.write_text("MODEL_PROVIDER=fake\n", encoding="utf-8")
+    monkeypatch.setattr(config_module, "_ENV_FILE", env_file)
+    monkeypatch.setenv("MODEL_PROVIDER", "fake")
+    monkeypatch.delenv("MYSQL_DATABASE", raising=False)
+
+    assert load_config_from_env().mysql_database is None
+
+
+def test_core_sql_registration_uses_generic_resource_configuration(monkeypatch, tmp_path):
+    import sqlite3
+    from core.composition import create_agent
+
+    database = tmp_path / "generic.sqlite"
+    with sqlite3.connect(database) as connection:
+        connection.execute("CREATE TABLE records (id INTEGER)")
+
+    env_file = tmp_path / ".env"
+    env_file.write_text("MODEL_PROVIDER=fake\n", encoding="utf-8")
+    monkeypatch.setattr(config_module, "_ENV_FILE", env_file)
+    monkeypatch.setenv("MODEL_PROVIDER", "fake")
+    monkeypatch.setenv("SQL_DATABASE_PATH", str(database))
+
+    agent = create_agent()
+
+    source = agent.execution_manager.knowledge_source_registry.get("sql")
+    assert source.default_query is None
+    assert source.aliases == ("sqlite database",)
+    assert "business_db" not in {
+        item["name"] for item in agent.execution_manager.knowledge_source_registry.describe_sources()
+    }
+
+
+def test_fraud_composition_requires_explicit_mysql_database(monkeypatch, tmp_path):
+    from apps.fraud.real import create_real_agent
+
+    env_file = tmp_path / ".env"
+    env_file.write_text("MODEL_PROVIDER=fake\n", encoding="utf-8")
+    monkeypatch.setattr(config_module, "_ENV_FILE", env_file)
+    for name, value in {
+        "MODEL_PROVIDER": "fake",
+        "NEO4J_URI": "bolt://localhost:7687",
+        "NEO4J_USERNAME": "neo4j",
+        "NEO4J_PASSWORD": "test-password",
+        "MYSQL_PASSWORD": "test-password",
+    }.items():
+        monkeypatch.setenv(name, value)
+    monkeypatch.delenv("MYSQL_DATABASE", raising=False)
+
+    with pytest.raises(ValueError, match="MYSQL_DATABASE must be configured"):
+        create_real_agent()
+
+
 def test_local_rag_inference_is_explicitly_configured(monkeypatch):
     monkeypatch.setenv("ENABLE_LOCAL_RAG_INFERENCE", "1")
     assert load_config_from_env().local_rag_inference_enabled is True

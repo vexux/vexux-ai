@@ -79,6 +79,43 @@ def test_one_line_investigation_result_is_concise_and_deterministic():
     assert "Resources: customer_graph, fraud_graph, business_db" in text
 
 
+def test_investigation_result_expands_follow_up_with_deterministic_details():
+    result = _result()
+    result.metadata = {
+        "transaction_count": 2,
+        "alert_count": 2,
+        "investigation_count": 1,
+    }
+    result.contributing_signals = [
+        "open_high_severity_alerts",
+        "elevated_transaction_activity",
+        "shared_device_relationship",
+        "active_investigation",
+    ]
+
+    text = result.to_follow_up_text(
+        kind="expand",
+        previous_response=result.to_user_text(),
+    )
+
+    assert "Transaction records reviewed: 2" in text
+    assert "Alert records reviewed: 2" in text
+    assert "Investigation records reviewed: 1" in text
+    assert "Open high-severity alerts" in text
+    assert "Shared-device relationship" in text
+    assert "Risk: HIGH" in text
+    assert "Resources consulted:" in text
+
+
+def test_investigation_summary_follow_up_is_one_line():
+    result = _result()
+
+    text = result.to_follow_up_text(kind="summarize", previous_response="")
+
+    assert "\n" not in text
+    assert "C1001 Investigation: HIGH;" in text
+
+
 def test_unavailable_fraud_resource_is_terminal_and_not_model_synthesized(monkeypatch):
     with create_demo_agent() as agent:
         workflow = agent.workflow_registry.get("fraud_investigation")
@@ -93,7 +130,11 @@ def test_unavailable_fraud_resource_is_terminal_and_not_model_synthesized(monkey
             lambda *args, **kwargs: "The score is 0.6280381679534912.",
         )
 
-        response = agent.run("Investigate C1001", session_id="fraud-failure")
+        response = agent.run(
+            "Investigate C1001",
+            session_id="fraud-failure",
+            user_id="investigator",
+        )
 
     assert response.success is False
     assert response.output is None

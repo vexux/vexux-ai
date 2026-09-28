@@ -175,3 +175,41 @@ class InvestigationResult:
             f"{title}\n\n{risk}\n\nFindings:\n{finding_lines}\n\n"
             f"Resources consulted:\n{resources}"
         )
+
+    def to_follow_up_text(
+        self,
+        *,
+        kind: str,
+        previous_response: str = "",
+    ) -> str:
+        """Render a deterministic continuation from this investigation result."""
+        if kind == "summarize":
+            return self.to_user_text(one_line=True)
+
+        details = []
+        count_labels = (
+            ("transaction_count", "Transaction records reviewed"),
+            ("alert_count", "Alert records reviewed"),
+            ("investigation_count", "Investigation records reviewed"),
+        )
+        for key, label in count_labels:
+            if key in self.metadata:
+                details.append(f"- {label}: {self.metadata[key]}")
+
+        signal_labels = {
+            "open_high_severity_alerts": "Open high-severity alerts",
+            "elevated_transaction_activity": "Elevated transaction activity",
+            "shared_device_relationship": "Shared-device relationship",
+            "active_investigation": "Active investigation record",
+        }
+        signals = [
+            signal_labels.get(signal, signal.replace("_", " ").capitalize())
+            for signal in self.contributing_signals
+        ]
+        if signals:
+            details.append(f"- Contributing signals: {', '.join(signals)}")
+
+        base = self.to_user_text()
+        if not details:
+            return base
+        return f"{base}\n\nAdditional detail:\n" + "\n".join(details)

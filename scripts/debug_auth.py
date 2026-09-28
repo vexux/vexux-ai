@@ -16,13 +16,13 @@ class TestPolicy(DefaultPolicy):
         return DefaultPolicy.PolicyDecision(True)
 
 kr = KnowledgeGraphRegistry()
-g1 = InMemoryKnowledgeGraph(); g1.name = 'customer_graph'; g1.add_node('n1', properties={})
-g2 = InMemoryKnowledgeGraph(); g2.name = 'fraud_graph'; g2.add_node('n2', properties={})
+g1 = InMemoryKnowledgeGraph(); g1.name = 'public_graph'; g1.add_node('n1', properties={})
+g2 = InMemoryKnowledgeGraph(); g2.name = 'restricted_graph'; g2.add_node('n2', properties={})
 kr.register(g1); kr.register(g2)
-policy = TestPolicy(deny_map={'knowledge_graph': {'fraud_graph'}})
+policy = TestPolicy(deny_map={'knowledge_graph': {'restricted_graph'}})
 em = ExecutionManager(knowledge_graph_registry=kr, policy=policy)
 
-task = Task(id='t1', description='multi', input={'query':'q', 'graph_requests':[{'graph_name':'customer_graph','operation':'get_node','params':{'node_id':'n1'}},{'graph_name':'fraud_graph','operation':'get_node','params':{'node_id':'n2'}}]}, metadata={'capability':'retrieval'})
+task = Task(id='t1', description='multi', input={'query':'q', 'graph_requests':[{'graph_name':'public_graph','operation':'get_node','params':{'node_id':'n1'}},{'graph_name':'restricted_graph','operation':'get_node','params':{'node_id':'n2'}}]}, metadata={'capability':'retrieval'})
 ctx = AgentContext(request_id='r1', user_id='bob')
 
 try:

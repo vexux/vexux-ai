@@ -25,8 +25,7 @@ class SQLiteBackend:
         connection = self._connect()
         try:
             connection.row_factory = sqlite3.Row
-            # The fraud workflow uses MySQL-style positional placeholders;
-            # normalize them for the deterministic SQLite fixture.
+            # Normalize DB-API positional placeholders for SQLite.
             sqlite_query = query.replace("%s", "?")
             cursor = connection.execute(sqlite_query, parameters or {})
             return [dict(row) for row in cursor.fetchall()]

@@ -61,7 +61,10 @@ Do not set that flag for normal offline validation.
 ## 3. Bootstrap local fraud databases
 
 The real fraud composition expects Neo4j database `neo4j` (or the configured
-`NEO4J_DATABASE`) and MySQL database `vexux_fraud` (or `MYSQL_DATABASE`).
+`NEO4J_DATABASE`) and a MySQL database explicitly selected with
+`MYSQL_DATABASE`. The setup commands below use `vexux_fraud` as the fraud
+application's local database name; core does not provide a domain-specific
+database default.
 Create the MySQL database and application user using local administrative
 credentials, then grant that user access:
 

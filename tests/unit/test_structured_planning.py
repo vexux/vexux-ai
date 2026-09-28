@@ -46,6 +46,25 @@ class CustomerInvestigationWorkflow:
     def build_tasks(self, workflow_input):
         return []
 
+    def plan_query(self, query):
+        if "investigat" not in query.lower() and "suspicious activity" not in query.lower():
+            return None
+        import re
+
+        match = re.search(r"\b[A-Z]\d+\b", query)
+        if match is None:
+            return None
+        return Task(
+            id="task-1",
+            description="Run the registered workflow",
+            input={
+                "workflow": self.name,
+                "query": query,
+                "customer_id": match.group(0),
+            },
+            metadata={"capability": "workflow", "workflow": self.name},
+        )
+
 
 def plan(*tasks):
     return json.dumps({"tasks": list(tasks)})

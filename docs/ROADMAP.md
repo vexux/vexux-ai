@@ -5,15 +5,18 @@ This document outlines the current state and planned future capabilities of the 
 ## 1. Project Status Matrix
 
 ```text
-COMPLETED                    IN PROGRESS               PLANNED
-Agent control loop           RAG-Gateway decoupling    Multi-Agent Systems
-Structured planning          Test organization         Multi-Step DAG Plans
-Scoped replanning            Capability dispatch      Persistent storage
-Tool extensibility                                      Expanded tool ecosystem
-Hardened local RAG                                      Async/streaming execution
-Knowledge source abstraction                            SQL/API/graph knowledge sources
-Session conversation                                     Multi-backend inference
-FastAPI and observability
+COMPLETED                         IN PROGRESS       PLANNED
+Agent control loop                —                 Multi-Agent Systems
+Structured planning               —                 Expanded tool ecosystem
+Scoped replanning                 —                 Async/streaming execution
+Multi-Step DAG Plans
+Capability dispatch
+Tool extensibility
+Hardened local RAG
+Knowledge source and graph registries
+Session conversation
+Multi-backend inference
+FastAPI and local observability
 Evaluation suite
 ```
 
@@ -66,13 +69,21 @@ governance remain outside this phase.
 - File loader, sliding-window chunking, normalized embeddings, and FAISS vector search.
 - `RAGPipeline.retrieve()` with configurable top-k and similarity threshold handling.
 - Controlled no-result and retrieval-exception behavior through `ExecutionManager`.
-- `RAGKnowledgeSource` and `KnowledgeSourceRegistry` provide a domain-agnostic retrieval seam; only the RAG source is implemented.
-- Retrieval tasks can select registered sources and grounded responses attribute the actual selected source; advanced semantic routing remains future work.
+- `RAGKnowledgeSource` and SQL-backed knowledge sources use the domain-agnostic
+  `KnowledgeSourceRegistry`; SQLite and MySQL backend adapters are available.
+- Graph resources use `KnowledgeGraphRegistry`; explicit resource routing is
+  deterministic and authorization remains a separate execution-time decision.
+- Retrieval results retain selected-source attribution; broader semantic
+  routing remains future work.
 
 ### 2.4 Sessions, API, and Observability
-- Bounded in-memory conversation history isolated by `session_id`.
+- Bounded in-memory conversation history isolated by `session_id`, with
+  reference-style follow-up interpretation and independent-request isolation.
 - FastAPI endpoint: `POST /api/v1/agent/run`.
-- Structured task logs containing request/session/task IDs, capability, outcome, and duration.
+- Generic progress callbacks and structured task logs containing
+  request/session/task IDs, capability, outcome, and duration.
+- Audit events, execution traces, and derived metrics persisted in the local
+  sanitized SQLite observability store.
 
 ### 2.5 Evaluation and Training
 - Deterministic system evaluation: `python -m evaluation`, currently 44 scenarios.

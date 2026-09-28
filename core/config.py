@@ -78,7 +78,7 @@ class Config:
     mysql_port: int = 3306
     mysql_user: str = "vexux_app"
     mysql_password: Optional[str] = None
-    mysql_database: str = "vexux_fraud"
+    mysql_database: Optional[str] = None
     local_rag_inference_enabled: bool = False
 
     # Hide potential secrets from default repr by overriding
@@ -155,7 +155,7 @@ def load_config_from_env(prefix: str = "") -> Config:
     mysql_port = _parse_int(e("MYSQL_PORT"), default=3306, min_value=1, max_value=65535)
     mysql_user = e("MYSQL_USER") or "vexux_app"
     mysql_password = e("MYSQL_PASSWORD") or None
-    mysql_database = e("MYSQL_DATABASE") or "vexux_fraud"
+    mysql_database = e("MYSQL_DATABASE") or None
     local_rag_inference_enabled = _parse_bool(e("ENABLE_LOCAL_RAG_INFERENCE"))
 
     return Config(

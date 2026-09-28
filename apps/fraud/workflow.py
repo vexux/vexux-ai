@@ -5,6 +5,7 @@ from __future__ import annotations
 import uuid
 from dataclasses import dataclass, field
 from enum import Enum
+import re
 from typing import Any
 
 from agent.observer import Observer
@@ -22,6 +23,7 @@ from core.observability import (
 )
 
 from apps.fraud.domain import InvestigationResult
+from apps.fraud.identity import DEFAULT_ACTOR, validate_actor
 
 
 class StepStatus(str, Enum):
@@ -195,7 +197,12 @@ class FraudInvestigationWorkflow:
         self.max_retries_per_step = max_retries_per_step
 
     def execute(self, workflow_input: dict[str, Any], context: AgentContext) -> InvestigationResult:
-        actor = context.user_id or "investigator"
+        try:
+            actor = validate_actor(
+                DEFAULT_ACTOR if context.user_id is None else context.user_id
+            )
+        except ValueError as exc:
+            raise PermissionError("Actor identity is not registered.") from exc
         for resource_type, resource_name in (
             ("knowledge_graph", "customer_graph"),
             ("knowledge_graph", "fraud_graph"),
@@ -219,6 +226,27 @@ class FraudInvestigationWorkflow:
                 authoritative=True,
                 failure_category="infrastructure",
             ) from exc
+
+    def plan_query(self, query: str) -> Task | None:
+        if not re.search(
+            r"\binvestigat(?:e|ion|ing)\b|\bsuspicious activity\b",
+            query,
+            re.IGNORECASE,
+        ):
+            return None
+        identifier_match = re.search(r"\b[A-Z]\d+\b", query)
+        if identifier_match is None:
+            return None
+        return Task(
+            id="task-1",
+            description="Run the registered investigation workflow",
+            input={
+                "workflow": self.name,
+                "query": query,
+                "customer_id": identifier_match.group(0),
+            },
+            metadata={"capability": "workflow", "workflow": self.name},
+        )
 
     def create_plan(self, customer_id: str, goal: str | None = None) -> InvestigationPlan:
         return self.planner.create_plan(customer_id, goal)
@@ -314,7 +342,7 @@ class FraudInvestigationWorkflow:
     def run(
         self,
         customer_id: str,
-        actor: str = "investigator",
+        actor: str = DEFAULT_ACTOR,
         request_id: str | None = None,
     ) -> InvestigationResult:
         plan = self.create_plan(customer_id)

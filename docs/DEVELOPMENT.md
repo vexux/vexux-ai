@@ -105,11 +105,13 @@ provide arbitrary Cypher execution.
 
 `SQLKnowledgeSource` provides a contract-level adapter to relational data.
 Set `SQL_DATABASE_PATH` to an existing SQLite database to register the
-`business_db` source. Queries are read-only single `SELECT` statements and
+generic `sql` source. Queries are read-only single `SELECT` statements and
 support parameterized values; writes and multiple statements are rejected.
-The source runs through `KnowledgeSourceRegistry`, `KnowledgeDecision`, and
-`ExecutionManager`, so existing authorization, audit, and evidence behavior
-is preserved. Use [SETUP.md](SETUP.md) for the authoritative local database
+An application that needs domain-specific source names or natural-language
+default queries supplies them in its own composition. The source runs through
+`KnowledgeSourceRegistry`, `KnowledgeDecision`, and `ExecutionManager`, so
+existing authorization, audit, and evidence behavior is preserved. Use
+[SETUP.md](SETUP.md) for the fraud application's authoritative local database
 bootstrap and verification flow. Historical demonstrations are retained under
 `scripts/history/` and are not authoritative entry points.
 

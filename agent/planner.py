@@ -56,16 +56,17 @@ class Planner:
 
     def _deterministic_plan(self, query: str) -> Plan | None:
         """Select unambiguous capabilities without relying on model formatting."""
-        if self.workflow_registry is None:
-            return None
-        has_customer_workflow = any(
-            "customer_id" in set(item.get("input_schema", {}).get("required", []))
-            for item in self.workflow_registry.describe_workflows()
-        )
-        if not has_customer_workflow:
+        normalized = query.strip().lower()
+        if (
+            self.workflow_registry is not None
+            and self.workflow_registry.supports_query_planning()
+        ):
+            workflow_task = self.workflow_registry.plan_query(query)
+            if workflow_task is not None:
+                return Plan(tasks=[workflow_task])
+        else:
             return None
 
-        normalized = query.strip().lower()
         if re.fullmatch(r"(?:hi|hello|hey|good morning|good afternoon|good evening)[!. ]*", normalized):
             return Plan(tasks=[Task(
                 id="task-1",
@@ -97,31 +98,22 @@ class Planner:
                 metadata={"capability": "retrieval"},
             )])
 
-        if self.workflow_registry is not None and re.search(
-            r"\binvestigat(?:e|ion|ing)\b|\bsuspicious activity\b",
-            normalized,
-        ):
-            identifier_match = re.search(r"\b[A-Z]\d+\b", query)
-            if identifier_match is not None:
-                workflow_name = None
-                for metadata in self.workflow_registry.describe_workflows():
-                    required = set(metadata.get("input_schema", {}).get("required", []))
-                    if "customer_id" in required:
-                        workflow_name = metadata["name"]
-                        break
-                if workflow_name is not None:
-                    return Plan(tasks=[Task(
-                        id="task-1",
-                        description="Run the registered customer investigation workflow",
-                        input={
-                            "workflow": workflow_name,
-                            "query": query,
-                            "customer_id": identifier_match.group(0),
-                        },
-                        metadata={"capability": "workflow", "workflow": workflow_name},
-                    )])
-
         return None
+
+    def is_independent_request(self, query: str) -> bool:
+        """Return whether generic deterministic guardrails recognize a new request."""
+        normalized = query.strip().lower()
+        return bool(
+            re.fullmatch(r"(?:hi|hello|hey|good morning|good afternoon|good evening)[!. ]*", normalized)
+            or re.fullmatch(
+                r"(?:calculate|compute|what is)\s+[0-9\s()+\-*/%.]+[?.! ]*",
+                normalized,
+            )
+            or re.match(
+                r"^(?:what is|what are|who is|where is|when did|define|explain)\b",
+                normalized,
+            )
+        )
 
     def _workflow_guardrail(self, query: str, plan: Plan) -> Plan:
         """Correct unambiguous model misclassification using registered metadata."""
@@ -278,8 +270,8 @@ Multi-task example:
 Field rules:
 - General conversation, greetings, and social messages MUST use capability "model".
 - Generic factual or document questions MUST use capability "retrieval".
-- An explicitly supported customer investigation MUST use the registered workflow
-  whose input schema requires "customer_id"; do not use generic retrieval.
+- An explicitly supported registered workflow MUST use that workflow instead of
+  generic retrieval.
 - Arithmetic or another registered operation MUST use capability "tool".
 - Retrieval input MUST contain a string field named "query".
 - Retrieval input may include "source" only when it exactly matches a registered knowledge source; omit it to use the default source.

@@ -12,18 +12,14 @@ import core.composition as composition
 from core.knowledge.registry import KnowledgeSourceRegistry
 from core.knowledge.sql_source import SQLKnowledgeSource
 from core.knowledge.sqlite_backend import SQLiteBackend
-from core.policy.default import DefaultPolicy, PolicyDecision
-
 from apps.fraud.composition import build_fraud_investigation_graphs
+from apps.fraud.graph_correlation import process_investigation_graph_results
 from apps.fraud.investigation import FraudInvestigationService
+from apps.fraud.policy import FraudPolicy
 from apps.fraud.workflow import FraudInvestigationWorkflow
 
 
-class DemoPolicy(DefaultPolicy):
-    def authorize_resource(self, actor, resource_type, resource_name, action, context=None):
-        if actor == "support_user" and resource_name == "fraud_graph":
-            return PolicyDecision(False, "support_user cannot access fraud_graph", "demo_policy")
-        return super().authorize_resource(actor, resource_type, resource_name, action, context)
+DemoPolicy = FraudPolicy
 
 
 class _DemoRAGPipeline:
@@ -91,13 +87,14 @@ def create_demo_agent():
         agent.resource_router.knowledge_graph_registry = graphs
         agent.resource_router.knowledge_source_registry = sources
         agent.execution_manager.knowledge_graph_registry = graphs
+        agent.execution_manager.graph_result_processor = process_investigation_graph_results
         agent.execution_manager.knowledge_source_registry = sources
         knowledge_decision = getattr(agent.execution_manager, "knowledge_decision", None)
         if knowledge_decision is not None:
             knowledge_decision.knowledge_graph_registry = graphs
             knowledge_decision.knowledge_source_registry = sources
         agent.knowledge_graph_registry = graphs
-        demo_policy = DemoPolicy()
+        demo_policy = FraudPolicy()
         agent.policy = demo_policy
         agent.execution_manager.policy = demo_policy
         workflow_registry = getattr(agent, "workflow_registry", None)

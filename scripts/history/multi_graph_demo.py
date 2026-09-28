@@ -7,6 +7,7 @@ if str(ROOT) not in sys.path:
 
 from core.knowledge.multi_graph import execute_multi_graph_request
 from apps.fraud.composition import build_fraud_investigation_graphs, create_fraud_investigation_request
+from apps.fraud.graph_correlation import correlate_investigation_graph_results
 
 
 def main() -> None:
@@ -14,14 +15,18 @@ def main() -> None:
     request = create_fraud_investigation_request(
         "Investigate customer C1001 and identify their associated accounts, fraud cases, and any devices that connect them to other customers."
     )
-    result = execute_multi_graph_request(registry, request, customer_id="C1001")
+    result = execute_multi_graph_request(registry, request)
+    correlated = correlate_investigation_graph_results(
+        result["results"],
+        customer_id="C1001",
+    )
 
     print("Customer graph:", registry.get("customer_graph").name)
     print("Fraud graph:", registry.get("fraud_graph").name)
     print("Summary:")
-    print(result["summary"])
+    print(correlated["summary"])
     print("Facts:")
-    for fact in result["facts"]:
+    for fact in correlated["facts"]:
         print(f"- {fact}")
 
 

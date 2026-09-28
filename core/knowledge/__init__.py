@@ -5,7 +5,6 @@ from core.knowledge.mysql_backend import MySQLBackend
 from core.knowledge.resource_router import ResourceRouter
 from core.knowledge.api_documentation_source import APIDocumentationKnowledgeSource
 from core.knowledge.multi_graph import (
-    GraphCorrelator,
     GraphRequest,
     MultiGraphRequest,
     execute_multi_graph_request,
@@ -18,7 +17,6 @@ __all__ = [
     "MySQLBackend",
     "ResourceRouter",
     "APIDocumentationKnowledgeSource",
-    "GraphCorrelator",
     "GraphRequest",
     "MultiGraphRequest",
     "execute_multi_graph_request",

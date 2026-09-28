@@ -102,13 +102,12 @@ def create_agent():
         RAGKnowledgeSource(rag)
     )
     if config.sql_database_path:
-        sql_source = SQLKnowledgeSource(
-            SQLiteBackend(config.sql_database_path),
-            default_query="SELECT * FROM accounts",
-            aliases=("business db", "sqlite", "sqlite db", "sqlite database"),
+        knowledge_sources.register(
+            SQLKnowledgeSource(
+                SQLiteBackend(config.sql_database_path),
+                aliases=("sqlite database",),
+            )
         )
-        sql_source.name = "business_db"
-        knowledge_sources.register(sql_source)
 
     # -------------------------
     # Tools

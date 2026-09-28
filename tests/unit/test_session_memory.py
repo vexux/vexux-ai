@@ -109,6 +109,32 @@ def test_independent_numbered_query_does_not_receive_prior_context():
     assert Agent._conversation_context("1. hey", next_context) == []
 
 
+def test_registered_workflow_query_does_not_receive_prior_context():
+    class QueryWorkflow:
+        name = "reference-workflow"
+
+        def plan_query(self, query):
+            from core.contracts.execution import Task
+
+            if query.startswith("review"):
+                return Task("workflow-task", query)
+            return None
+
+    from core.workflows.registry import WorkflowRegistry
+
+    manager = ContextManager()
+    context = manager.create("request-1", session_id="workflow-session")
+    manager.add_conversation_turn(context, "unrelated", "previous response")
+    workflow_registry = WorkflowRegistry()
+    workflow_registry.register(QueryWorkflow())
+
+    assert Agent._conversation_context(
+        "review item 42",
+        context,
+        workflow_registry=workflow_registry,
+    ) == []
+
+
 def test_request_ids_remain_distinct_within_session():
     manager = ContextManager()
 

@@ -20,9 +20,12 @@ def test_demo_fixture_registers_reference_resources_and_policy(monkeypatch):
             "am I allowed to access customer_graph and fraud_graph?",
             user_id="support_user",
         )
+        omitted_actor = agent.run("Investigate C1001")
 
         assert investigator.output == "customer_graph -> ALLOWED\nfraud_graph -> ALLOWED"
         assert support_user.output == "customer_graph -> ALLOWED\nfraud_graph -> DENIED"
+        assert omitted_actor.success is False
+        assert omitted_actor.metadata["user_id"] == "support_user"
 
 
 def test_demo_single_graph_query_executes_through_graph_resource(monkeypatch):

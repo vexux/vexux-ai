@@ -4,6 +4,7 @@ import pytest
 
 from apps.fraud.domain import Customer, InvestigationResult, Transaction
 from apps.fraud.investigation import FraudInvestigationService
+from apps.fraud.identity import DEFAULT_ACTOR
 from apps.fraud.policy import FraudPolicy
 from core.knowledge.graph_registry import KnowledgeGraphRegistry
 from core.knowledge.inmemory_graph import InMemoryKnowledgeGraph
@@ -75,7 +76,7 @@ def test_domain_entity_validation_and_result_contract():
 def test_investigation_correlates_seeded_suspicious_signals_and_evidence():
     service, _ = make_service()
 
-    result = service.investigate("C1001")
+    result = service.investigate("C1001", actor="investigator")
 
     assert result.subject.customer_id == "C1001"
     assert result.risk_assessment == "high"
@@ -104,10 +105,26 @@ def test_authorization_denies_fraud_graph_before_fraud_execution():
 def test_unknown_customer_and_source_failure_remain_visible():
     service, _ = make_service()
     with pytest.raises(KeyError, match="Node not found"):
-        service.investigate("C9999")
+        service.investigate("C9999", actor="investigator")
 
     failing = FakeSource({"transactions": [], "alerts": [], "investigations": []})
     failing.retrieve = lambda *args, **kwargs: (_ for _ in ()).throw(RuntimeError("source unavailable"))
     service, _ = make_service(failing)
     with pytest.raises(RuntimeError, match="source unavailable"):
+        service.investigate("C1001", actor="investigator")
+
+
+def test_omitted_actor_uses_least_privileged_identity():
+    service, fraud_graph = make_service()
+    calls = []
+    original = fraud_graph.get_neighbors
+    fraud_graph.get_neighbors = lambda *args, **kwargs: (
+        calls.append(args),
+        original(*args, **kwargs),
+    )[1]
+
+    with pytest.raises(PermissionError, match="fraud_graph"):
         service.investigate("C1001")
+
+    assert DEFAULT_ACTOR == "support_user"
+    assert calls == []

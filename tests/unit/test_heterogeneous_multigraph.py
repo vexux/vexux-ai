@@ -4,6 +4,7 @@ from core.knowledge.inmemory_graph import InMemoryKnowledgeGraph
 from core.knowledge.neo4j_graph import Neo4jKnowledgeGraph
 from core.policy.default import DefaultPolicy, PolicyDecision
 from agent.execution_manager import ExecutionManager
+from apps.fraud.graph_correlation import process_investigation_graph_results
 
 
 class FakeResult:
@@ -110,7 +111,11 @@ def test_heterogeneous_backends_execute_and_aggregate_with_evidence():
     registry = build_registry()
     assert registry.get("customer_graph").__class__ is Neo4jKnowledgeGraph
     assert registry.get("fraud_graph").__class__ is InMemoryKnowledgeGraph
-    manager = ExecutionManager(knowledge_graph_registry=registry, policy=SelectivePolicy())
+    manager = ExecutionManager(
+        knowledge_graph_registry=registry,
+        policy=SelectivePolicy(),
+        graph_result_processor=process_investigation_graph_results,
+    )
     task = Task(
         id="heterogeneous",
         description="investigate",

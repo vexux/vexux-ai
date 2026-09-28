@@ -9,6 +9,7 @@ from apps.fraud.composition import (
     create_fraud_investigation_fixture,
     create_fraud_investigation_request,
 )
+from apps.fraud.graph_correlation import process_investigation_graph_results
 from core.model_gateway.gateway import ModelGateway
 from core.orchestrator import Orchestrator
 from core.policy.default import DefaultPolicy, PolicyDecision
@@ -52,6 +53,7 @@ def test_authorized_multigraph_investigation_and_audit():
     manager = ExecutionManager(
         knowledge_graph_registry=create_fraud_investigation_fixture(),
         policy=ScenarioPolicy(),
+        graph_result_processor=process_investigation_graph_results,
     )
 
     result = manager.execute(
@@ -89,6 +91,7 @@ def test_unauthorized_multigraph_fails_before_graph_execution():
     manager = ExecutionManager(
         knowledge_graph_registry=create_fraud_investigation_fixture(),
         policy=ScenarioPolicy({("knowledge_graph", "fraud_graph")}),
+        graph_result_processor=process_investigation_graph_results,
     )
 
     result = manager.execute(

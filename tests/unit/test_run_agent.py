@@ -1,4 +1,5 @@
 import logging
+from types import SimpleNamespace
 
 from scripts.manual import run_agent
 
@@ -93,3 +94,29 @@ def test_interactive_runner_uses_least_privileged_default_actor(monkeypatch, cap
     run_agent.main()
 
     assert agent.run_kwargs[0]["user_id"] == "support_user"
+
+
+def test_progress_renderer_displays_runtime_resource_data(capsys):
+    run_agent._render_progress_event(SimpleNamespace(
+        event_type="execution_progress",
+        phase="execution",
+        message="Resource complete.",
+        resource="registered_source",
+        status="completed",
+        task_id="task-1",
+    ))
+
+    assert "[Execution] registered_source [OK]" in capsys.readouterr().out
+
+
+def test_progress_renderer_displays_task_authorization_phase(capsys):
+    run_agent._render_progress_event(SimpleNamespace(
+        event_type="authorization_started",
+        phase="authorization",
+        message="Checking execution permission.",
+        resource=None,
+        status="started",
+        task_id="task-1",
+    ))
+
+    assert "[Authorization] Checking execution permission." in capsys.readouterr().out

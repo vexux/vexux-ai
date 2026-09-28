@@ -5,6 +5,10 @@ from core.contracts.execution import AgentContext, Task
 from core.knowledge.decision import KnowledgeDecision
 from core.knowledge.multi_graph import execute_multi_graph_request
 from apps.fraud.composition import build_fraud_investigation_graphs, create_fraud_investigation_request
+from apps.fraud.graph_correlation import (
+    correlate_investigation_graph_results,
+    process_investigation_graph_results,
+)
 
 
 def test_customer_graph_registration():
@@ -54,7 +58,10 @@ def test_knowledge_decision_supports_multi_graph_requests():
 
 def test_execution_manager_multi_graph_request_executes_both_graphs():
     registry = build_fraud_investigation_graphs()
-    manager = ExecutionManager(knowledge_graph_registry=registry)
+    manager = ExecutionManager(
+        knowledge_graph_registry=registry,
+        graph_result_processor=process_investigation_graph_results,
+    )
     request = create_fraud_investigation_request("Investigate customer C1001 and identify associated accounts, fraud cases, and devices.")
     task = Task(
         id="multi-graph-1",
@@ -84,11 +91,25 @@ def test_execution_manager_multi_graph_request_executes_both_graphs():
 def test_cross_graph_correlation_uses_explicit_identifiers_only():
     registry = build_fraud_investigation_graphs()
     request = create_fraud_investigation_request("Investigate customer C1001")
-    result = execute_multi_graph_request(registry, request, customer_id="C1001")
+    result = execute_multi_graph_request(registry, request)
+    correlation = correlate_investigation_graph_results(result["results"], customer_id="C1001")
 
-    assert result["summary"]["related_customers"] == ["C2001"]
-    assert "Customer C1001 owns accounts A100, A101." in result["facts"]
-    assert all("Alice" not in fact for fact in result["facts"])
+    assert correlation["summary"]["related_customers"] == ["C2001"]
+    assert "Customer C1001 owns accounts A100, A101." in correlation["facts"]
+    assert all("Alice" not in fact for fact in correlation["facts"])
+    assert "summary" not in result
+    assert "facts" not in result
+
+
+def test_generic_multi_graph_execution_returns_schema_neutral_results_and_evidence():
+    registry = build_fraud_investigation_graphs()
+    request = create_fraud_investigation_request("Investigate customer C1001")
+
+    result = execute_multi_graph_request(registry, request)
+
+    assert result["results"]
+    assert result["evidence"].sources() == ["customer_graph", "fraud_graph"]
+    assert not {"customer_id", "account_ids", "case_ids", "device_ids", "facts"} & set(result)
 
 
 def test_missing_graph_controlled_failure():
