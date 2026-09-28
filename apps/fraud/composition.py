@@ -24,15 +24,21 @@ def build_fraud_investigation_graphs() -> KnowledgeGraphRegistry:
     customer_graph.default_node_id = "C1001"
 
     customer_graph.add_node("C1001", label="Customer", properties={"customer_id": "C1001"})
+    customer_graph.add_node("C1002", label="Customer", properties={"customer_id": "C1002"})
     customer_graph.add_node("C2001", label="Customer", properties={"customer_id": "C2001"})
     customer_graph.add_node("A100", label="Account", properties={"account_id": "A100"})
     customer_graph.add_node("A101", label="Account", properties={"account_id": "A101"})
+    customer_graph.add_node("A200", label="Account", properties={"account_id": "A200"})
     customer_graph.add_node("D500", label="Device", properties={"device_id": "D500"})
+    customer_graph.add_node("D501", label="Device", properties={"device_id": "D501"})
 
     customer_graph.add_relationship("C1001", "A100", rel_type="owns", properties={"customer_id": "C1001", "account_id": "A100"})
     customer_graph.add_relationship("C1001", "A101", rel_type="owns", properties={"customer_id": "C1001", "account_id": "A101"})
     customer_graph.add_relationship("C1001", "D500", rel_type="uses", properties={"customer_id": "C1001", "device_id": "D500"})
     customer_graph.add_relationship("C2001", "D500", rel_type="uses", properties={"customer_id": "C2001", "device_id": "D500"})
+    customer_graph.add_relationship("C1002", "A200", rel_type="owns", properties={"customer_id": "C1002", "account_id": "A200"})
+    customer_graph.add_relationship("C1002", "D501", rel_type="uses", properties={"customer_id": "C1002", "device_id": "D501"})
+    customer_graph.add_relationship("C2001", "D501", rel_type="uses", properties={"customer_id": "C2001", "device_id": "D501"})
 
     registry.register(customer_graph)
 
@@ -46,13 +52,17 @@ def build_fraud_investigation_graphs() -> KnowledgeGraphRegistry:
     fraud_graph.default_node_id = "C1001"
 
     fraud_graph.add_node("C1001", label="Customer", properties={"customer_id": "C1001"})
+    fraud_graph.add_node("C1002", label="Customer", properties={"customer_id": "C1002"})
     fraud_graph.add_node("C2001", label="Customer", properties={"customer_id": "C2001"})
     fraud_graph.add_node("F900", label="FraudCase", properties={"case_id": "F900"})
     fraud_graph.add_node("D500", label="Device", properties={"device_id": "D500"})
+    fraud_graph.add_node("D501", label="Device", properties={"device_id": "D501"})
 
     fraud_graph.add_relationship("C1001", "F900", rel_type="involved_in", properties={"customer_id": "C1001", "case_id": "F900"})
     fraud_graph.add_relationship("C1001", "D500", rel_type="linked_to", properties={"customer_id": "C1001", "device_id": "D500"})
     fraud_graph.add_relationship("C2001", "D500", rel_type="linked_to", properties={"customer_id": "C2001", "device_id": "D500"})
+    fraud_graph.add_relationship("C1002", "D501", rel_type="linked_to", properties={"customer_id": "C1002", "device_id": "D501"})
+    fraud_graph.add_relationship("C2001", "D501", rel_type="linked_to", properties={"customer_id": "C2001", "device_id": "D501"})
 
     registry.register(fraud_graph)
     return registry

@@ -37,6 +37,9 @@ def test_default_benchmark_scenarios_are_stable_and_complete():
     assert {"general-conversation", "knowledge-rag", "tool-use", "fraud-investigation"} <= {
         scenario.scenario_id for scenario in scenarios
     }
+    assert {"fraud-investigation-c1002", "compare-c1001-c1002"} <= {
+        scenario.scenario_id for scenario in scenarios
+    }
 
 
 def test_benchmark_normalizes_authorization_and_invalid_actor_results(monkeypatch):
@@ -115,3 +118,36 @@ def test_benchmark_comparison_summary_is_human_readable():
     summary = BenchmarkComparison([report]).summary()
     assert "provider/model" in summary
     assert "ollama/phi3:latest" in summary
+
+
+def test_demo_benchmark_executes_c1002_and_comparison_scenarios(monkeypatch):
+    from evaluation.benchmark import configured_demo_agent
+
+    monkeypatch.setenv("MODEL_PROVIDER", "fake")
+    scenarios = [
+        BenchmarkScenario(
+            "fraud-investigation-c1002",
+            "Investigate C1002",
+            "fraud investigation workflow for a shared-device customer",
+            "investigator",
+        ),
+        BenchmarkScenario(
+            "compare-c1001-c1002",
+            "Compare C1001 and C1002",
+            "deterministic comparison of two customer investigations",
+            "investigator",
+        ),
+    ]
+    config = BenchmarkConfig(provider="fake", model="fake", repetitions=1)
+    with configured_demo_agent(config) as agent_factory:
+        report = run_benchmark(
+            agent_factory,
+            scenarios,
+            benchmark_config=config,
+        )
+
+    assert report.passed == 2
+    assert [metric.selected_workflow for metric in report.metrics] == [
+        "fraud_investigation",
+        "fraud_investigation",
+    ]

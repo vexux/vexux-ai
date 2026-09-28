@@ -61,16 +61,8 @@ def create_demo_agent():
         database = Path(directory) / "business.db"
         connection = sqlite3.connect(database)
         try:
-            connection.executescript(
-                "CREATE TABLE accounts (account_id TEXT, customer_id TEXT, status TEXT);"
-                "INSERT INTO accounts VALUES ('A100', 'C1001', 'active');"
-                "CREATE TABLE transactions (transaction_id TEXT, account_id TEXT, customer_id TEXT, merchant_id TEXT, amount REAL, status TEXT, occurred_at TEXT);"
-                "INSERT INTO transactions VALUES ('T1001', 'A100', 'C1001', 'M100', 120.0, 'posted', '2026-01-01');"
-                "CREATE TABLE fraud_alerts (alert_id TEXT, customer_id TEXT, transaction_id TEXT, alert_type TEXT, severity TEXT, status TEXT, created_at TEXT);"
-                "INSERT INTO fraud_alerts VALUES ('AL1001', 'C1001', 'T1001', 'velocity', 'high', 'open', '2026-01-01');"
-                "CREATE TABLE investigations (investigation_id TEXT, customer_id TEXT, fraud_case_id TEXT, status TEXT, opened_at TEXT);"
-                "INSERT INTO investigations VALUES ('I1001', 'C1001', 'F900', 'open', '2026-01-01');"
-            )
+            fixture_path = Path(__file__).parent / "data" / "sqlite" / "demo.sql"
+            connection.executescript(fixture_path.read_text(encoding="utf-8"))
         finally:
             connection.close()
 

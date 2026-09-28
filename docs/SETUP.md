@@ -36,6 +36,13 @@ repository root. Explicit process environment variables take precedence over
 $env:MODEL_PROVIDER = "fake"
 ```
 
+The local observability store is generated at
+`data/observability/vexux_observability.db` by default and is ignored by Git.
+It is runtime state, not a checked-in fixture; it is created when observability
+is initialized. Set `OBSERVABILITY_DB_PATH` to use another local path. The
+fraud demo SQLite fixture at `apps/fraud/data/sqlite/demo.sql` is separate and
+is not covered by the runtime database ignore rule.
+
 `MODEL_PROVIDER` is required and must be one of `fake`, `ollama`, `mistral`, or
 `qwen`. Missing or invalid values produce a configuration error; Vexux never
 falls back to an unexpected remote provider. `FAKE_MODEL`, `MISTRAL_MODEL`,
@@ -92,8 +99,18 @@ apps/fraud/data/neo4j/schema.cypher
 apps/fraud/data/neo4j/seed.cypher
 ```
 
-The scripts are idempotent for the seeded records. Verify the expected C1001
-state with:
+The scripts are repeatable for the seeded records. The MySQL seed includes
+10 customers, 16 accounts, 50 transactions, 12 alerts, and 6 investigation
+records. The graph seed provides matching customer/account identities and
+representative device, address, merchant, case, and alert nodes with 40
+relationships declared by the seed. Existing records are preserved, so an
+already-populated Neo4j database can contain more relationships than the seed
+declares.
+The SQLite demo fixture is maintained separately at
+`apps/fraud/data/sqlite/demo.sql`; it is intentionally small and is not a
+replacement for the Neo4j/MySQL seed.
+
+Verify the expected C1001 and C1002 states with:
 
 ```sql
 SELECT customer_id, full_name, risk_level
@@ -102,11 +119,17 @@ SELECT COUNT(*) AS transaction_count
 FROM transactions WHERE customer_id = 'C1001';
 SELECT alert_id, alert_type, severity, status
 FROM fraud_alerts WHERE customer_id = 'C1001';
+SELECT customer_id, COUNT(*) AS transaction_count
+FROM transactions WHERE customer_id IN ('C1001', 'C1002')
+GROUP BY customer_id;
 ```
 
-Expected MySQL facts include Alice Smith, four transactions, and two open
-high-severity alerts. Neo4j seed data gives C1001 a shared device relationship
-with C1002 and open fraud-case context.
+Expected facts include Alice Smith, five seeded transactions, and two open
+high-severity alerts for C1001. C1002 has four transactions and a closed
+low-severity alert; Neo4j links C1001 and C1002 through a shared device. The
+deterministic investigation should therefore retain C1001 as high risk and
+C1002 as medium risk. Apply the updated seed files after the schemas are
+present to add the expanded fixture records to an existing local dataset.
 
 ## 4. Run deterministic validation
 

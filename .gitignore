@@ -6,6 +6,9 @@ __pycache__/
 .env.*
 !.env.example
 
+# Local runtime observability store; fraud SQLite fixtures remain tracked.
+/data/observability/vexux_observability.db
+
 models/checkpoints/
 models/base/
 

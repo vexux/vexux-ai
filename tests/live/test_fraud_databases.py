@@ -16,6 +16,8 @@ from core.knowledge.mysql_backend import MySQLBackend
 from core.knowledge.neo4j_graph import Neo4jKnowledgeGraph
 from core.knowledge.registry import KnowledgeSourceRegistry
 from core.knowledge.sql_source import SQLKnowledgeSource
+from apps.fraud.investigation import FraudInvestigationService
+from apps.fraud.policy import FraudPolicy
 
 
 CONFIG = get_config()
@@ -47,9 +49,14 @@ def test_neo4j_seeded_lookup_and_multi_hop_traversal():
     graph = _graph("customer_graph")
     customer = graph.get_node("C1001")
     assert customer["properties"]["name"] == "Alice Smith"
+    assert graph.get_node("C1005")["properties"]["name"] == "Evan Brooks"
     neighbors = graph.get_neighbors("C1001", direction="outgoing")
     neighbor_ids = {item["node"]["id"] for item in neighbors}
     assert {"A1001", "D5001", "ADDR8001", "F9001"} <= neighbor_ids
+    c1002_neighbors = graph.get_neighbors("C1002", direction="outgoing")
+    assert {"A1003", "D5001", "ADDR8002"} <= {
+        item["node"]["id"] for item in c1002_neighbors
+    }
 
 
 def test_mysql_seeded_customer_transactions_alerts_and_schema():
@@ -72,6 +79,85 @@ def test_mysql_seeded_customer_transactions_alerts_and_schema():
         ("C1001",),
     )
     assert {row["alert_id"] for row in alerts} >= {"ALERT6001", "ALERT6002"}
+    counts = {
+        table: backend.execute(f"SELECT COUNT(*) AS count FROM {table}")[0]["count"]
+        for table in ("customers", "accounts", "transactions", "fraud_alerts", "investigations")
+    }
+    assert counts["customers"] >= 10
+    assert counts["accounts"] >= 16
+    assert counts["transactions"] >= 50
+    assert counts["fraud_alerts"] >= 12
+    assert counts["investigations"] >= 6
+    orphan_accounts = backend.execute(
+        "SELECT COUNT(*) AS count FROM accounts a "
+        "LEFT JOIN customers c ON c.customer_id = a.customer_id "
+        "WHERE c.customer_id IS NULL"
+    )[0]["count"]
+    orphan_transactions = backend.execute(
+        "SELECT COUNT(*) AS count FROM transactions t "
+        "LEFT JOIN accounts a ON a.account_id = t.account_id "
+        "LEFT JOIN customers c ON c.customer_id = t.customer_id "
+        "LEFT JOIN merchants m ON m.merchant_id = t.merchant_id "
+        "WHERE a.account_id IS NULL OR c.customer_id IS NULL OR m.merchant_id IS NULL"
+    )[0]["count"]
+    assert orphan_accounts == 0
+    assert orphan_transactions == 0
+
+
+def test_live_investigation_keeps_c1002_medium_and_c1001_high():
+    graphs = KnowledgeGraphRegistry()
+    graphs.register(_graph("customer_graph"))
+    graphs.register(_graph("fraud_graph"))
+    source = SQLKnowledgeSource(
+        MySQLBackend(
+            host=CONFIG.mysql_host,
+            port=CONFIG.mysql_port,
+            user=CONFIG.mysql_user,
+            password=CONFIG.mysql_password,
+            database=CONFIG.mysql_database,
+        ),
+        aliases=("business database",),
+    )
+    source.name = "business_db"
+    sources = KnowledgeSourceRegistry()
+    sources.register(source)
+    service = FraudInvestigationService(graphs, sources, FraudPolicy())
+
+    c1001 = service.investigate("C1001", actor="investigator")
+    c1002 = service.investigate("C1002", actor="investigator")
+
+    assert c1001.risk_assessment == "high"
+    assert c1001.metadata["transaction_count"] == 5
+    assert c1001.metadata["alert_count"] == 2
+    assert c1002.risk_assessment == "medium"
+    assert "shared_device_relationship" in c1002.contributing_signals
+    assert c1002.metadata["transaction_count"] == 4
+    assert c1002.metadata["alert_count"] == 1
+
+
+def test_live_investigation_rejects_missing_customer_and_unauthorized_actor():
+    graphs = KnowledgeGraphRegistry()
+    graphs.register(_graph("customer_graph"))
+    graphs.register(_graph("fraud_graph"))
+    source = SQLKnowledgeSource(
+        MySQLBackend(
+            host=CONFIG.mysql_host,
+            port=CONFIG.mysql_port,
+            user=CONFIG.mysql_user,
+            password=CONFIG.mysql_password,
+            database=CONFIG.mysql_database,
+        ),
+        aliases=("business database",),
+    )
+    source.name = "business_db"
+    sources = KnowledgeSourceRegistry()
+    sources.register(source)
+    service = FraudInvestigationService(graphs, sources, FraudPolicy())
+
+    with pytest.raises(KeyError, match="Node not found"):
+        service.investigate("C9999", actor="investigator")
+    with pytest.raises(PermissionError, match="Unauthorized access"):
+        service.investigate("C1001", actor="support_user")
 
 
 def test_vexux_registry_adapter_execution_produces_real_source_evidence():

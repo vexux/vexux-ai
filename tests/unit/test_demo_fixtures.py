@@ -1,5 +1,7 @@
 from apps.fraud.demo import create_demo_agent
 from types import SimpleNamespace
+import sqlite3
+from pathlib import Path
 
 
 def test_demo_fixture_registers_reference_resources_and_policy(monkeypatch):
@@ -90,3 +92,31 @@ def test_demo_provider_respects_explicit_environment(monkeypatch):
         pass
     assert observed == ["qwen"]
     assert __import__("os").environ["MODEL_PROVIDER"] == "qwen"
+
+
+def test_demo_business_fixture_is_application_owned_and_referentially_valid():
+    fixture = (
+        Path(__file__).parents[2]
+        / "apps"
+        / "fraud"
+        / "data"
+        / "sqlite"
+        / "demo.sql"
+    )
+    connection = sqlite3.connect(":memory:")
+    try:
+        connection.executescript(fixture.read_text(encoding="utf-8"))
+        assert connection.execute("SELECT COUNT(*) FROM accounts").fetchone()[0] == 2
+        assert connection.execute("SELECT COUNT(*) FROM transactions").fetchone()[0] == 3
+        assert connection.execute("SELECT COUNT(*) FROM fraud_alerts").fetchone()[0] == 2
+        assert connection.execute("SELECT COUNT(*) FROM investigations").fetchone()[0] == 1
+        assert connection.execute(
+            "SELECT COUNT(*) FROM transactions t LEFT JOIN accounts a "
+            "ON a.account_id = t.account_id WHERE a.account_id IS NULL"
+        ).fetchone()[0] == 0
+        assert connection.execute(
+            "SELECT COUNT(*) FROM fraud_alerts a LEFT JOIN transactions t "
+            "ON t.transaction_id = a.transaction_id WHERE t.transaction_id IS NULL"
+        ).fetchone()[0] == 0
+    finally:
+        connection.close()
