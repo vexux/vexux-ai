@@ -5,6 +5,10 @@ from core.contracts.execution import Intent, Plan, Task
 from core.tools.registry import ToolRegistry
 
 
+class UnsupportedCapabilityError(ValueError):
+    """Raised when a model proposes a capability outside the runtime contract."""
+
+
 class Planner:
 
     SUPPORTED_CAPABILITIES = {
@@ -58,14 +62,13 @@ class Planner:
         """Select unambiguous capabilities without relying on model formatting."""
         normalized = query.strip().lower()
         if (
-            self.workflow_registry is not None
-            and self.workflow_registry.supports_query_planning()
+            self.workflow_registry is None
+            or not self.workflow_registry.supports_query_planning()
         ):
-            workflow_task = self.workflow_registry.plan_query(query)
-            if workflow_task is not None:
-                return Plan(tasks=[workflow_task])
-        else:
             return None
+        workflow_plan = self.plan_registered_workflow(query)
+        if workflow_plan is not None:
+            return workflow_plan
 
         if re.fullmatch(r"(?:hi|hello|hey|good morning|good afternoon|good evening)[!. ]*", normalized):
             return Plan(tasks=[Task(
@@ -99,6 +102,16 @@ class Planner:
             )])
 
         return None
+
+    def plan_registered_workflow(self, query: str) -> Plan | None:
+        """Ask opted-in registered workflows to route their own domain queries."""
+        if (
+            self.workflow_registry is None
+            or not self.workflow_registry.supports_query_planning()
+        ):
+            return None
+        workflow_task = self.workflow_registry.plan_query(query)
+        return Plan(tasks=[workflow_task]) if workflow_task is not None else None
 
     def is_independent_request(self, query: str) -> bool:
         """Return whether generic deterministic guardrails recognize a new request."""
@@ -371,6 +384,8 @@ Field rules:
 
             return Plan(tasks=tasks)
 
+        except UnsupportedCapabilityError:
+            raise
         except (json.JSONDecodeError, TypeError, ValueError) as exc:
             raise ValueError(f"Invalid structured plan response: {exc}") from exc
 
@@ -401,7 +416,9 @@ Field rules:
             raise ValueError(f"Task {index} is missing a valid 'description'.")
 
         if capability not in self.SUPPORTED_CAPABILITIES:
-            raise ValueError(f"Task {index} has unknown capability: {capability}")
+            raise UnsupportedCapabilityError(
+                f"Task {index} has unknown capability: {capability}"
+            )
 
         if not isinstance(task_input, dict):
             raise ValueError(f"Task {index} is missing a valid 'input' object.")

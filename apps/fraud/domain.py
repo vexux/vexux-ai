@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -176,6 +177,17 @@ class InvestigationResult:
             f"Resources consulted:\n{resources}"
         )
 
+    def to_query_text(self, query: str) -> str:
+        """Present query-specific deterministic caveats with the authoritative result."""
+        if "score" not in query.lower() and "probability" not in query.lower():
+            return self.to_user_text()
+        return (
+            "A numeric fraud score or probability is not available. "
+            f"The deterministic categorical assessment for "
+            f"{self.subject.customer_id} is {self.risk_assessment.upper()}.\n\n"
+            f"{self.to_user_text()}"
+        )
+
     def to_follow_up_text(
         self,
         *,
@@ -213,3 +225,47 @@ class InvestigationResult:
         if not details:
             return base
         return f"{base}\n\nAdditional detail:\n" + "\n".join(details)
+
+
+@dataclass
+class FraudQueryResult:
+    subject_ids: list[str]
+    query_label: str
+    records: list[dict[str, Any]]
+    resources_consulted: list[str]
+
+    def to_user_text(self, *, one_line: bool = False) -> str:
+        subjects = ", ".join(self.subject_ids)
+        if self.records:
+            records = "\n".join(
+                f"- {json.dumps(record, sort_keys=True, default=str)}"
+                for record in self.records
+            )
+        else:
+            records = "- No matching records."
+        output = (
+            f"{self.query_label.title()} for {subjects}\n\n"
+            f"Results:\n{records}\n\n"
+            f"Resources consulted:\n{', '.join(self.resources_consulted)}"
+        )
+        return " ".join(output.split()) if one_line else output
+
+
+@dataclass
+class FraudComparisonResult:
+    results: list[InvestigationResult]
+
+    def to_user_text(self, *, one_line: bool = False) -> str:
+        lines = [
+            f"{result.subject.customer_id}: {result.risk_assessment.upper()} risk "
+            f"({len(result.findings)} deterministic finding(s))"
+            for result in self.results
+        ]
+        output = "Customer comparison\n\n" + "\n".join(f"- {line}" for line in lines)
+        resources = list(dict.fromkeys(
+            resource
+            for result in self.results
+            for resource in result.resources_consulted
+        ))
+        output += f"\n\nResources consulted:\n{', '.join(resources)}"
+        return " ".join(output.split()) if one_line else output

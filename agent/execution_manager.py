@@ -129,7 +129,15 @@ class ExecutionManager:
             if self.policy is not None:
                 decision = self.policy.authorize_execution(task, context)
                 if not decision.allowed:
-                    return ExecutionResult(success=False, error=f"Policy denied execution: {decision.reason}", metadata={"policy": decision.policy_name, "reason": decision.reason})
+                    return ExecutionResult(
+                        success=False,
+                        error=f"Policy denied execution: {decision.reason}",
+                        metadata={
+                            "policy": decision.policy_name,
+                            "reason": decision.reason,
+                            "authorization_denied": True,
+                        },
+                    )
 
             if capability == "retrieval":
 

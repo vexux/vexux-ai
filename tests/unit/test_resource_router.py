@@ -5,10 +5,14 @@ from core.knowledge.registry import KnowledgeSourceRegistry
 from core.knowledge.resource_router import ResourceRouter
 from core.knowledge.sql_source import SQLKnowledgeSource
 from agent.agent import Agent
-from core.contracts.execution import ExecutionResult, Plan, Task
+from agent.execution_manager import ExecutionManager
+from core.contracts.execution import AgentContext, ExecutionResult, Plan, Task
 from core.context.context_manager import ContextManager
 from agent.observer import Observer
 from agent.decision import DecisionMaker
+from core.contracts.progress import ProgressReporter
+from core.knowledge.graph_registry import KnowledgeGraphRegistry
+from core.knowledge.inmemory_graph import InMemoryKnowledgeGraph
 
 
 class StubBackend:
@@ -150,3 +154,91 @@ def test_authorization_questions_use_current_actor_not_conversation():
     assert support_user.output == "customer_graph -> ALLOWED\nfraud_graph -> DENIED"
     assert support_user.success is False
     assert "did not identify" in no_resource.error
+
+
+def test_generic_execution_denial_emits_failed_progress_without_resource_success():
+    from core.policy.default import DefaultPolicy, PolicyDecision
+
+    graph = InMemoryKnowledgeGraph()
+    graph.name = "restricted_graph"
+    graph.add_node("node-1", label="Node")
+    registry = KnowledgeGraphRegistry()
+    registry.register(graph)
+    calls = []
+    graph.get_neighbors = lambda *args, **kwargs: calls.append("executed")
+
+    class DenyingPolicy(DefaultPolicy):
+        def authorize_resource(
+            self, actor, resource_type, resource_name, action, context=None
+        ):
+            return PolicyDecision(
+                False,
+                "access denied",
+                "test_policy",
+            )
+
+    manager = ExecutionManager(
+        knowledge_graph_registry=registry,
+        policy=DenyingPolicy(),
+    )
+    events = []
+    manager.progress_reporter = ProgressReporter(events.append)
+    result = manager.execute(
+        Task(
+            id="restricted-read",
+            description="Read restricted graph",
+            input={
+                "query": "Read relationships",
+                "source": "restricted_graph",
+                "operation": "get_neighbors",
+                "params": {"node_id": "node-1"},
+            },
+            metadata={"capability": "retrieval"},
+        ),
+        AgentContext(request_id="generic-denial", user_id="support_user"),
+    )
+
+    assert result.success is False
+    assert result.metadata["authorization_denied"] is True
+    assert calls == []
+    assert any(
+        event.event_type == "execution_progress"
+        and event.status == "failed"
+        for event in events
+    )
+    assert not any(
+        event.resource == "restricted_graph" and event.status == "completed"
+        for event in events
+    )
+
+
+def test_execution_policy_denial_is_marked_for_terminal_agent_handling():
+    from core.policy.default import DefaultPolicy, PolicyDecision
+
+    class DenyingPolicy(DefaultPolicy):
+        def authorize_execution(self, task, context):
+            return PolicyDecision(False, "execution denied", "test_policy")
+
+    manager = ExecutionManager(policy=DenyingPolicy())
+    events = []
+    manager.progress_reporter = ProgressReporter(events.append)
+    result = manager.execute(
+        Task(
+            id="denied-task",
+            description="Run a task",
+            input={"query": "not executed"},
+            metadata={"capability": "model"},
+        ),
+        AgentContext(request_id="execution-denial", user_id="support_user"),
+    )
+
+    assert result.success is False
+    assert result.metadata["authorization_denied"] is True
+    assert any(
+        event.event_type == "authorization_completed" and event.status == "denied"
+        for event in events
+    )
+    assert any(
+        event.event_type == "execution_progress" and event.status == "failed"
+        for event in events
+    )

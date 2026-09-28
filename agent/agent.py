@@ -7,7 +7,7 @@ from agent.execution_manager import (
     ExecutionManager,
 )
 
-from agent.planner import Planner
+from agent.planner import Planner, UnsupportedCapabilityError
 from agent.observer import Observer
 from agent.decision import DecisionMaker, DecisionType
 from core.contracts.execution import Plan, Task
@@ -70,6 +70,8 @@ class Agent:
         self.resource_router = resource_router
         self.progress_reporter = ProgressReporter(progress_callback)
         self.execution_manager.progress_reporter = self.progress_reporter
+        if hasattr(self.response_synthesizer, "progress_reporter"):
+            self.response_synthesizer.progress_reporter = self.progress_reporter
 
     def _emit_progress(self, event_type: str, phase: str, message: str, **kwargs):
         return self.progress_reporter.emit(event_type, phase, message, **kwargs)
@@ -189,6 +191,7 @@ class Agent:
         planning_query = follow_up.planning_query if follow_up is not None else query
 
         routed_plan = None
+        setup_started = time.perf_counter()
         if self.resource_router is not None:
             if self.resource_router.is_authorization_query(query):
                 try:
@@ -264,8 +267,19 @@ class Agent:
                         },
                     },
                 )
+            plan_registered_workflow = getattr(
+                self.planner,
+                "plan_registered_workflow",
+                None,
+            )
+            if callable(plan_registered_workflow):
+                routed_plan = plan_registered_workflow(planning_query)
             try:
-                route = self.resource_router.route(query)
+                route = (
+                    None
+                    if routed_plan is not None
+                    else self.resource_router.route(query)
+                )
             except (ValueError, KeyError) as exc:
                 return AgentResponse(
                     success=False,
@@ -303,6 +317,9 @@ class Agent:
                     ))
                 routed_plan = Plan(tasks=routed_tasks)
 
+        setup_routing_duration_ms = (
+            time.perf_counter() - setup_started
+        ) * 1000.0
         retry_count = 0
         logger = logging.getLogger(__name__)
         planning_duration_ms = 0.0
@@ -335,6 +352,13 @@ class Agent:
                     )
 
                 else:
+                    self._emit_progress(
+                        "planning_started",
+                        "planning",
+                        "Creating recovery plan.",
+                        status="started",
+                    )
+                    recovery_planning_started = time.perf_counter()
 
                     if context.session_id is None:
                         recovery_plan = self.planner.replan(
@@ -349,6 +373,17 @@ class Agent:
                             context.current_task,
                             conversation_context=conversation_context,
                         )
+                    recovery_planning_duration_ms = (
+                        time.perf_counter() - recovery_planning_started
+                    ) * 1000.0
+                    planning_duration_ms += recovery_planning_duration_ms
+                    self._emit_progress(
+                        "planning_completed",
+                        "planning",
+                        "Recovery plan created.",
+                        status="completed",
+                        duration_ms=recovery_planning_duration_ms,
+                    )
 
                     # Collect any remaining tasks from the previous plan that have not run yet
                     remaining_tasks = []
@@ -364,7 +399,34 @@ class Agent:
                         tasks=recovery_plan.tasks + remaining_tasks
                     )
 
+            except UnsupportedCapabilityError:
+                self._emit_progress(
+                    "planning_failed",
+                    "planning",
+                    "No supported plan could be created.",
+                    status="failed",
+                )
+                return AgentResponse(
+                    success=False,
+                    output=None,
+                    error=(
+                        "I couldn't map that request to a supported capability. "
+                        "Try a registered resource, tool, or workflow request."
+                    ),
+                    trace=context.observations,
+                    metadata={
+                        "request_id": context.request_id,
+                        "session_id": context.session_id,
+                        "user_id": context.user_id,
+                    },
+                )
             except ValueError as exc:
+                self._emit_progress(
+                    "planning_failed",
+                    "planning",
+                    "Planning could not be completed.",
+                    status="failed",
+                )
 
                 return AgentResponse(
                     success=False,
@@ -806,6 +868,7 @@ class Agent:
 
                 futures = {}
                 results = {}
+                execution_batch_started = time.perf_counter()
 
                 def _exec_task(t):
                     # Worker runs execution_manager.execute and returns tuple
@@ -879,6 +942,9 @@ class Agent:
                             duration_ms = 0.0
                         completed_batch.append((tid, res, duration_ms, task))
 
+                execution_duration_ms += (
+                    time.perf_counter() - execution_batch_started
+                ) * 1000.0
                 # Process completed_batch in deterministic plan order
                 completed_batch.sort(key=lambda item: original_index[item[0]])
 
@@ -887,7 +953,6 @@ class Agent:
                 failed_replan_ids = []
 
                 for tid, res, duration_ms, task in completed_batch:
-                    execution_duration_ms += duration_ms
                     self._emit_progress(
                         "execution_completed",
                         "execution",
@@ -1043,15 +1108,14 @@ class Agent:
                     context.observations,
                     conversation_context=conversation_context,
                 )
-                response_duration_ms = (time.perf_counter() - response_started) * 1000.0
-                total_duration_ms = (time.perf_counter() - request_started) * 1000.0
-                self._emit_progress(
-                    "response_completed",
-                    "response",
-                    "Response ready.",
-                    status="completed",
-                    duration_ms=response_duration_ms,
+                response_component_timings = {}
+                timings_for_call = getattr(
+                    self.response_synthesizer,
+                    "timings_for_current_call",
+                    None,
                 )
+                if callable(timings_for_call):
+                    response_component_timings = timings_for_call()
 
                 if self.policy is not None:
                     decision = self.policy.validate_output(final_output, context)
@@ -1063,6 +1127,27 @@ class Agent:
                     query,
                     final_output,
                 )
+                response_duration_ms = (
+                    time.perf_counter() - response_started
+                ) * 1000.0
+                self._emit_progress(
+                    "response_completed",
+                    "response",
+                    "Response ready.",
+                    status="completed",
+                    duration_ms=response_duration_ms,
+                )
+                total_duration_ms = (
+                    time.perf_counter() - request_started
+                ) * 1000.0
+                other_duration_ms = max(
+                    0.0,
+                    total_duration_ms
+                    - setup_routing_duration_ms
+                    - planning_duration_ms
+                    - execution_duration_ms
+                    - response_duration_ms,
+                )
 
                 return AgentResponse(
                     success=True,
@@ -1073,9 +1158,12 @@ class Agent:
                         "request_id": context.request_id,
                         "session_id": context.session_id,
                         "timings_ms": {
+                            "setup_routing": round(setup_routing_duration_ms, 2),
                             "planning": round(planning_duration_ms, 2),
                             "execution": round(execution_duration_ms, 2),
                             "response": round(response_duration_ms, 2),
+                            **response_component_timings,
+                            "other": round(other_duration_ms, 2),
                             "total": round(total_duration_ms, 2),
                         },
                     },

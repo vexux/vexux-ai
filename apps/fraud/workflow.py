@@ -22,7 +22,11 @@ from core.observability import (
     timed,
 )
 
-from apps.fraud.domain import InvestigationResult
+from apps.fraud.domain import (
+    FraudComparisonResult,
+    FraudQueryResult,
+    InvestigationResult,
+)
 from apps.fraud.identity import DEFAULT_ACTOR, validate_actor
 
 
@@ -196,25 +200,37 @@ class FraudInvestigationWorkflow:
         self.max_replans = max_replans
         self.max_retries_per_step = max_retries_per_step
 
-    def execute(self, workflow_input: dict[str, Any], context: AgentContext) -> InvestigationResult:
+    def execute(
+        self, workflow_input: dict[str, Any], context: AgentContext
+    ) -> InvestigationResult | FraudQueryResult | FraudComparisonResult:
         try:
             actor = validate_actor(
                 DEFAULT_ACTOR if context.user_id is None else context.user_id
             )
         except ValueError as exc:
             raise PermissionError("Actor identity is not registered.") from exc
-        for resource_type, resource_name in (
-            ("knowledge_graph", "customer_graph"),
-            ("knowledge_graph", "fraud_graph"),
-            ("knowledge_source", "business_db"),
-        ):
-            self.service._authorize(actor, resource_type, resource_name)
         try:
-            return self.run(
-                workflow_input["customer_id"],
-                actor=actor,
-                request_id=context.request_id,
-            )
+            query_kind = workflow_input.get("query_kind", "investigation")
+            if query_kind in {"investigation", "comparison"}:
+                for resource_type, resource_name in (
+                    ("knowledge_graph", "customer_graph"),
+                    ("knowledge_graph", "fraud_graph"),
+                    ("knowledge_source", "business_db"),
+                ):
+                    self.service._authorize(actor, resource_type, resource_name)
+            if query_kind == "comparison":
+                results = [
+                    self.run(customer_id, actor=actor, request_id=context.request_id)
+                    for customer_id in workflow_input["customer_ids"]
+                ]
+                return FraudComparisonResult(results)
+            if query_kind == "investigation":
+                return self.run(
+                    workflow_input["customer_id"],
+                    actor=actor,
+                    request_id=context.request_id,
+                )
+            return self._run_resource_query(workflow_input, context)
         except PermissionError:
             raise
         except Exception as exc:
@@ -227,23 +243,119 @@ class FraudInvestigationWorkflow:
                 failure_category="infrastructure",
             ) from exc
 
+    def _run_resource_query(
+        self, workflow_input: dict[str, Any], context: AgentContext
+    ) -> FraudQueryResult:
+        customer_id = workflow_input["customer_id"]
+        query_kind = workflow_input["query_kind"]
+        source = "customer_graph" if query_kind == "connections" else "business_db"
+        if query_kind == "transactions":
+            query = (
+                "SELECT * FROM transactions WHERE customer_id = %s "
+                "ORDER BY occurred_at"
+            )
+        elif query_kind == "alerts":
+            query = (
+                "SELECT * FROM fraud_alerts WHERE customer_id = %s ORDER BY created_at"
+            )
+        elif query_kind == "accounts":
+            query = (
+                "SELECT * FROM accounts WHERE customer_id = %s ORDER BY account_id"
+            )
+        else:
+            query = f"Retrieve connections for {customer_id}"
+        step = InvestigationStep(
+            id=f"query_{query_kind}",
+            action="retrieve",
+            resource=source,
+            input=(
+                {
+                    "query": query,
+                    "source": source,
+                    "operation": "get_neighbors",
+                    "params": {"node_id": customer_id, "direction": "both"},
+                }
+                if query_kind == "connections"
+                else {
+                    "query": query,
+                    "source": source,
+                    "parameters": (customer_id,),
+                }
+            ),
+            expected_output=f"{query_kind} for {customer_id}",
+            max_retries=self.max_retries_per_step,
+        )
+        self._execute_step(step, context)
+        return FraudQueryResult(
+            subject_ids=[customer_id],
+            query_label=query_kind,
+            records=self._results(step.output),
+            resources_consulted=[source],
+        )
+
     def plan_query(self, query: str) -> Task | None:
-        if not re.search(
+        identifiers = re.findall(r"\b[A-Z]\d+\b", query, re.IGNORECASE)
+        customer_ids = list(dict.fromkeys(item.upper() for item in identifiers))
+        normalized = query.lower()
+        query_kind = None
+        if len(customer_ids) >= 2 and re.search(r"\bcompare\b", normalized):
+            query_kind = "comparison"
+        elif customer_ids and re.search(r"\btransactions?\b", normalized):
+            query_kind = "transactions"
+        elif customer_ids and re.search(r"\balerts?\b", normalized):
+            query_kind = "alerts"
+        elif customer_ids and re.search(r"\bconnections?\b|\brelationships?\b", normalized):
+            query_kind = "connections"
+        elif customer_ids and re.search(r"\baccounts?\b", normalized):
+            query_kind = "accounts"
+
+        if query_kind is not None:
+            inputs: dict[str, Any] = {
+                "workflow": self.name,
+                "query": query,
+                "query_kind": query_kind,
+            }
+            if query_kind == "comparison":
+                inputs["customer_ids"] = customer_ids[:2]
+            inputs["customer_id"] = customer_ids[0]
+            return Task(
+                id="task-1",
+                description=f"Retrieve deterministic {query_kind} information",
+                input=inputs,
+                metadata={"capability": "workflow", "workflow": self.name},
+            )
+
+        investigation_request = re.search(
             r"\binvestigat(?:e|ion|ing)\b|\bsuspicious activity\b",
             query,
             re.IGNORECASE,
+        )
+        detail_request = re.search(
+            r"\bfind\b.*\b(?:details?|information|records?)\b",
+            query,
+            re.IGNORECASE,
+        )
+        score_request = re.search(
+            r"\b(?:fraud )?(?:score|probability)\b", query, re.IGNORECASE
+        )
+        if (
+            investigation_request is None
+            and detail_request is None
+            and score_request is None
         ):
             return None
-        identifier_match = re.search(r"\b[A-Z]\d+\b", query)
-        if identifier_match is None:
+        if not customer_ids:
             return None
+        if score_request:
+            investigation_request = True
         return Task(
             id="task-1",
             description="Run the registered investigation workflow",
             input={
                 "workflow": self.name,
                 "query": query,
-                "customer_id": identifier_match.group(0),
+                "customer_id": customer_ids[0],
+                "query_kind": "investigation",
             },
             metadata={"capability": "workflow", "workflow": self.name},
         )
@@ -434,7 +546,9 @@ class FraudInvestigationWorkflow:
 
 
 __all__ = [
+    "FraudComparisonResult",
     "FraudInvestigationWorkflow",
+    "FraudQueryResult",
     "InvestigationPlan",
     "InvestigationStep",
     "StepStatus",

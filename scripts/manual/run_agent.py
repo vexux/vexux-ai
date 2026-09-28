@@ -1,6 +1,9 @@
 """Interactive runner for the real local fraud application."""
 
 import logging
+import sys
+import threading
+import time
 
 from apps.fraud.real import create_real_agent
 from apps.fraud.identity import DEFAULT_ACTOR, validate_actor
@@ -11,46 +14,263 @@ from core.observability_store import get_observability_store
 LOGGER = logging.getLogger(__name__)
 
 
-def _render_progress_event(event) -> None:
-    labels = {
-        "request": "Request",
+class TerminalProgressRenderer:
+    """Render only lifecycle phases and deduplicated resource milestones."""
+
+    _PHASES = {
         "planning": "Planning",
-        "authorization": "Authorization",
-        "execution": "Execution",
-        "observation": "Observation",
-        "decision": "Decision",
-        "response": "Response",
+        "execution": "Executing",
+        "response": "Responding",
     }
-    label = labels.get(event.phase, event.phase.title())
-    if event.event_type == "execution_progress" and event.resource:
-        if event.status == "completed":
-            print(f"[{label}] {event.resource} [OK]")
-        elif event.status == "authorized":
-            print(f"[{label}] {event.resource} authorized")
-        return
-    if event.phase == "authorization":
-        if event.resource:
-            if event.status in {"allowed", "authorized"}:
-                print(f"[{label}] {event.resource} authorized")
-            elif event.status == "denied":
-                print(f"[{label}] {event.resource} denied")
-            elif event.event_type == "authorization_started":
-                print(f"[{label}] {event.message}")
+    _START_EVENTS = {
+        "planning_started": "planning",
+        "execution_started": "execution",
+        "response_started": "response",
+    }
+    _END_EVENTS = {
+        "planning_completed": "planning",
+        "response_completed": "response",
+    }
+    _FAILED_EVENTS = {
+        "planning_failed": "planning",
+        "workflow_failed": "execution",
+    }
+
+    def __init__(
+        self,
+        output=None,
+        clock=time.monotonic,
+        tick_interval: float = 0.25,
+    ):
+        self.output = output or sys.stdout
+        self.clock = clock
+        self.tick_interval = tick_interval
+        self._lock = threading.Lock()
+        self._active: dict[str, dict] = {}
+        self._resources: set[str] = set()
+        self._live_line_width = 0
+        self._interactive = bool(
+            getattr(self.output, "isatty", lambda: False)()
+        )
+        self._terminal_phases: set[str] = set()
+
+    @staticmethod
+    def _duration_text(duration: float) -> str:
+        return f"{max(0.0, duration):.2f}s"
+
+    def _symbol(self, symbol: str, fallback: str) -> str:
+        if not self._interactive:
+            return fallback
+        encoding = getattr(self.output, "encoding", None)
+        if not encoding:
+            return symbol
+        try:
+            symbol.encode(encoding)
+        except (LookupError, UnicodeEncodeError):
+            return fallback
+        return symbol
+
+    def _write(self, text: str, *, live: bool = False) -> None:
+        with self._lock:
+            if live and self._interactive:
+                self._live_line_width = max(self._live_line_width, len(text))
+                self.output.write("\r" + text.ljust(self._live_line_width))
+            else:
+                self.output.write(text + "\n")
+                self._live_line_width = 0
+            self.output.flush()
+
+    def _write_final(self, text: str) -> None:
+        with self._lock:
+            if self._interactive:
+                width = max(self._live_line_width, len(text))
+                self.output.write("\r" + text.ljust(width) + "\n")
+            else:
+                self.output.write(text + "\n")
+            self._live_line_width = 0
+            self.output.flush()
+
+    def _line(
+        self,
+        marker: str,
+        phase: str,
+        duration: float,
+        message: str = "",
+    ) -> str:
+        activity = f" {message}" if message else ""
+        return (
+            f"{marker} {self._PHASES[phase]:<12}{activity}"
+            f"{self._duration_text(duration):>8}"
+        )
+
+    def _start(self, phase: str, message: str = "") -> None:
+        if phase in self._active:
             return
-        if event.event_type == "authorization_started":
-            print(f"[{label}] {event.message}")
-        return
-    if event.event_type in {
-        "request_received",
-        "planning_started",
-        "planning_completed",
-        "authorization_started",
-        "authorization_completed",
-        "execution_started",
-        "response_started",
-        "response_completed",
-    }:
-        print(f"[{label}] {event.message}")
+        self._terminal_phases.discard(phase)
+        started = self.clock()
+        stop = threading.Event()
+        state = {
+            "started": started,
+            "stop": stop,
+            "thread": None,
+            "message": message,
+        }
+        self._active[phase] = state
+        self._write(
+            self._line(self._symbol("›", ">"), phase, 0.0, message),
+            live=True,
+        )
+        if self._interactive:
+            thread = threading.Thread(
+                target=self._tick,
+                args=(phase, state),
+                daemon=True,
+            )
+            state["thread"] = thread
+            thread.start()
+
+    def _tick(self, phase: str, state: dict) -> None:
+        stop = state["stop"]
+        while not stop.wait(self.tick_interval):
+            elapsed = self.clock() - state["started"]
+            self._write(
+                self._line(
+                    self._symbol("›", ">"),
+                    phase,
+                    elapsed,
+                    state["message"],
+                ),
+                live=True,
+            )
+
+    def _finish(self, phase: str, duration_ms: float | None = None) -> None:
+        state = self._active.pop(phase, None)
+        if state is None:
+            return
+        state["stop"].set()
+        thread = state["thread"]
+        if thread is not None and thread is not threading.current_thread():
+            thread.join(timeout=max(self.tick_interval * 2, 0.1))
+        self._terminal_phases.add(phase)
+        elapsed = (
+            duration_ms / 1000.0
+            if duration_ms is not None
+            else self.clock() - state["started"]
+        )
+        self._write_final(
+            self._line(self._symbol("✓", "+"), phase, elapsed)
+        )
+
+    def _fail(self, phase: str) -> None:
+        state = self._active.pop(phase, None)
+        if state is None:
+            if phase in self._terminal_phases:
+                return
+            self._terminal_phases.add(phase)
+            self._write_final(
+                f"{self._symbol('✗', 'x')} {self._PHASES[phase]}"
+            )
+            return
+        state["stop"].set()
+        thread = state["thread"]
+        if thread is not None and thread is not threading.current_thread():
+            thread.join(timeout=max(self.tick_interval * 2, 0.1))
+        self._terminal_phases.add(phase)
+        self._write_final(
+            self._line(
+                self._symbol("✗", "x"),
+                phase,
+                self.clock() - state["started"],
+            )
+        )
+
+    def _resource_completed(self, resource: str) -> None:
+        if resource in self._resources:
+            return
+        self._resources.add(resource)
+        if self._interactive:
+            with self._lock:
+                self.output.write(
+                    "\r" + (" " * max(self._live_line_width, 42)) + "\r"
+                )
+                self._live_line_width = 0
+                self.output.flush()
+        self._write(f"    {self._symbol('✓', '+')} {resource}")
+
+    def render(self, event) -> None:
+        if (
+            event.phase == "execution"
+            and event.status == "failed"
+            and event.event_type in {"execution_progress", "execution_completed"}
+        ):
+            self._fail("execution")
+            return
+
+        if event.event_type == "execution_started":
+            self._start("execution")
+            return
+        if event.event_type == "response_started":
+            self._finish("execution")
+
+        failed_phase = self._FAILED_EVENTS.get(event.event_type)
+        if failed_phase is not None:
+            self._fail(failed_phase)
+            return
+
+        if event.event_type == "response_progress":
+            if event.status == "failed":
+                self._fail("response")
+                return
+            state = self._active.get("response")
+            if state is not None and event.status == "started":
+                state["message"] = event.message.lower()
+                if not self._interactive:
+                    self._write(
+                        self._line(
+                            self._symbol("›", ">"),
+                            "response",
+                            self.clock() - state["started"],
+                            state["message"],
+                        )
+                    )
+            return
+
+        phase = self._START_EVENTS.get(event.event_type)
+        if phase is not None:
+            status = {
+                "planning": "Creating plan...",
+                "execution": "Executing tasks...",
+                "response": "Preparing response...",
+            }.get(phase, "")
+            self._start(phase, status if phase == "response" else "")
+            return
+
+        phase = self._END_EVENTS.get(event.event_type)
+        if phase is not None:
+            self._finish(phase, event.duration_ms)
+            if phase == "response":
+                self._resources.clear()
+            return
+
+        if (
+            event.phase == "execution"
+            and event.resource
+            and event.status == "completed"
+            and event.event_type in {"execution_progress", "execution_completed"}
+        ):
+            self._resource_completed(event.resource)
+
+
+def _render_progress_event(event) -> None:
+    """Compatibility callback backed by the terminal-only presentation filter."""
+    _terminal_progress_renderer.output = sys.stdout
+    _terminal_progress_renderer._interactive = bool(
+        getattr(sys.stdout, "isatty", lambda: False)()
+    )
+    _terminal_progress_renderer.render(event)
+
+
+_terminal_progress_renderer = TerminalProgressRenderer()
 
 
 def _handle_observability_command(query: str, store) -> bool:
@@ -111,9 +331,11 @@ def _provider_error_message(error: RuntimeError) -> str:
 
 
 def main():
+    if sys.stdout.isatty() and hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     agent = create_real_agent()
     if hasattr(agent, "progress_reporter"):
-        agent.progress_reporter.callback = _render_progress_event
+        agent.progress_reporter.callback = TerminalProgressRenderer().render
     actor = DEFAULT_ACTOR
     session_id = "terminal-session"
     store = get_observability_store(
@@ -153,10 +375,7 @@ def main():
             continue
 
         try:
-            route = agent.resource_router.route(query)
-            print("\nDetected resources:")
-            for selection in route.selections if route else []:
-                print(f"- {selection.name}")
+            agent.resource_router.route(query)
         except ValueError as exc:
             print(f"\nRouting error: {exc}")
 
@@ -167,35 +386,24 @@ def main():
             print(f"\nError: {_provider_error_message(exc)}")
             continue
 
-        print("\nAgent:")
-        print(result.output)
+        if result.output is not None:
+            print("\nAgent:")
+            print(result.output)
 
         if result.error:
             print("\nError:")
             print(result.error)
 
-        sources_used = {
-            item.source
-            for observation in result.trace
-            for evidence in (
-                [observation.output.get("evidence")]
-                if isinstance(observation.output, dict)
-                else []
-            )
-            if evidence is not None
-            for item in getattr(evidence, "items", [])
-        }
-        if sources_used:
-            print("Sources:", sorted(sources_used))
-        print("\nSuccess:", result.success)
-        print("Trace length:", len(result.trace))
         timings = getattr(result, "metadata", {}).get("timings_ms", {})
         if timings:
+            for phase in ("setup_routing", "other"):
+                duration = timings.get(phase, 0) / 1000.0
+                if duration >= 0.01:
+                    label = "Setup/routing" if phase == "setup_routing" else "Other"
+                    print(f"{label:<16}{duration:.2f}s")
             print(
-                "Timing: "
-                f"Planning {timings.get('planning', 0) / 1000:.2f}s | "
-                f"Execution {timings.get('execution', 0) / 1000:.2f}s | "
-                f"Total {timings.get('total', 0) / 1000:.2f}s"
+                f"{'Total':<16}"
+                f"{timings.get('total', 0) / 1000:.2f}s"
             )
 
 

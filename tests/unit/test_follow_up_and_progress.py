@@ -137,6 +137,75 @@ def test_response_synthesizer_uses_generic_follow_up_formatter_protocol():
     assert result.request == ("expand", "Original result.")
 
 
+def test_response_synthesizer_reports_generation_activity_and_phase_timings():
+    events = []
+    synthesizer = ResponseSynthesizer(_Gateway(["Generated answer."]))
+    synthesizer.progress_reporter = ProgressReporter(events.append)
+
+    response = synthesizer.synthesize(
+        "Summarize the retrieved information.",
+        [Observation(
+            success=True,
+            output={
+                "context_found": True,
+                "source": "knowledge",
+                "results": [{"document": "Grounded fact."}],
+            },
+            summary="completed",
+        )],
+    )
+
+    timings = synthesizer.timings_for_current_call()
+    assert response == "Generated answer.\n\nSources:\n- knowledge"
+    assert timings["response_preparation"] >= 0
+    assert timings["response_generation"] >= 0
+    assert any(
+        event.event_type == "response_progress"
+        and event.message == "Generating response..."
+        for event in events
+    )
+
+
+def test_agent_exposes_response_preparation_and_generation_timings():
+    gateway = _Gateway([
+        json.dumps({
+            "tasks": [{
+                "id": "task-1",
+                "description": "Retrieve information",
+                "capability": "retrieval",
+                "input": {"query": "Explain the subject"},
+            }]
+        }),
+        "Generated answer.",
+    ])
+
+    class _StructuredExecutionManager:
+        def execute(self, task, context):
+            return ExecutionResult(
+                success=True,
+                output={
+                    "context_found": True,
+                    "source": "knowledge",
+                    "results": [{"document": "Grounded fact."}],
+                },
+            )
+
+    agent = Agent(
+        execution_manager=_StructuredExecutionManager(),
+        planner=Planner(gateway, ToolRegistry()),
+        observer=Observer(),
+        decision_maker=DecisionMaker(),
+        context_manager=ContextManager(),
+        response_synthesizer=ResponseSynthesizer(gateway),
+    )
+
+    response = agent.run("Explain the subject")
+
+    assert response.success is True
+    assert response.metadata["timings_ms"]["response_preparation"] >= 0
+    assert response.metadata["timings_ms"]["response_generation"] >= 0
+
+
 def test_follow_up_references_previous_result_and_remains_deterministic():
     gateway = _Gateway()
     context_manager = ContextManager()
@@ -336,6 +405,13 @@ def test_progress_callback_propagates_ordered_events_through_agent_loop():
     assert response.metadata["timings_ms"]["planning"] >= 0
     assert response.metadata["timings_ms"]["execution"] >= 0
     assert response.metadata["timings_ms"]["total"] >= 0
+    timings = response.metadata["timings_ms"]
+    assert {"setup_routing", "planning", "execution", "response", "other"} <= set(timings)
+    assert abs(
+        sum(timings[key] for key in (
+            "setup_routing", "planning", "execution", "response", "other",
+        )) - timings["total"]
+    ) <= 0.05
 
 
 def test_generic_terminal_failure_publishes_failure_event_without_domain_metadata():

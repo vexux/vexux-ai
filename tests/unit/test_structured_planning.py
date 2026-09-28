@@ -6,7 +6,7 @@ from agent.agent import Agent
 from agent.decision import DecisionMaker
 from agent.execution_manager import ExecutionManager
 from agent.observer import Observer
-from agent.planner import Planner
+from agent.planner import Planner, UnsupportedCapabilityError
 from agent.response_synthesizer import ResponseSynthesizer
 from core.context.context_manager import ContextManager
 from core.contracts.execution import AgentContext, Task
@@ -391,6 +391,40 @@ def test_unknown_capability_is_rejected():
 
     with pytest.raises(ValueError, match="unknown capability"):
         planner_for(response).create_plan("Query the database")
+
+
+def test_unknown_capability_returns_clean_actionable_agent_failure():
+    gateway = MockGateway(plan(task(
+        "task-1",
+        "fraud_investigation",
+        {"query": "what connections do they have?"},
+    )))
+    tools = registry()
+    events = []
+    agent = Agent(
+        execution_manager=ExecutionManager(tool_registry=tools),
+        planner=Planner(gateway, tools),
+        observer=Observer(),
+        decision_maker=DecisionMaker(),
+        context_manager=ContextManager(),
+        response_synthesizer=ResponseSynthesizer(gateway),
+        progress_callback=events.append,
+    )
+
+    response = agent.run("what connections do they have?")
+
+    assert response.success is False
+    assert response.output is None
+    assert "supported capability" in response.error
+    assert "unknown capability" not in response.error
+    assert any(event.event_type == "planning_failed" for event in events)
+
+
+def test_unsupported_capability_remains_a_planner_validation_error():
+    response = plan(task("task-1", "fraud_investigation", {"query": "x"}))
+
+    with pytest.raises(UnsupportedCapabilityError):
+        planner_for(response).create_plan("unregistered request")
 
 
 def test_pipe_separated_capability_is_rejected():
