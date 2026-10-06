@@ -55,6 +55,16 @@ subjective judging or claim that the adapter improves model quality.
 
 ## Run
 
+In PowerShell, first load the project-scoped cache and temporary-directory
+settings into the current session:
+
+```powershell
+. .\scripts\set_finetuning_env.ps1
+```
+
+This directs Hugging Face, Transformers, PyTorch, CUDA, and Triton cache/temp
+activity to the existing `D:\NatWest\` directories. The settings are
+process-scoped; dot-source the script again in each new PowerShell session.
 With the repository virtual environment and local Hugging Face dependencies
 installed, run the one-step smoke path:
 
