@@ -13,6 +13,7 @@ from training.configuration import (
     resolve_config_path,
 )
 from training.inference import InferencePipeline
+from training.evaluation_scoring import add_comparison_scores
 
 
 def evaluate_base_vs_adapter(
@@ -80,7 +81,7 @@ def evaluate_base_vs_adapter(
             if callable(close):
                 close()
 
-    result = {
+    result = add_comparison_scores({
         "base_model": config["model"]["base_model"],
         "adapter_path": str(
             resolve_config_path(config["output"]["directory"], config)
@@ -99,7 +100,7 @@ def evaluate_base_vs_adapter(
             }
             for index, case in enumerate(cases)
         ],
-    }
+    })
     if output_path is None:
         output_path = (
             resolve_config_path(config["output"]["directory"], config)
@@ -116,13 +117,39 @@ def evaluate_base_vs_adapter(
     return result
 
 
+def score_existing_evaluation(path: str | Path) -> dict[str, Any]:
+    result_path = Path(path)
+    if not result_path.is_file():
+        raise FileNotFoundError(f"Evaluation result was not found: {result_path}")
+    try:
+        result = json.loads(result_path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"Invalid evaluation result JSON: {result_path}") from exc
+    if not isinstance(result, dict) or not isinstance(result.get("results"), list):
+        raise ValueError(f"Evaluation result has no results list: {result_path}")
+    scored_result = add_comparison_scores(result)
+    result_path.write_text(
+        json.dumps(scored_result, indent=2, ensure_ascii=False) + "\n",
+        encoding="utf-8",
+    )
+    return scored_result
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description="Capture base and fine-tuned outputs on the held-out test split."
     )
     parser.add_argument("--config", default=str(DEFAULT_CONFIG_PATH))
     parser.add_argument("--output")
+    parser.add_argument(
+        "--score-existing",
+        help="Add deterministic property scores to an existing evaluation JSON without model inference.",
+    )
     args = parser.parse_args(argv)
+    if args.score_existing:
+        result = score_existing_evaluation(args.score_existing)
+        print(json.dumps(result["deterministic_summary"], indent=2, ensure_ascii=False))
+        return 0
     result = evaluate_base_vs_adapter(args.config, output_path=args.output)
     print(json.dumps(result, indent=2, ensure_ascii=False))
     return 0

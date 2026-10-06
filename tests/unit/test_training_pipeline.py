@@ -391,12 +391,12 @@ def test_evaluation_captures_base_and_adapter_on_same_test_examples(
         {
             "category": "authority_boundary",
             "prompt": "test one",
-            "expected_properties": ["no invention"],
+            "expected_properties": ["do_not_invent_transactions"],
         },
         {
             "category": "general_retention",
             "prompt": "test two",
-            "expected_properties": ["concise"],
+            "expected_properties": ["clear_general_explanation"],
         },
     ]
     baseline_path = tmp_path / "baseline.jsonl"
