@@ -283,6 +283,13 @@ For the direct RAG demonstration:
 python test.py
 ```
 
+## Experimental fine-tuning
+
+The isolated QLoRA training and held-out base-versus-adapter evaluation path
+is documented in [docs/FINETUNING.md](docs/FINETUNING.md). Production continues
+to use the configured Ollama/Phi-3 path; fine-tuning does not change production
+model routing.
+
 ## Running the API
 
 ```powershell

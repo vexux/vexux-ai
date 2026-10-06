@@ -1,112 +1,88 @@
-import torch
+"""Configurable local inference for experimental Qwen PEFT adapters."""
 
-from transformers import (
-    AutoModelForCausalLM,
-    AutoTokenizer,
+from __future__ import annotations
+
+import gc
+from pathlib import Path
+from typing import Any
+
+from training.configuration import (
+    DEFAULT_CONFIG_PATH,
+    load_finetuning_config,
+    resolve_config_path,
 )
-
-from peft import PeftModel
-
-from utils.config import ConfigLoader
 
 
 class InferencePipeline:
+    def __init__(
+        self,
+        config_path: str | Path = DEFAULT_CONFIG_PATH,
+        *,
+        model_name: str | None = None,
+        adapter_path: str | Path | None = None,
+        load_adapter: bool = True,
+        provider_factory=None,
+    ):
+        from models.providers.qwen import QwenProvider
 
-    def __init__(self):
-
-        config = ConfigLoader.load("configs/model.yaml")
-
-        self.model_name = config["model"]["name"]
-
-        self.device = "cuda" if torch.cuda.is_available() else "cpu"
-
-        self.tokenizer = AutoTokenizer.from_pretrained(
-            self.model_name
+        config = load_finetuning_config(config_path)
+        self.config = config
+        self.model_name = model_name or config["model"]["base_model"]
+        configured_adapter_path = (
+            Path(adapter_path)
+            if adapter_path is not None
+            else resolve_config_path(config["output"]["directory"], config)
+            / config["output"]["experiment_name"]
         )
-
-        self.tokenizer.pad_token = self.tokenizer.eos_token
-
-        base_model = AutoModelForCausalLM.from_pretrained(
-            self.model_name,
-            torch_dtype=torch.float32,
-        )
-
-        self.model = PeftModel.from_pretrained(
-            base_model,
-            "models/checkpoints"
-        )
-
-        self.model = self.model.to(self.device)
-
-        self.model.eval()
-
-    def generate(self, prompt):
-
-        messages = [
-            {
-                "role": "user",
-                "content": prompt
-            }
-        ]
-
-        text = self.tokenizer.apply_chat_template(
-            messages,
-            tokenize=False,
-            add_generation_prompt=True
-        )
-
-        inputs = self.tokenizer(
-            text,
-            return_tensors="pt"
-        ).to(self.device)
-
-        with torch.no_grad():
-
-            outputs = self.model.generate(
-
-                **inputs,
-
-                max_new_tokens=200,
-
-                temperature=0.7,
-
-                top_p=0.9,
-
-                do_sample=True,
-
-                pad_token_id=self.tokenizer.eos_token_id,
+        if load_adapter and not configured_adapter_path.is_dir():
+            raise FileNotFoundError(
+                f"Fine-tuned adapter directory does not exist: {configured_adapter_path}"
             )
-
-        generated = outputs[0][inputs["input_ids"].shape[-1]:]
-
-        response = self.tokenizer.decode(
-            generated,
-            skip_special_tokens=True,
+        selected_adapter = str(configured_adapter_path) if load_adapter else None
+        quantization = config["inference"]
+        factory = provider_factory or QwenProvider
+        self.provider = factory(
+            model_name=self.model_name,
+            adapter_path=selected_adapter,
+            load_in_4bit=quantization["load_in_4bit"],
+            compute_dtype=quantization["compute_dtype"],
+            quant_type=quantization["quant_type"],
+            use_double_quant=quantization["use_double_quant"],
         )
+        self.adapter_path = selected_adapter
 
-        return response.strip()
+    def generate(self, prompt: str, **generation_overrides: Any) -> str:
+        from transformers import set_seed
+
+        generation = dict(self.config["generation"])
+        generation.update(generation_overrides)
+        seed = generation.pop("seed", None)
+        if seed is not None:
+            set_seed(seed)
+        return self.provider.generate(prompt, **generation)
+
+    def close(self) -> None:
+        import torch
+
+        del self.provider
+        gc.collect()
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
 
 
-def main():
-
+def main() -> int:
     pipeline = InferencePipeline()
-
-    print("=" * 60)
-    print("Vexux-AI")
-    print("Type 'exit' to quit")
-    print("=" * 60)
-
-    while True:
-
-        prompt = input("\nYou: ")
-
-        if prompt.lower() == "exit":
-            break
-
-        answer = pipeline.generate(prompt)
-
-        print("\nVexux:", answer)
+    try:
+        print("Experimental Qwen adapter inference. Type 'exit' to quit.")
+        while True:
+            prompt = input("\nYou: ")
+            if prompt.strip().lower() == "exit":
+                break
+            print("\nAssistant:", pipeline.generate(prompt))
+    finally:
+        pipeline.close()
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

@@ -8,24 +8,33 @@ from peft import (
 class LoRAManager:
 
     @staticmethod
-    def apply(model, config):
-
-        model = prepare_model_for_kbit_training(model)
-
+    def create_config(model, config):
         lora = config["lora"]
-
-        lora_config = LoraConfig(
+        target_modules = lora["target_modules"]
+        module_names = [name for name, _ in model.named_modules()]
+        missing_targets = [
+            target for target in target_modules
+            if not any(name == target or name.endswith(f".{target}") for name in module_names)
+        ]
+        if missing_targets:
+            raise ValueError(
+                "LoRA target modules were not found in the selected model: "
+                + ", ".join(missing_targets)
+            )
+        return LoraConfig(
             r=lora["r"],
             lora_alpha=lora["alpha"],
             lora_dropout=lora["dropout"],
-            bias=lora["bias"],
-            task_type=lora["task_type"],
-            target_modules=lora["target_modules"],
+            bias=lora.get("bias", "none"),
+            task_type=lora.get("task_type", "CAUSAL_LM"),
+            target_modules=target_modules,
         )
 
-        model = get_peft_model(
+    @staticmethod
+    def apply(model, config):
+        lora_config = LoRAManager.create_config(model, config)
+        model = prepare_model_for_kbit_training(
             model,
-            lora_config,
+            use_gradient_checkpointing=config["training"]["gradient_checkpointing"],
         )
-
-        return model
+        return get_peft_model(model, lora_config)
