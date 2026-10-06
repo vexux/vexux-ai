@@ -1,0 +1,73 @@
+model:
+  base_model: "Qwen/Qwen2.5-1.5B-Instruct"
+  smoke_model: "Qwen/Qwen2.5-0.5B-Instruct"
+
+dataset:
+  directory: "data/fraud_finetuning"
+
+evaluation:
+  baseline_path: "data/evaluation/fraud_baseline.jsonl"
+
+output:
+  directory: "models/checkpoints"
+  experiment_name: "qwen25-15b-qlora-remediation-b"
+  smoke_experiment_name: "qwen25-05b-smoke"
+  save_tokenizer: true
+
+quantization:
+  load_in_4bit: true
+  compute_dtype: "bfloat16"
+  quant_type: "nf4"
+  use_double_quant: true
+
+tokenizer:
+  trust_remote_code: true
+  padding_side: "right"
+
+device:
+  device_map: "auto"
+
+training:
+  max_sequence_length: 256
+  per_device_train_batch_size: 1
+  per_device_eval_batch_size: 1
+  gradient_accumulation_steps: 8
+  epochs: 1
+  learning_rate: 0.00005
+  optimizer: "paged_adamw_8bit"
+  gradient_checkpointing: true
+  fp16: false
+  bf16: true
+  logging_steps: 1
+  eval_strategy: "epoch"
+  eval_steps: null
+  save_strategy: "epoch"
+  save_steps: 100
+  seed: 42
+
+lora:
+  r: 8
+  alpha: 16
+  dropout: 0.05
+  bias: "none"
+  task_type: "CAUSAL_LM"
+  target_modules:
+    - q_proj
+    - k_proj
+    - v_proj
+    - o_proj
+
+inference:
+  load_in_4bit: true
+  compute_dtype: "bfloat16"
+  quant_type: "nf4"
+  use_double_quant: true
+
+generation:
+  max_new_tokens: 200
+  do_sample: false
+  seed: 42
+
+smoke:
+  max_steps: 1
+  train_examples: 2
