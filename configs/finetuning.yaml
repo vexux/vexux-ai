@@ -3,7 +3,10 @@ model:
   smoke_model: "Qwen/Qwen2.5-0.5B-Instruct"
 
 dataset:
-  directory: "data/datasets"
+  directory: "data/fraud_finetuning"
+
+evaluation:
+  baseline_path: "data/evaluation/fraud_baseline.jsonl"
 
 output:
   directory: "models/checkpoints"

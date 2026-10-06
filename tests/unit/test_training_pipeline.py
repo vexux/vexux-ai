@@ -82,6 +82,27 @@ def test_dataset_loader_reads_all_explicit_split_files(tmp_path):
     assert [len(dataset[name]) for name in ("train", "validation", "test")] == [1, 1, 1]
 
 
+def test_dataset_loader_and_formatter_preserve_conversational_fraud_records(tmp_path):
+    example = {
+        "category": "shared_device",
+        "messages": [
+            {"role": "user", "content": "What can a shared device indicate?"},
+            {"role": "assistant", "content": "It is a signal that needs context."},
+        ],
+    }
+    for split in ("train", "validation", "test"):
+        (tmp_path / f"{split}.jsonl").write_text(
+            json.dumps(example) + "\n",
+            encoding="utf-8",
+        )
+
+    loaded = DatasetLoader(str(tmp_path)).load()
+    formatted = DatasetFormatter.format(loaded["train"])
+
+    assert formatted.column_names == ["messages"]
+    assert formatted[0]["messages"] == example["messages"]
+
+
 def test_dataset_loader_reports_missing_split(tmp_path):
     (tmp_path / "train.jsonl").write_text(
         '{"instruction":"train","input":"","output":"ok"}\n',
@@ -366,19 +387,25 @@ def test_evaluation_captures_base_and_adapter_on_same_test_examples(
     config, tmp_path, monkeypatch
 ):
     config = copy.deepcopy(config)
-    examples = [
-        {"instruction": "test one", "input": "", "output": "reference one"},
-        {"instruction": "test two", "input": "input", "output": "reference two"},
+    cases = [
+        {
+            "category": "authority_boundary",
+            "prompt": "test one",
+            "expected_properties": ["no invention"],
+        },
+        {
+            "category": "general_retention",
+            "prompt": "test two",
+            "expected_properties": ["concise"],
+        },
     ]
-    monkeypatch.setattr(
-        training_evaluate,
-        "DatasetLoader",
-        lambda _path: SimpleNamespace(load=lambda: {
-            "train": [],
-            "validation": [],
-            "test": examples,
-        }),
+    baseline_path = tmp_path / "baseline.jsonl"
+    baseline_path.write_text(
+        "\n".join(json.dumps(case) for case in cases) + "\n",
+        encoding="utf-8",
     )
+    config["evaluation"]["baseline_path"] = str(baseline_path)
+    monkeypatch.setattr(training_evaluate, "load_finetuning_config", lambda _path: config)
     instances = []
 
     class FakeInference:
@@ -399,7 +426,8 @@ def test_evaluation_captures_base_and_adapter_on_same_test_examples(
 
     assert instances == ["base", "adapter"]
     assert result["test_example_count"] == 2
-    assert result["results"][1]["prompt"] == "test two\n\ninput"
-    assert result["results"][1]["base_output"] == "base:test two\n\ninput"
-    assert result["results"][1]["adapter_output"] == "adapter:test two\n\ninput"
+    assert result["evaluation_categories"] == ["authority_boundary", "general_retention"]
+    assert result["results"][1]["prompt"] == "test two"
+    assert result["results"][1]["base_output"] == "base:test two"
+    assert result["results"][1]["adapter_output"] == "adapter:test two"
     assert json.loads(destination.read_text(encoding="utf-8"))["test_example_count"] == 2

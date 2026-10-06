@@ -11,14 +11,47 @@ fallback. Training configuration is isolated in
 [`configs/model.yaml`](../configs/model.yaml) is not used to set training
 hyperparameters.
 
-## Dataset splits
+## Curated fraud-domain dataset
 
-The current `data/datasets/` files are a small, generic programming/general-AI
-dataset for pipeline validation, not fraud-training data. `train.jsonl` is
-used for optimization, `validation.jsonl` is passed to trainer evaluation,
-and `test.jsonl` is held out for the later base-versus-adapter evaluation.
-Training never passes the test split to the trainer. Do not add live fraud
-customer records or operational evidence to a training dataset.
+The initial generic pipeline fixture remains in `data/datasets/` (20 train,
+5 validation, 3 test); it is not the fraud fine-tuning corpus. The curated
+instruction dataset is under `data/fraud_finetuning/` and uses the same
+conversational `messages` structure consumed by the training pipeline:
+
+| Split | Examples | Use |
+|---|---:|---|
+| Train | 83 | Adapter optimization |
+| Validation | 20 | In-training evaluation and checkpoint selection |
+| Test | 20 | Held-out; never passed to the trainer |
+
+The combined split distribution is 42 policy, 21 shared-device, 21
+alert/monitoring, 17 response-style, 16 authority-boundary, and 6 general
+retention examples. Generic retention is approximately 5% so domain behavior
+remains the focus.
+
+Training responses are concise, authored from the project-authored reference
+corpus under `apps/fraud/knowledge/`, workflow behavior, and the documented
+authority boundaries. They are instruction/response examples rather than
+copies of whole retrieval documents. The data contains no live customer,
+transaction, alert, account, or graph records; no demo customer IDs; no
+credentials; and no database dumps. Customer-specific requests use generic
+wording or a placeholder and teach that operational facts must come from
+authorized sources. Do not add live fraud customer records to this dataset.
+
+Run deterministic schema, count, category, duplicate, split-leakage, secret,
+identifier, path, and content checks with:
+
+```powershell
+python -m data.validate_fraud_dataset
+```
+
+The separate fixed baseline evaluation prompts are in
+`data/evaluation/fraud_baseline.jsonl` (18 prompts covering policy,
+shared-device reasoning, alert handling, transaction monitoring, authority
+boundaries, and general retention). The evaluator runs precisely those same
+prompts against the configured base model and adapter and records expected
+behavior properties alongside both generated outputs. It does not apply
+subjective judging or claim that the adapter improves model quality.
 
 ## Run
 
@@ -56,7 +89,7 @@ PEFT adapter weights, the tokenizer, trainer checkpoints, and a machine-readable
 ## Held-out output capture
 
 After an adapter has been produced, capture deterministic base and adapter
-outputs on the same held-out test examples:
+outputs on the same fixed fraud baseline evaluation prompts:
 
 ```powershell
 python -m training.evaluate

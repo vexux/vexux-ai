@@ -3,6 +3,21 @@ class DatasetFormatter:
     @staticmethod
     def format(dataset):
         def convert(example):
+            messages = example.get("messages")
+            if messages is not None:
+                if not isinstance(messages, list) or not messages:
+                    raise ValueError("Every fine-tuning example must have non-empty messages.")
+                for message in messages:
+                    if (
+                        not isinstance(message, dict)
+                        or message.get("role") not in {"system", "user", "assistant"}
+                        or not isinstance(message.get("content"), str)
+                        or not message["content"].strip()
+                    ):
+                        raise ValueError(
+                            "Fine-tuning messages require an allowed role and non-empty content."
+                        )
+                return {"messages": messages}
             instruction = example.get("instruction")
             response = example.get("output")
             extra_input = example.get("input", "")

@@ -27,6 +27,7 @@ def validate_finetuning_config(config: Any) -> None:
     required_sections = {
         "model": ("base_model", "smoke_model"),
         "dataset": ("directory",),
+        "evaluation": ("baseline_path",),
         "output": ("directory", "experiment_name"),
         "quantization": ("load_in_4bit", "compute_dtype", "quant_type", "use_double_quant"),
         "training": (
