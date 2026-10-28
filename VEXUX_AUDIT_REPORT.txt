@@ -1,102 +1,123 @@
-VEXUX AI — SYNTHETIC DEMO AND PYTHON READINESS AUDIT
+VEXUX AI — COMPANY-LAPTOP SYNTHETIC DEMO AUDIT
 Consolidated current report
 
 Scope and evidence labels
 ------------------------
 This report consolidates previous read-only repository, architecture,
-dependency, security, and API audits with a current static Python 3.12
-compatibility review. No project code or tests were executed, no dependencies
-were installed, no services were started, no models were downloaded, and no
-.env contents or secrets were inspected. No production or customer data was
-accessed.
+dependency, security, API, and Python-version audits with the current review
+of Python 3.11 availability. No application code or tests were run; no
+packages or runtimes were installed; no virtual environment was created; no
+services were started; no model was downloaded; and no .env contents or
+secrets were inspected. No production/customer data was accessed.
 
-CONFIRMED: directly observed in repository source/docs/manifests/Git.
-USER-SUPPLIED: terminal facts provided in the request, not independently run
-               or verified by this audit.
-INFERENCE:     reasoned from static source, not a runtime test.
-UNKNOWN:       not established or tested.
-HISTORICAL:    reported by older checked-in verification material.
-RECOMMENDATION: proposed next action only.
+CONFIRMED       Observed in repository source/docs/manifests/Git output.
+USER-SUPPLIED   Terminal result supplied by the user; not rerun here.
+INFERENCE       Reasoned from source, not a runtime test.
+UNKNOWN         Not established or tested.
+HISTORICAL      Reported by older checked-in verification material.
+RECOMMENDATION  Proposed action only.
 
 Change summary from the previous report
 ----------------------------------------
-- Added the supplied Python 3.12.4 / launcher / no-venv terminal results,
-  clearly distinguished from this audit's static inspection.
-- Added the repository's Python version targets and source syntax findings.
-- Reframed Python 3.12 as a plausible but unverified candidate for the direct
-  synthetic demo, and recommend the approved Python 3.11 runtime for closest
-  alignment with CI/setup.
-- Updated the verified branch and commit.
-- Preserved previous API, demo, dependency, RAG, security, test, and setup
+- Added a review of whether Python 3.11 installation is available through an
+  approved company process. No such availability is established by the
+  repository or terminal facts supplied.
+- Added guidance to request a company-managed Python 3.11 installation via
+  IT/software support if approval is required; do not bypass company controls.
+- Reiterated Python 3.12.4 is a plausible, unverified alternative for a
+  narrow direct synthetic workflow, not demonstrated compatibility.
+- Updated the current Git commit from current Git output.
+- Preserved previous API, fraud workflow, dependency, RAG, security, and test
   findings, including the conditional Neo4j-construction caveat.
 
 1. Repository and Git status
 ----------------------------
 CONFIRMED
 - Current branch: prod.
-- Current commit at this report refresh: 97730b7264c555849848e79837f09300424c634b.
-- Git status before this report refresh showed a clean tracked working tree
-  on prod tracking origin/prod.
+- Current commit at this report refresh: 680ac04704b8b306af463bf41b9df284202ffa12.
+- Git status before refreshing this report showed a clean tracked working
+  tree on prod tracking origin/prod.
 - This is a Python Vexux AI project with agent orchestration, fraud workflow,
-  RAG, model providers, database adapters, FastAPI, and training modules.
+  RAG, providers, database adapters, FastAPI, and training modules.
 
-USER-SUPPLIED terminal results (not independently verified here)
+USER-SUPPLIED terminal results (not rerun)
 - `python` selected Python 3.12.4.
 - The Python launcher lists Python 3.12 and 3.13.
 - No existing `.venv` or `venv` directory was found.
-- The user reports the current branch is prod; the branch was independently
-  confirmed as prod above.
+- The user reports branch prod; this was independently confirmed.
 
 UNKNOWN
-- Whether this exact checkout is the intended final demo implementation or
-  another branch/commit/repository was expected.
-- Installed laptop hardware, disk/RAM headroom, package/network policy,
+- Whether this checkout is the exact intended final demo implementation or
+  another branch/commit/repository was intended.
+- Laptop hardware, available disk/RAM, network/proxy, package approvals,
   administrative rights, service installation rights, and port restrictions.
-- Effective .env and process settings; .env was not inspected.
+- Effective .env and process settings; the file was not inspected.
 
-2. Python-version compatibility review
---------------------------------------
-CONFIRMED: repository declarations
-- `.github/workflows/ci.yml` sets Python `3.11` for deterministic CI and the
-  optional live Mistral job.
-- `docs/SETUP.md` identifies Python 3.11 as its setup target.
-- README.md says the project is developed with Python 3.11.
+2. Python version and approved installation availability
+--------------------------------------------------------
+CONFIRMED: repository version guidance
+- `.github/workflows/ci.yml` uses Python 3.11 for deterministic CI and the
+  optional live-provider job.
+- `docs/SETUP.md` identifies Python 3.11 as its setup target; README.md says
+  the project is developed with Python 3.11.
 - `docs/DEVELOPMENT.md` recommends Python 3.10 or 3.11.
-- No `requires-python`, `python_requires`, packaging metadata, or version
-  matrix declaring Python 3.12 support was found in the inspected repository.
-- Requirements are pinned without Python-version environment markers.
+- No `requires-python`, `python_requires`, packaging metadata, or Python
+  3.12 support matrix was found in the repository inspected previously.
 
-CONFIRMED: source syntax
-- The source uses PEP 604 unions such as `str | None` and built-in generic
-  annotations such as `list[dict[...]]`. These require Python 3.10 or later
-  and are supported by Python 3.12.
-- No inspected syntax feature establishes a Python 3.12 incompatibility.
+WHY 3.11 IS PREFERRED — CONFIRMED / INFERENCE
+- Confirmed: 3.11 is the CI interpreter and primary setup/documentation target.
+- Inference: using 3.11 minimizes differences from the repository's tested
+  configuration. This is a conservative alignment recommendation, not proof
+  that 3.12 is incompatible.
 
-INFERENCE
-- Python 3.12 is a reasonable candidate for the *direct minimal synthetic
-  demo* based on repository syntax and the limited import path. This is not
-  proof that the demo imports or runs on 3.12.
-- The full pinned dependency stack has not been checked for Windows/Python
-  3.12 wheel availability or install compatibility. Optional ML packages,
-  compiled packages, and transitive version resolution may introduce issues;
-  no specific pinned package was established by this static review to be
-  incompatible with 3.12.
-- Python 3.11 is the lower-risk choice for matching the repository's CI and
-  documented setup target. This recommendation is about reducing unverified
-  variation, not proof Python 3.12 fails.
+APPROVED INSTALLATION MECHANISM
+- Confirmed: the repository setup instructions describe creating a virtual
+  environment and installing Python packages, but do not document a
+  company-approved method for installing Python itself.
+- User-supplied: the Python launcher currently lists 3.12 and 3.13; Python
+  3.11 was not reported among installed launcher versions.
+- Unknown: whether the company offers Software Center, managed package
+  deployment, an internal Python distribution, an approved package manager,
+  or another way to request Python 3.11. No such tool or permission is
+  evidenced by the information supplied.
+
+RECOMMENDATION IF IT APPROVAL IS REQUIRED
+- Ask the company IT/software-support team for an approved, managed Python
+  3.11 installation (or approved portable/runtime distribution) suitable for
+  this project. Include the reason: repository CI and primary setup target
+  Python 3.11, and request confirmation of the approved package source and
+  any required PATH/launcher configuration.
+- Do not download/install Python independently, use an unapproved package
+  manager, bypass endpoint controls, or change system policy. Follow the
+  company's software-request process.
+
+PYTHON 3.12.4 ALTERNATIVE
+- Source syntax inspected previously uses Python 3.10+ features, including
+  PEP 604 unions and built-in generic annotations; these are valid in 3.12.
+- No definite Python 3.12 source incompatibility was found in that static
+  inspection. Python 3.12.4 therefore remains a reasonable candidate for the
+  narrowly scoped direct synthetic demo if company policy permits it.
+- This is not verified runtime compatibility. Dependency resolution,
+  Windows wheel availability, package-mirror support, imports, and execution
+  on 3.12.4 have not been tested. Full ML dependencies may have different
+  constraints; they are not necessary for the direct fake-provider workflow
+  under the configuration qualifications below.
+- Do not treat Python 3.13 being listed by the launcher as evidence that the
+  repo supports it; repository evidence only targets 3.11 and mentions 3.10.
 
 UNKNOWN
-- Actual package resolution, wheel availability, support from the company
-  package mirror, successful imports, and runtime behavior on Python 3.12.4.
-- Whether a company-approved Python 3.11 installation is available.
+- Whether IT can provide 3.11, how long approval may take, whether the
+  supplied Python 3.12.4 is company-approved for this work, or whether the
+  approved package source supports needed Windows wheels.
+- No runtime compatibility has been tested on 3.11, 3.12, or 3.13 in these
+  audits.
 
-Relevant references:
+References:
   .github/workflows/ci.yml — Python 3.11 CI jobs
-  docs/SETUP.md — Python 3.11 setup instructions
+  docs/SETUP.md — Python 3.11 setup target
   README.md — Python 3.11 development target
   docs/DEVELOPMENT.md — Python 3.10/3.11 recommendation
-  requirements.txt — dependency pins, without version markers
-  core/config.py; apps/fraud/workflow.py; agent/agent.py — modern annotations
+  requirements.txt — dependency pins without Python-version markers
 
 3. Architecture, providers, and fraud logic
 -------------------------------------------
@@ -104,14 +125,13 @@ CONFIRMED
 - The documented architecture separates Agent orchestration, Planner,
   ExecutionManager, observation, decisions, context, ModelGateway, tools, and
   capabilities (README.md; docs/ARCHITECTURE.md).
-- `core.config.SUPPORTED_MODEL_PROVIDERS` supports fake, ollama, mistral, and
-  qwen. Configuration requires MODEL_PROVIDER; `core.composition.create_agent`
-  selects the provider.
-- Code's Ollama fallback model is `llama3.2`; documentation describes a
-  development `.env` using `phi3:latest`; `.env.example` selects fake. The
-  actual local setting is unknown and was not inspected.
+- Supported model providers in `core.config.SUPPORTED_MODEL_PROVIDERS` are
+  fake, ollama, mistral, and qwen. Configuration requires MODEL_PROVIDER.
+- Code's Ollama fallback model is `llama3.2`; docs describe development
+  configuration using `phi3:latest`; `.env.example` selects fake. Effective
+  local settings are unknown and were not inspected.
 - Mistral is remote; Ollama is local; Qwen loads Transformers/PEFT assets;
-  fake is a deterministic provider.
+  fake is deterministic.
 - Fraud risk assessment is categorical (low/medium/high) and deterministic.
   `FraudInvestigationService.build_result` derives it from explicit alert,
   transaction, relationship, and investigation signals; the LLM is not the
@@ -132,11 +152,11 @@ CONFIRMED: API
   which calls `agent.run(query, session_id, user_id)`.
 - AgentRunRequest accepts optional workflow, agent, and delegations values,
   but `run_agent()` does not forward these fields.
-- The generic composition registers KnowledgeGroundedAnswerWorkflow, not
-  FraudInvestigationWorkflow. The route therefore does not select the
-  synthetic or real fraud composition.
-- FastAPI's default interactive documentation path is `/docs`.
-- The endpoint emits audit events and redacts some serialized output, but
+- Generic composition registers KnowledgeGroundedAnswerWorkflow, not
+  FraudInvestigationWorkflow. The route does not select the synthetic or
+  real fraud composition.
+- FastAPI's default interactive documentation route is `/docs`.
+- The endpoint emits audit events and redacts some serialized output, but it
   does not authenticate the requestor.
 
 CONFIRMED: synthetic fraud path
@@ -144,14 +164,13 @@ CONFIRMED: synthetic fraud path
   creates a temporary SQLite database seeded from
   `apps/fraud/data/sqlite/demo.sql`, creates in-memory graphs, configures
   FraudPolicy, and registers FraudInvestigationWorkflow.
-- The direct demonstrated call shape is:
-  enter `create_demo_agent()` context, then call
+- Direct call shape: enter the `create_demo_agent()` context, then invoke
   `agent.run("Investigate C1001", user_id="investigator")`.
 - `FraudInvestigationWorkflow.plan_query()` maps recognized fraud queries to
-  workflow tasks. The planner and execution manager dispatch them to the
-  workflow; the fraud service computes the categorical assessment.
-- `Agent.run_workflow()` also invokes a registered workflow directly, but is
-  not connected to the HTTP route.
+  workflow tasks. Planner and ExecutionManager dispatch these to workflow
+  execution; the fraud service computes the categorical assessment.
+- `Agent.run_workflow()` also invokes a registered workflow, but is not
+  wired to the HTTP route.
 - `apps.fraud.real.create_real_agent()` is a separate Neo4j/MySQL composition
   and intentionally has no synthetic fallback.
 
@@ -165,78 +184,75 @@ References:
   apps/fraud/workflow.py — plan_query, execute, run
   apps/fraud/real.py — create_real_agent
 
-INFERENCE
-- Source describes an available direct synthetic workflow route, but it has
-  not been executed during any audit and is not the current HTTP API path.
-
-5. Dependency and import-path audit
------------------------------------
+5. Minimal synthetic-demo dependencies and RAG
+----------------------------------------------
 CONFIRMED: direct import/call path
-1. Import `apps.fraud.demo`: imports core composition and fraud workflow,
+1. Importing `apps.fraud.demo` loads `core.composition` plus fraud workflow,
    investigation, policy, graph and SQL components.
-2. `core.composition` imports `rag.pipeline`; that imports
-   `rag.vectorstore`, which imports FAISS and NumPy at module import time.
-3. Calling `create_demo_agent()` chooses fake only if MODEL_PROVIDER is absent
-   from the process environment; otherwise it preserves the selected provider.
-   It then calls `core.composition.create_agent()`.
+2. `core.composition` imports `rag.pipeline`; this imports `rag.vectorstore`,
+   which imports FAISS and NumPy at module import time.
+3. Calling `create_demo_agent()` selects fake only if MODEL_PROVIDER is absent
+   from the process environment; otherwise it preserves that setting. It then
+   calls `core.composition.create_agent()`.
 4. `create_agent()` calls `core.config.get_config()`. `core.config` imports
-   python-dotenv; its loader may read repository `.env` at runtime. The file
+   python-dotenv; its loader may read the repository .env at runtime. The file
    was not inspected.
-5. Fake selects `FakeProvider`; Ollama, Mistral and Qwen imports are in their
-   provider-specific branches.
+5. Fake selects FakeProvider. Ollama/Mistral/Qwen packages are provider paths,
+   not imports needed by the fake branch.
 6. Generic composition constructs and registers RAGPipeline but does not
-   retrieve/encode documents at construction time.
+   retrieve documents or call the embedding model at construction time.
 7. Demo composition seeds temporary SQLite, installs synthetic graphs and
    registers the deterministic fraud workflow.
-8. The operational investigation uses synthetic graph and SQLite adapters.
-   SQLite and temp-file support come from Python's standard library.
+8. Operational investigation uses synthetic graph and SQLite adapters.
+   sqlite3/tempfile and other supporting modules are Python standard library.
 
-CONFIRMED: smallest defensible direct third-party dependencies from source
+CONFIRMED: smallest defensible direct third-party dependency candidate
 - `faiss-cpu==1.15.0`: pinned in requirements.txt; imported unconditionally
   through rag.vectorstore on this import path.
-- `numpy`: directly imported by rag.vectorstore but not independently pinned
-  in requirements.txt. Exact compatible pin was not established.
+- `numpy`: directly imported by rag.vectorstore, not independently pinned
+  in requirements.txt; exact compatible version is unknown.
 - `python-dotenv==1.1.1`: pinned in requirements.txt; imported by core.config.
-- Python standard library: includes sqlite3, tempfile, pathlib and other
-  standard modules used by this direct demo.
+- This is static source analysis, not a tested or locked installation recipe.
+  Transitive dependencies, Windows wheels, and successful Python imports are
+  unverified.
 
-This is a static candidate set, not a validated installation recipe. Full
-dependency metadata, exact NumPy compatibility, Windows wheel availability,
-and successful Python 3.12 imports are unverified.
-
-Optional or not needed for a direct operational demo call, subject to the
+Optional or unnecessary for a direct operational demo, subject to the
 conditional Neo4j note in section 6:
-- Ollama package/service/model: only if Ollama is selected.
-- Mistral package/API credentials: only if Mistral is selected.
-- Transformers, PEFT, PyTorch, bitsandbytes and related training packages:
-  model-loading/training paths, not fake operational fraud assessment.
-- Sentence Transformers: imported lazily for embedding, not for pipeline
-  construction or the operational fraud workflow.
-- MySQL connector/service: real fraud composition only; demo uses SQLite.
-- FastAPI, Uvicorn, Pydantic, HTTPX and pytest: not needed by direct Python
-  agent invocation; needed for corresponding API/server/test paths.
-- black, flake8 and ipykernel: development conveniences, not runtime needs.
+- Ollama package/service/model if fake is selected.
+- Mistral package/API credentials if Mistral is not selected.
+- Transformers, PEFT, PyTorch, bitsandbytes and related model/training stack.
+- Sentence Transformers for an operational workflow that does not retrieve
+  RAG documents.
+- MySQL connector/service; synthetic demo uses SQLite.
+- FastAPI, Uvicorn, Pydantic, HTTPX, pytest, black, flake8, ipykernel for
+  direct invocation (they are needed for corresponding API/test/dev paths).
 
-CONFIRMED
+CONFIRMED: manifests
 - requirements.txt combines provider, database, API, RAG, ML and training
-  dependencies. Pins include torch 2.7.1, Transformers 4.55.2, datasets 4.0.0,
+  packages. Pins include torch 2.7.1, Transformers 4.55.2, datasets 4.0.0,
   TRL 0.21.0, PEFT 0.17.1, Accelerate 1.10.1, bitsandbytes 0.47.0,
   sentence-transformers 5.6.1, faiss-cpu 1.15.0, FastAPI 0.116.1,
   Mistral 2.9.3, Neo4j 5.28.1, mysql-connector-python 9.4.0,
   python-dotenv 1.1.1, and Ollama 0.6.0.
-- requirements-dev.txt contains black, flake8, pytest, ipykernel and httpx.
-- No dedicated minimal-runtime manifest or supported runtime-only install
-  method was found. No pyproject.toml, setup.py/setup.cfg, Pipfile, Poetry/uv
-  lockfile, or environment.yml was found.
-- Uvicorn is not declared in either requirements file, despite the documented
-  API startup command using `python -m uvicorn api.main:app ...`.
+- requirements-dev.txt includes black, flake8, pytest, ipykernel and httpx.
+- No minimal-runtime manifest or supported runtime-only install method was
+  found. No pyproject.toml, setup.py/setup.cfg, Pipfile, Poetry/uv lockfile,
+  or environment.yml was found.
+- Uvicorn is not declared in either requirements file, though the documented
+  API command uses `python -m uvicorn api.main:app ...`.
 
-INFERENCE / UNKNOWN
-- API import path eagerly requires FAISS and NumPy through generic composition
-  even when fake is selected. FastAPI/Pydantic, python-dotenv, and Uvicorn are
-  relevant to serving the HTTP API, not the direct demo call.
-- The exact minimal third-party set must be checked against selected versions
-  and company's approved Windows package source before use.
+CONFIRMED: RAG behavior
+- First RAG retrieval calls `RAGPipeline._ensure_initialized()`, reads local
+  documents, embeds using default `BAAI/bge-small-en-v1.5`, and builds an
+  in-memory FAISS index. If uncached, first use may need network access to
+  download the embedding model.
+- ENABLE_LOCAL_RAG_INFERENCE controls local generation in
+  RAGPipeline.ask(); it does not prevent embedding initialization in retrieve.
+- Operational fraud requests use the deterministic workflow and do not need
+  RAG retrieval; general policy/RAG requests may trigger BGE loading.
+- Demo creates a temporary business SQLite file. Audit events may initialize
+  a local observability SQLite file at
+  `data/observability/vexux_observability.db`; this side effect was not run.
 
 References:
   apps/fraud/demo.py:7-18, :27-84
@@ -249,63 +265,48 @@ References:
   core/knowledge/mysql_backend.py:29-33
   requirements.txt; requirements-dev.txt
 
-6. Fake demo, conditional Neo4j, and RAG downloads
+6. Fake demo and conditional external dependencies
 --------------------------------------------------
 CONFIRMED
-- `create_demo_agent()` defaults to fake only if MODEL_PROVIDER is absent.
-  An explicitly selected provider is preserved.
-- `core.composition.create_agent()` conditionally constructs a
-  Neo4jKnowledgeGraph when config.neo4j_uri is nonempty. This happens before
-  create_demo_agent replaces graph registries with synthetic graphs.
-- Thus, source-selected demo data is synthetic and does not use a Neo4j
-  service, but the demo factory cannot categorically be said to avoid the
-  Neo4j package: a nonempty NEO4J_URI can trigger adapter/client construction.
-  The effective configuration is unknown.
-- The demo path does not construct MySQLBackend. Its data backend is SQLite.
-- With fake selected and no Neo4j URI causing construction, the operational
-  workflow does not use Ollama, MySQL, Transformers, PEFT, PyTorch, Sentence
-  Transformers, or embedding assets.
-- FAISS and NumPy remain import-time requirements.
-- A RAG retrieval calls RAGPipeline._ensure_initialized(), reads documents,
-  embeds them using default `BAAI/bge-small-en-v1.5`, and builds an in-memory
-  FAISS index. If the model is not cached, first retrieval may require network
-  access to download it.
-- ENABLE_LOCAL_RAG_INFERENCE controls local generation in RAGPipeline.ask();
-  it does not disable embedding initialization in retrieve().
-- Fraud operational requests use the deterministic workflow and do not need
-  RAG retrieval. General policy/RAG requests may initialize/download BGE.
-- Demo creates a temporary business SQLite file. Fraud workflow audit events
-  can initialize local SQLite observability storage at the default
-  `data/observability/vexux_observability.db`; audit writes were not run here.
+- `create_demo_agent()` selects fake only when MODEL_PROVIDER is absent;
+  explicitly configured provider values are preserved.
+- `core.composition.create_agent()` conditionally constructs a Neo4j graph
+  when config.neo4j_uri is nonempty. This occurs before demo composition
+  replaces the graph registry with synthetic graphs.
+- Thus, synthetic data is used for the workflow, but the factory cannot
+  categorically avoid the Neo4j package/client if NEO4J_URI triggers adapter
+  construction. Effective environment configuration is unknown.
+- The demo path does not construct MySQLBackend.
+- With fake selected and no Neo4j construction, the operational workflow
+  does not use Ollama, MySQL, Transformers, PEFT, PyTorch, Sentence
+  Transformers, or embedding model assets. FAISS/NumPy are still imported.
 
 RECOMMENDATION
 - For a direct offline synthetic demo, explicitly select fake, ensure the
-  effective configuration does not cause Neo4j construction, and restrict
-  requests to operational fraud workflow queries. This avoids embedding-model
-  download risk but does not remove FAISS/NumPy import dependencies.
+  effective configuration does not trigger Neo4j construction, and use only
+  operational fraud workflow queries to avoid RAG embedding downloads.
 
-7. Security, evidence and laptop setup risks
---------------------------------------------
+7. Security, evidence and laptop risks
+--------------------------------------
 CONFIRMED
 - Fraud workflows authorize protected named resources before I/O, validate
   actors against application-level policy, and collect bounded evidence.
-- The fraud default actor is support_user, who is denied fraud_graph access;
+- The default fraud actor is support_user, who is denied fraud_graph access;
   investigator is the intended authorized demo actor.
-- API user_id is request input; there is no HTTP caller authentication. It
-  must not be treated as verified identity.
+- API user_id is caller input; there is no HTTP authentication. It is not
+  verified identity.
 - Generic DefaultPolicy is permissive for execution unless stricter
   application policy is wired.
 - API/audit/evidence paths redact some sensitive-looking content. Audit
-  persistence is best-effort local SQLite, not demonstrated as tamper-proof
+  persistence is best-effort local SQLite, not demonstrated tamper-proof
   enterprise audit.
-- docs/SETUP.md documents Neo4j/MySQL schema and seed steps and notes seeded
-  records are preserved; running them against existing data may change it.
-- Documentation includes loopback and 0.0.0.0 server examples. Default/local
+- docs/SETUP.md describes database schema/seed steps and warns seeded records
+  are preserved; running them against existing data may change it.
+- Documentation includes loopback and 0.0.0.0 API examples. Default/local
   ports include API 8000, Ollama 11434, Neo4j 7687, MySQL 3306; availability
-  and company firewall policy are unknown.
-- First use of RAG may download BGE; selected LLM providers may load/download
-  additional assets. Full pinned ML installs may require substantial disk and
-  network; exact laptop requirements are not verified.
+  and firewall policy are unknown.
+- Full ML package/model setup may require substantial disk and network.
+  Exact laptop capacity and requirements are unknown.
 
 References:
   apps/fraud/identity.py; apps/fraud/policy.py
@@ -316,13 +317,13 @@ References:
   docs/SETUP.md:70-106, :170-190, :219-226
 
 RECOMMENDATION
-- Use only synthetic fixtures, keep any future service bound to loopback,
-  avoid existing databases, and do not expose this unauthenticated API or
-  caller-supplied actor identity as suitable for real customer data.
-- Follow company-approved Python/package installation policy.
+- Use only synthetic fixtures, keep any future service loopback-only, avoid
+  existing databases, do not send customer/production data, and do not
+  present caller-supplied user_id as authentication.
+- Follow company-approved software and package installation procedures.
 
 8. Tests and validation status
-------------------------------
+-----------------------------
 CONFIRMED: tests that exist
 - API serialization/redaction/validation tests:
   tests/unit/test_api.py and tests/integration/test_api_operational_readiness.py.
@@ -340,67 +341,73 @@ HISTORICAL
 - docs/history/FINAL_VERIFICATION_REPORT.md reports 7/7 task-ID regression
   tests, 8/8 multi-task failure tests, 4/4 live smoke tests, 19/19 custom
   tests, and evaluation 43/44 (97.73%) with one pre-existing
-  session-isolation failure. This does not verify the current commit, laptop,
-  dependencies, or Python 3.12 compatibility.
+  session-isolation failure. These claims do not validate the current commit,
+  the laptop, Python 3.12, or the dependency candidate set.
 
 ACTUALLY RUN
-- No tests, app code, evaluations, package checks that execute Python, or
-  services were run during these audits. Python 3.12.4 and launcher findings
-  above are user-supplied terminal results, not tests run by this audit.
+- No application code, tests, evaluation commands, Python compatibility
+  checks, package checks that execute Python, or services were run during
+  these audits. Python launcher/version facts are user-supplied terminal
+  results, not tests run by this audit.
 
-9. Blockers, unresolved items, and recommendation
--------------------------------------------------
+9. Blockers, unresolved items, and recommended next step
+--------------------------------------------------------
 BLOCKERS BEFORE AN HTTP FRAUD DEMO
-1. POST /api/v1/agent/run builds the generic agent, not the fraud demo.
-2. Route does not forward workflow/agent/delegations inputs.
+1. POST /api/v1/agent/run constructs the generic agent, not the fraud demo.
+2. The route does not forward workflow/agent/delegations inputs.
 3. No API-to-fraud integration test.
-4. Uvicorn is missing from dependency manifests for the documented server
-   command; NumPy is direct-imported but not explicitly pinned.
-5. A nonempty NEO4J_URI can cause Neo4j adapter construction during synthetic
-   demo setup.
+4. Uvicorn is absent from dependency manifests for the documented server
+   command; NumPy is directly imported but not explicitly pinned.
+5. A nonempty NEO4J_URI can cause Neo4j construction during synthetic demo
+   setup.
 6. API identity is unauthenticated and caller-controlled.
-7. RAG retrieval may download BGE; fake selection does not prevent that.
+7. RAG retrieval may download BGE; fake alone does not prevent that.
 
-PYTHON RECOMMENDATION
-- Preferred: request/use Python 3.11 through the company's approved
-  installation process, because it matches CI and the primary setup target.
-- Python 3.12.4 is a reasonable candidate for a narrowly scoped direct
-  synthetic demo: inspected source syntax supports 3.10+, and no definite
-  3.12 incompatibility was found. It remains unverified; do not claim it works
-  until the approved dependency set is installed and the demo is tested with
-  permission.
-- Do not install Python 3.13 for this demo solely because the launcher lists
-  it; repository evidence only establishes CI/setup for 3.11 and docs mention
-  3.10/3.11.
+PYTHON / COMPANY INSTALLATION RECOMMENDATION
+- Preferred: request or use Python 3.11 through the company's approved
+  software installation/request process because it matches CI and the primary
+  setup target.
+- The information provided does not show that Python 3.11 is available via
+  an approved company tool or that the user has permission to install it.
+  Availability remains UNKNOWN.
+- If IT approval is required, submit a request to the company's IT/software
+  support channel for a managed Python 3.11 runtime and approved package
+  source. State that repo CI/setup targets 3.11 and ask for the approved
+  installation and launcher/PATH guidance. Do not bypass controls or install
+  from an unapproved source.
+- Python 3.12.4 remains a reasonable candidate for the narrowly scoped direct
+  synthetic demo if company policy permits it: inspected syntax is compatible
+  with Python 3.12 and no specific incompatibility was found. It is not
+  verified; dependency wheels, imports, and execution remain unknown.
+- Do not choose Python 3.13 based only on it appearing in the launcher.
 
-SAFEST MINIMAL DEMO PATH — RECOMMENDATION
-- Use apps.fraud.demo.create_demo_agent() directly with fake provider and call
-  `agent.run("Investigate C1001", user_id="investigator")` within its context.
-- Avoid nonempty NEO4J_URI during generic composition and use operational
-  fraud queries rather than RAG questions. This direct path uses in-memory
-  graphs and temporary SQLite but has not been run on this laptop.
-- It is not the current FastAPI route. Resolve route wiring before relying on
-  HTTP fraud-demo behavior.
+SAFEST MINIMAL SYNTHETIC DEMO PATH — RECOMMENDATION
+- Use `apps.fraud.demo.create_demo_agent()` directly with fake provider and
+  call `agent.run("Investigate C1001", user_id="investigator")` inside its
+  context.
+- Avoid a nonempty NEO4J_URI during generic composition. Use operational
+  fraud queries rather than RAG queries. This direct path uses in-memory
+  graphs and temporary SQLite but has not been run on the laptop.
+- It is not the current FastAPI endpoint. Resolve API wiring before relying
+  on HTTP fraud-demo behavior.
+- Candidate direct-call third-party dependencies from static inspection:
+  faiss-cpu==1.15.0, python-dotenv==1.1.1, and an explicitly selected
+  compatible NumPy version. This is not an install recommendation until
+  approved package compatibility is confirmed.
 
 UNRESOLVED
-- Whether Python 3.12 package wheels and all transitive dependencies install
-  from the approved Windows package source.
-- Whether company-approved Python 3.11 can be provided.
-- Laptop hardware, network, caches, permissions, service and port restrictions.
-- Whether synthetic demo or real Neo4j/MySQL composition is intended for HTTP.
-- Whether another branch/repository contains the intended API integration.
-- Whether direct demo works on the laptop; not tested.
+- Whether IT can provide Python 3.11 and whether Python 3.12.4 is approved.
+- Whether needed dependency wheels/packages are available from the company
+  source and compatible with the laptop's Windows/Python version.
+- Laptop capacity, network, caches, permissions, service and port restrictions.
+- Whether the HTTP demo should use synthetic resources or real Neo4j/MySQL.
+- Whether another branch/repository contains intended API integration.
+- Whether the synthetic demo works on the laptop; it was not run.
 
-PROPOSED PATCH / NEXT STEP — NOT IMPLEMENTED
-- First select the approved Python runtime (prefer 3.11), then prepare a
-  reviewed minimal runtime dependency approach rather than installing all
-  training/ML pins.
-- If an HTTP demo is required, add an explicit synthetic-fraud API composition
-  with safe lifecycle management, trusted identity handling, Uvicorn and
-  explicit compatible NumPy declaration, plus an API-to-fraud integration
-  test. Keep generic and real Neo4j/MySQL modes explicit.
-- Document RAG asset behavior and keep unauthenticated API use local and
-  synthetic.
-
-No environment setup or implementation changes have been performed. Await
-explicit approval before proceeding.
+PROPOSED NEXT STEP — NO CHANGES MADE
+- Ask IT/software support for managed Python 3.11 availability and approved
+  package-source guidance. If 3.11 is unavailable or approval is delayed,
+  ask whether existing Python 3.12.4 is an approved runtime for this narrowly
+  scoped demo. Only after approval, prepare an isolated environment and
+  validate the minimal dependency set and direct synthetic workflow.
+- Do not install, execute, or modify anything until explicitly approved.
