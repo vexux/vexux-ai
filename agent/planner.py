@@ -1,7 +1,12 @@
 import json
+import re
 
 from core.contracts.execution import Intent, Plan, Task
 from core.tools.registry import ToolRegistry
+
+
+class UnsupportedCapabilityError(ValueError):
+    """Raised when a model proposes a capability outside the runtime contract."""
 
 
 class Planner:
@@ -18,6 +23,7 @@ class Planner:
         model_gateway,
         tool_registry: ToolRegistry,
         knowledge_source_registry=None,
+        knowledge_graph_registry=None,
         workflow_registry=None,
     ):
 
@@ -25,6 +31,7 @@ class Planner:
         self.tool_registry = tool_registry
 
         self.knowledge_source_registry = knowledge_source_registry
+        self.knowledge_graph_registry = knowledge_graph_registry
         self.workflow_registry = workflow_registry
 
     def _tool_descriptions(self) -> str:
@@ -51,6 +58,84 @@ class Planner:
 
         return json.dumps(workflows, indent=2) if workflows else "No workflows are registered."
 
+    def _deterministic_plan(self, query: str) -> Plan | None:
+        """Select unambiguous capabilities without relying on model formatting."""
+        normalized = query.strip().lower()
+        if (
+            self.workflow_registry is None
+            or not self.workflow_registry.supports_query_planning()
+        ):
+            return None
+        workflow_plan = self.plan_registered_workflow(query)
+        if workflow_plan is not None:
+            return workflow_plan
+
+        if re.fullmatch(r"(?:hi|hello|hey|good morning|good afternoon|good evening)[!. ]*", normalized):
+            return Plan(tasks=[Task(
+                id="task-1",
+                description="Answer the user's greeting",
+                input={"query": query},
+                metadata={"capability": "model"},
+            )])
+
+        calculation = re.fullmatch(
+            r"(?:calculate|compute|what is)\s+([0-9\s()+\-*/%.]+)[?.! ]*",
+            normalized,
+        )
+        if calculation and re.search(r"\d", calculation.group(1)):
+            return Plan(tasks=[Task(
+                id="task-1",
+                description="Calculate the requested expression",
+                input={
+                    "tool": "calculator",
+                    "arguments": {"expression": calculation.group(1).strip()},
+                },
+                metadata={"capability": "tool"},
+            )])
+
+        if re.match(r"^(?:what is|what are|who is|where is|when did|define|explain)\b", normalized):
+            return Plan(tasks=[Task(
+                id="task-1",
+                description="Retrieve factual information",
+                input={"query": query},
+                metadata={"capability": "retrieval"},
+            )])
+
+        return None
+
+    def plan_registered_workflow(self, query: str) -> Plan | None:
+        """Ask opted-in registered workflows to route their own domain queries."""
+        if (
+            self.workflow_registry is None
+            or not self.workflow_registry.supports_query_planning()
+        ):
+            return None
+        workflow_plan = self.workflow_registry.plan_query(query)
+        if isinstance(workflow_plan, Plan):
+            return workflow_plan
+        workflow_task = workflow_plan
+        return Plan(tasks=[workflow_task]) if workflow_task is not None else None
+
+    def is_independent_request(self, query: str) -> bool:
+        """Return whether generic deterministic guardrails recognize a new request."""
+        normalized = query.strip().lower()
+        return bool(
+            re.fullmatch(r"(?:hi|hello|hey|good morning|good afternoon|good evening)[!. ]*", normalized)
+            or re.fullmatch(
+                r"(?:calculate|compute|what is)\s+[0-9\s()+\-*/%.]+[?.! ]*",
+                normalized,
+            )
+            or re.match(
+                r"^(?:what is|what are|who is|where is|when did|define|explain)\b",
+                normalized,
+            )
+        )
+
+    def _workflow_guardrail(self, query: str, plan: Plan) -> Plan:
+        """Correct unambiguous model misclassification using registered metadata."""
+        deterministic = self._deterministic_plan(query)
+        return deterministic or plan
+
     def understand_intent(
         self,
         query: str,
@@ -70,6 +155,7 @@ User: {query}
             prompt,
             max_new_tokens=100,
             do_sample=False,
+            response_format="json",
         ).strip()
 
         if response.startswith("```"):
@@ -198,6 +284,11 @@ Multi-task example:
 }}
 
 Field rules:
+- General conversation, greetings, and social messages MUST use capability "model".
+- Generic factual or document questions MUST use capability "retrieval".
+- An explicitly supported registered workflow MUST use that workflow instead of
+  generic retrieval.
+- Arithmetic or another registered operation MUST use capability "tool".
 - Retrieval input MUST contain a string field named "query".
 - Retrieval input may include "source" only when it exactly matches a registered knowledge source; omit it to use the default source.
 - Model input MUST contain a string field named "query".
@@ -217,13 +308,18 @@ Field rules:
         conversation_context=None,
     ) -> Plan:
 
+        deterministic = self._deterministic_plan(query)
+        if deterministic is not None:
+            return deterministic
+
         response = self.model_gateway.generate(
             self._planning_prompt(query, conversation_context),
             max_new_tokens=500,
             do_sample=False,
+            response_format="json",
         )
 
-        return self._parse_plan(response)
+        return self._workflow_guardrail(query, self._parse_plan(response))
 
     def _parse_plan(self, response: str) -> Plan:
 
@@ -255,8 +351,44 @@ Field rules:
             for index, raw_task in enumerate(raw_tasks, start=1):
                 tasks.append(self._parse_task(raw_task, index, task_ids))
 
+            # Validate dependencies after all tasks are parsed
+            id_map = {t.id: t for t in tasks}
+
+            # Validate dependency values: existence, no self-dependency
+            for t in tasks:
+                if not isinstance(t.depends_on, list):
+                    raise ValueError(f"Task '{t.id}' has malformed 'depends_on' value; must be a list of task ids.")
+                for dep in t.depends_on:
+                    if dep == t.id:
+                        raise ValueError(f"Task '{t.id}' has a self-dependency.")
+                    if dep not in id_map:
+                        raise ValueError(f"Task '{t.id}' depends on unknown task id: {dep}")
+
+            # Detect cycles using Kahn's algorithm
+            indegree = {t.id: 0 for t in tasks}
+            adj = {t.id: [] for t in tasks}
+            for t in tasks:
+                for dep in t.depends_on:
+                    adj[dep].append(t.id)
+                    indegree[t.id] += 1
+
+            queue = [nid for nid, deg in indegree.items() if deg == 0]
+            seen = 0
+            while queue:
+                nid = queue.pop(0)
+                seen += 1
+                for nbr in adj.get(nid, []):
+                    indegree[nbr] -= 1
+                    if indegree[nbr] == 0:
+                        queue.append(nbr)
+
+            if seen != len(tasks):
+                raise ValueError("Plan contains a cycle in task dependencies.")
+
             return Plan(tasks=tasks)
 
+        except UnsupportedCapabilityError:
+            raise
         except (json.JSONDecodeError, TypeError, ValueError) as exc:
             raise ValueError(f"Invalid structured plan response: {exc}") from exc
 
@@ -287,7 +419,9 @@ Field rules:
             raise ValueError(f"Task {index} is missing a valid 'description'.")
 
         if capability not in self.SUPPORTED_CAPABILITIES:
-            raise ValueError(f"Task {index} has unknown capability: {capability}")
+            raise UnsupportedCapabilityError(
+                f"Task {index} has unknown capability: {capability}"
+            )
 
         if not isinstance(task_input, dict):
             raise ValueError(f"Task {index} is missing a valid 'input' object.")
@@ -308,15 +442,23 @@ Field rules:
                     f"Task {index} requires a valid knowledge source name."
                 )
 
-            if self.knowledge_source_registry is None:
-                raise ValueError("Knowledge source selection is unavailable.")
-
-            try:
-                self.knowledge_source_registry.get(source_name)
-            except KeyError as exc:
+            found = False
+            if self.knowledge_source_registry is not None:
+                try:
+                    self.knowledge_source_registry.get(source_name)
+                    found = True
+                except KeyError:
+                    pass
+            if self.knowledge_graph_registry is not None:
+                try:
+                    self.knowledge_graph_registry.get(source_name)
+                    found = True
+                except KeyError:
+                    pass
+            if not found:
                 raise ValueError(
-                    f"Task {index} references unknown knowledge source: {source_name}"
-                ) from exc
+                    f"Task {index} references unknown knowledge resource: {source_name}"
+                )
 
         if capability == "workflow":
             workflow_name = task_input.get("workflow")
@@ -360,11 +502,14 @@ Field rules:
                 index,
             )
 
+        depends_on = raw_task.get("depends_on") if isinstance(raw_task.get("depends_on"), list) else []
+
         return Task(
             id=task_id,
             description=description,
             input=task_input,
             metadata={"capability": capability},
+            depends_on=depends_on,
         )
 
     def _validate_tool_arguments(
@@ -465,6 +610,7 @@ CRITICAL REQUIREMENTS:
             prompt,
             max_new_tokens=300,
             do_sample=False,
+            response_format="json",
         )
 
         plan = self._parse_plan(response)

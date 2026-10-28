@@ -5,17 +5,51 @@ This document outlines the current state and planned future capabilities of the 
 ## 1. Project Status Matrix
 
 ```text
-COMPLETED                    IN PROGRESS               PLANNED
-Agent control loop           RAG-Gateway decoupling    Multi-Agent Systems
-Structured planning          Test organization         Multi-Step DAG Plans
-Scoped replanning            Capability dispatch      Persistent storage
-Tool extensibility                                      Expanded tool ecosystem
-Hardened local RAG                                      Async/streaming execution
-Knowledge source abstraction                            SQL/API/graph knowledge sources
-Session conversation                                     Multi-backend inference
-FastAPI and observability
+COMPLETED                         IN PROGRESS       PLANNED
+Agent control loop                —                 Multi-Agent Systems
+Structured planning               —                 Expanded tool ecosystem
+Scoped replanning                 —                 Async/streaming execution
+Multi-Step DAG Plans
+Capability dispatch
+Tool extensibility
+Hardened local RAG
+Knowledge source and graph registries
+Session conversation
+Multi-backend inference
+FastAPI and local observability
 Evaluation suite
 ```
+
+Phase 4 fraud investigation workflow is completed for the bounded,
+application-specific path. Generic multi-agent expansion and broader
+governance remain outside this phase.
+
+## 1.1 Remaining delivery roadmap
+
+### PHASE 1 — Runtime & Evaluation Foundation — COMPLETE
+- Explicit provider/model configuration with safe runtime diagnostics.
+- Reusable, provider-neutral benchmark scenarios and structured metrics.
+
+### PHASE 2 — Model Baseline & Agent Quality — COMPLETE
+- Completed a controlled local Ollama comparison using `phi3:latest` and
+  `qwen3:4b` against the same 13 benchmark scenarios and two repetitions.
+- Both models passed 26/26 expected scenario outcomes with zero deterministic
+  or intermittent failures in the repeatability run.
+- Targeted deterministic guardrails now cover greetings, arithmetic, factual
+  retrieval, and registered fraud investigation workflow selection.
+- The SQLite fixture accepts the MySQL-style placeholders used by the shared
+  fraud workflow; this is a backend compatibility fix, not a security change.
+- No model was selected as superior on this bounded result; measured latency
+  and quality should be revisited with a broader approved workload before
+  domain adaptation.
+
+### PHASE 3 — Final Production Acceptance & Freeze — COMPLETE
+- Configuration tests are independent of private `.env` values.
+- Offline regression, evaluation, security, identity, authorization, and
+  deterministic fraud workflow validation are complete.
+- Local Ollama with `phi3:latest` is the manual development runtime.
+- Live Neo4j/MySQL checks remain dependent on the corresponding local services.
+- Authentication remains outside the Vexux application boundary.
 
 ## 2. Completed Capabilities
 
@@ -35,23 +69,109 @@ Evaluation suite
 - File loader, sliding-window chunking, normalized embeddings, and FAISS vector search.
 - `RAGPipeline.retrieve()` with configurable top-k and similarity threshold handling.
 - Controlled no-result and retrieval-exception behavior through `ExecutionManager`.
-- `RAGKnowledgeSource` and `KnowledgeSourceRegistry` provide a domain-agnostic retrieval seam; only the RAG source is implemented.
-- Retrieval tasks can select registered sources and grounded responses attribute the actual selected source; advanced semantic routing remains future work.
+- `RAGKnowledgeSource` and SQL-backed knowledge sources use the domain-agnostic
+  `KnowledgeSourceRegistry`; SQLite and MySQL backend adapters are available.
+- Graph resources use `KnowledgeGraphRegistry`; explicit resource routing is
+  deterministic and authorization remains a separate execution-time decision.
+- Retrieval results retain selected-source attribution; broader semantic
+  routing remains future work.
 
 ### 2.4 Sessions, API, and Observability
-- Bounded in-memory conversation history isolated by `session_id`.
+- Bounded in-memory conversation history isolated by `session_id`, with
+  reference-style follow-up interpretation and independent-request isolation.
 - FastAPI endpoint: `POST /api/v1/agent/run`.
-- Structured task logs containing request/session/task IDs, capability, outcome, and duration.
+- Generic progress callbacks and structured task logs containing
+  request/session/task IDs, capability, outcome, and duration.
+- Audit events, execution traces, and derived metrics persisted in the local
+  sanitized SQLite observability store.
 
 ### 2.5 Evaluation and Training
 - Deterministic system evaluation: `python -m evaluation`, currently 44 scenarios.
-- QLoRA fine-tuning and dataset handling under `training/`, `lora/`, and `data/`.
+
+### 2.7 Phase 32 - Pluggable graph backend proof (Completed)
+- Added a parameterized `Neo4jKnowledgeGraph` adapter implementing the existing
+  `KnowledgeGraphContract`.
+- Neo4j remains optional and is registered through `KnowledgeGraphRegistry`
+  only when configured; in-memory and Neo4j graphs may coexist.
+
+### 2.8 Phase 33 - Heterogeneous multi-graph integration (Completed)
+- Demonstrated `customer_graph` backed by Neo4j alongside `fraud_graph` backed
+  by `InMemoryKnowledgeGraph` through the existing registry and execution path.
+- Added deterministic mocked coverage for aggregation, evidence provenance, and
+  authorization-before-execution.
+
+### 2.9 Phase 34 - Real SQL backend integration (Completed)
+- Added the read-only `SQLiteBackend` behind `SQLKnowledgeSource`.
+- Registered optional SQLite sources through the existing knowledge-source
+  registry using `SQL_DATABASE_PATH`, with deterministic real-database tests
+  and a temporary-database demo.
+
+### 2.10 Phase 35 - End-to-end multi-source investigation (Completed)
+- Added deterministic integration coverage combining mocked Neo4j graph
+  behavior, the in-memory fraud graph, and a real temporary SQLite source
+  through existing registries and `ExecutionManager`.
+- Added a no-secrets manual demo with explicit unavailable-Neo4j behavior.
+
+### 2.11 Phase 36 - Deterministic natural-language resource routing (Completed)
+- Added metadata-driven explicit routing for registered graph and SQL resources,
+  including aliases, single-resource selection, and existing multi-source task
+  construction.
+- Unknown explicit resources fail without falling back to RAG; queries without
+  resource mentions preserve the normal planner path.
+- Added an interactive synthetic authorization demo for `investigator` and
+  `support_user`; routing remains separate from authorization and does not add
+  an LLM call, scheduler, or registry.
+
+### 2.12 Phase 4 - Agentic multi-step fraud investigation (Completed)
+- Added a structured fraud investigation plan with dependency validation,
+  bounded retries, bounded replanning, step status, and evidence.
+- Executes graph and SQL steps through the existing router, policy,
+  `ExecutionManager`, registries, and adapters.
+- Adds related-entity retrieval only after a suspicious relationship is observed.
+- Keeps factual signals in the deterministic Phase 3 investigation service.
+
+### 2.13 Phase 5 - Security and governance hardening (Completed)
+- Security contexts validate identity fields and expose immutable claims and
+  attributes.
+- Authorization rejects malformed/unknown resource actions and records denied
+  graph decisions before execution.
+- Planner/resource boundaries reject unregistered resources; audit storage
+  redacts credential-bearing metadata.
+- Prompt-injection strings remain data and cannot redefine actor or policy.
+
+### 2.6 Phase 24 — Resource-aware Authorization (Completed)
+A lightweight, resource-level authorization boundary was added to control access to sensitive resources while preserving the existing policy and security boundaries.
+
+Key points:
+- `AuthorizationRequest` / `AuthorizationDecision` contracts added under `core/contracts/authorization.py`.
+- `DefaultPolicy` exposes `authorize_resource(actor, resource_type, resource_name, action, context)` and remains permissive by default to preserve backward compatibility.
+- Enforcement is applied in `ExecutionManager` (single-graph, multi-graph, and registered knowledge-source retrievals) and `Orchestrator` (specialized-agent delegation). Multi-graph requests are authorized before any graph execution; a denial of any required graph rejects the whole multi-graph request.
+- Authorization failures are deterministic controlled failures surfaced via `ExecutionResult` / `AgentResponse` metadata and do not cause uncaught exceptions.
+- This implementation is intentionally small and domain-agnostic; full enterprise IAM, RBAC engines, or external identity integrations are out of scope for this phase.- QLoRA fine-tuning and dataset handling under `training/`, `lora/`, and `data/`.
 
 ## 3. In-Progress Capabilities
+
+### 3.0 Phase 2 - Real local fraud data platform (Completed)
+- Added deterministic Neo4j schema/seed resources under `apps/fraud/data/neo4j/`.
+- Added deterministic MySQL schema/seed resources under `apps/fraud/data/mysql/`.
+- Added the generic read-only `MySQLBackend` behind `SQLKnowledgeSource`; the existing SQLite backend remains available.
+- Added `apps/fraud/real.py`, which composes real `customer_graph`, `fraud_graph`, and `business_db` resources without fake fallback.
+- Added live local integration tests that skip unless Neo4j/MySQL credentials are configured.
+- Updated the interactive runner and local setup documentation for real provider/resource modes.
 
 ### 3.1 RAG and Model Gateway Decoupling
 - Route all answer generation through the central `ModelGateway`.
 - Keep retrieval and answer generation as distinct capability responsibilities.
+
+### 3.2 Phase 37 - Production runtime and security boundary (Completed)
+- Provider modules are loaded lazily, and the configured generation provider is
+  no longer coupled to local causal-model RAG generation.
+- `ENABLE_LOCAL_RAG_INFERENCE=1` explicitly enables the optional local RAG
+  generation pipeline; retrieval remains independently available.
+- Added the generic application-supplied `SecurityContext` contract while
+  preserving legacy `user_id` callers and keeping authentication outside core.
+- Authorization receives request/session/security context, and existing
+  resource policy, evidence, audit, and failure semantics remain unchanged.
 
 ### 3.2 Test Organization
 - Gradually consolidate root verification scripts into a structured test package while retaining deterministic coverage.
@@ -62,10 +182,25 @@ Evaluation suite
 ## 4. Planned Capabilities
 
 ### 4.1 Multi-Step and DAG Planning
-- Task dependencies, conditional branching, and partial DAG recovery.
+- Task dependencies (Phase 13 implemented): Planner supports Task.depends_on, the Agent performs dependency-aware deterministic scheduling. See limitations below.
+- Phase 14 (bounded local concurrency): Agent now supports bounded parallel execution of independent ready tasks via ThreadPoolExecutor. Configure the degree of parallelism with the environment variable `AGENT_MAX_PARALLEL_TASKS` (default `1` for legacy sequential behavior). This is local-only concurrency and does not change replanning semantics.
+- Future work: conditional branching, richer dataflow (output substitution), distributed DAG execution and advanced recovery strategies.
 
-### 4.2 Multi-Agent Orchestration
-- Specialized agents and supervisor-worker coordination.
+
+### Notes on Phase 13/14 (current limitations)
+- Execution is deterministic: when multiple tasks are ready the Agent preserves plan order for deterministic submission; with parallelism enabled independent tasks may execute concurrently.
+- Parallelism is bounded and local — no distributed scheduling or external worker pools.
+- No general output substitution or complex dataflow between tasks in Phase 13/14; that belongs to a subsequent phase.
+- If multiple tasks fail in the same batch, a deterministic selection rule (earliest by original plan order) selects which failed task drives replanning.
+- Recovery plan merging remains based on the existing replanning model and preserves task IDs for recovery tasks.
+
+### 4.2 Specialized Agent Delegation
+- Explicit, deterministic specialization via an orchestrator-level selection mechanism.
+- Reference implementation: `ResearchAgent`, a thin adapter around the existing Agent that reuses the current planning, DAG, workflow, and execution stack instead of creating a second planner or scheduler.
+- Controlled multi-agent delegation is supported only when a request explicitly names a target agent or includes a list of `delegations`.
+- `DelegationPlan` and `DelegationPlanner` provide a small, explicit structured multi-agent plan that validates IDs, dependency edges, and upstream dataflow references before execution.
+- Old behavior remains the default when no specialized agent is explicitly requested.
+- Multi-agent collaboration, automatic agent selection, recursive delegation, and shared multi-agent memory remain future work.
 
 ### 4.3 Persistent Conversation and Memory Storage
 - Durable session state, episodic memory, and entity memory backends.
@@ -76,6 +211,7 @@ Evaluation suite
 ### 4.5 Additional Knowledge Sources
 - SQL, knowledge graph, API documentation, and external knowledge implementations behind `KnowledgeSourceContract`.
 - Phase 11: Introduce a small domain-agnostic KnowledgeDecision layer that normalizes and validates which knowledge capability (RAG, registered knowledge source, or knowledge graph) should be used for a request. This component does NOT execute retrievals and intentionally does not perform multi-source fusion or ranking.
+- Multi-graph knowledge retrieval is supported through a small, explicit `graph_requests` structure on `KnowledgeRequest` plus a domain-agnostic `GraphCorrelator` that joins explicit identifiers across independent graphs while preserving per-graph provenance in `EvidenceSet`.
 - Planner-based selection among multiple knowledge sources (multi-source routing and source fusion) remains future work.
 
 ### 4.6 Streaming and Asynchronous Execution
@@ -83,3 +219,19 @@ Evaluation suite
 
 ### 4.6 Multi-Backend Model Gateway
 - Optional vLLM, Ollama, Llama.cpp, and remote provider implementations.
+
+### 4.7 Phase 29 — End-to-end integration and hardening
+- Integration coverage now verifies the secured synthetic customer/fraud multi-graph
+  investigation, including all-or-nothing authorization and cross-graph evidence.
+- Deterministic autonomous delegation coverage verifies one model-gateway call,
+  validated plans, controlled invalid-plan failures, and delegation audit events.
+- Configuration portability and optional persistent-memory behavior are verified
+  without enabling new defaults or introducing provider failover.
+
+### 4.8 Phase 30 — Production API and operational readiness
+- Added a thin orchestrator API endpoint while preserving the existing agent
+  endpoint and `AgentResponse` semantics.
+- Added stable redacted API serialization, request/audit ID correlation, safe
+  trace retrieval, and lightweight liveness/readiness endpoints.
+- Authentication, rate limiting, distributed tracing, and external deployment
+  infrastructure remain out of scope.

@@ -1,12 +1,3 @@
-import torch
-
-from transformers import (
-    AutoModelForCausalLM,
-    AutoTokenizer,
-)
-
-from peft import PeftModel
-
 from core.contracts.capabilities import ModelProviderContract
 
 
@@ -15,16 +6,30 @@ class QwenProvider:
     def __init__(
         self,
         model_name: str,
-        adapter_path: str,
+        adapter_path: str | None = None,
+        *,
+        load_in_4bit: bool = False,
+        compute_dtype: str = "float16",
+        quant_type: str = "nf4",
+        use_double_quant: bool = True,
     ):
+        # Keep the heavyweight ML stack out of module import and pytest
+        # collection; it is needed only when this provider is instantiated.
+        import torch
+        from peft import PeftModel
+        from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
 
         self._name = "qwen"
+        self.model_name = model_name
+        self.adapter_path = adapter_path
+        self.load_in_4bit = load_in_4bit
+        self._torch = torch
+        self.device = "cuda" if torch.cuda.is_available() else "cpu"
 
-        self.device = (
-            "cuda"
-            if torch.cuda.is_available()
-            else "cpu"
-        )
+        if load_in_4bit and not torch.cuda.is_available():
+            raise RuntimeError(
+                "4-bit Qwen adapter inference requires CUDA, but no CUDA device is available."
+            )
 
         self.tokenizer = AutoTokenizer.from_pretrained(
             model_name
@@ -34,15 +39,33 @@ class QwenProvider:
             self.tokenizer.eos_token
         )
 
-        base_model = AutoModelForCausalLM.from_pretrained(
-            model_name,
-            torch_dtype=torch.float32,
-            device_map="auto",
-        )
-
-        self.model = PeftModel.from_pretrained(
-            base_model,
-            adapter_path,
+        model_kwargs = {"device_map": "auto"}
+        if load_in_4bit:
+            try:
+                dtype = getattr(torch, compute_dtype)
+            except AttributeError as exc:
+                raise ValueError(f"Unsupported Qwen compute dtype: {compute_dtype}") from exc
+            if compute_dtype == "bfloat16" and not torch.cuda.is_bf16_supported():
+                raise RuntimeError(
+                    "bfloat16 Qwen inference is enabled, but the selected CUDA device "
+                    "does not support it."
+                )
+            model_kwargs.update({
+                "torch_dtype": dtype,
+                "quantization_config": BitsAndBytesConfig(
+                    load_in_4bit=True,
+                    bnb_4bit_compute_dtype=dtype,
+                    bnb_4bit_quant_type=quant_type,
+                    bnb_4bit_use_double_quant=use_double_quant,
+                ),
+            })
+        else:
+            model_kwargs["torch_dtype"] = torch.float32
+        base_model = AutoModelForCausalLM.from_pretrained(model_name, **model_kwargs)
+        self.model = (
+            PeftModel.from_pretrained(base_model, adapter_path)
+            if adapter_path
+            else base_model
         )
 
         self.model.eval()
@@ -51,6 +74,15 @@ class QwenProvider:
     def name(self) -> str:
 
         return self._name
+
+    @property
+    def metadata(self) -> dict[str, str]:
+        return {
+            "provider": self.name,
+            "model": self.model_name,
+            "adapter_path": self.adapter_path or "",
+            "runtime_mode": "local",
+        }
 
     def generate(
         self,
@@ -125,13 +157,11 @@ class QwenProvider:
             })
 
         if not do_sample:
-
             self.model.generation_config.temperature = None
             self.model.generation_config.top_p = None
-            self.model.generation_config.top_k = None    
+            self.model.generation_config.top_k = None
 
-        with torch.no_grad():
-
+        with self._torch.no_grad():
             outputs = self.model.generate(
                 **inputs,
                 **generation_kwargs,

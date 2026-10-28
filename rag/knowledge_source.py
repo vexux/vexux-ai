@@ -42,5 +42,24 @@ class RAGKnowledgeSource:
     def normalize(self, results):
         evidence = EvidenceSet()
         for result in results:
-            evidence.add(Evidence(self.name, str(result.get("document", "")), "document", {"score": result.get("score")}))
+            metadata = {
+                key: result[key]
+                for key in (
+                    "source",
+                    "document_name",
+                    "document_title",
+                    "title",
+                    "chunk_index",
+                    "score",
+                )
+                if key in result
+            }
+            evidence.add(
+                Evidence(
+                    self.name,
+                    str(result.get("document", "")),
+                    "document",
+                    metadata,
+                )
+            )
         return evidence

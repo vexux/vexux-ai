@@ -1,4 +1,10 @@
 from typing import Any
+import traceback
+
+from core.contracts.evidence import Evidence, EvidenceSet
+from core.knowledge.multi_graph import execute_multi_graph_request
+from core.observability import classify_error, duration_ms, log_event, timed
+from core.contracts.workflow import WorkflowExecutionError
 
 from core.contracts.execution import (
     AgentContext,
@@ -17,6 +23,8 @@ class ExecutionManager:
         knowledge_source_registry=None,
         knowledge_graph_registry=None,
         policy=None,
+        workflow_registry=None,
+        graph_result_processor=None,
     ):
 
         self.retrieval = retrieval
@@ -31,6 +39,8 @@ class ExecutionManager:
         self.knowledge_graph_registry = knowledge_graph_registry
 
         self.policy = policy
+        self.workflow_registry = workflow_registry
+        self.graph_result_processor = graph_result_processor
 
         # Create a KnowledgeDecision helper to normalize retrieval requests.
         try:
@@ -49,6 +59,66 @@ class ExecutionManager:
         task: Task,
         context: AgentContext,
     ) -> ExecutionResult:
+        start = timed()
+        reporter = getattr(self, "progress_reporter", None)
+        capability = task.metadata.get("capability")
+        if reporter is not None and self.policy is not None:
+            reporter.emit(
+                "authorization_started",
+                "authorization",
+                "Checking execution permission.",
+                task_id=task.id,
+                capability=capability,
+                status="started",
+            )
+        result = self._execute_internal(task, context)
+        if reporter is not None:
+            metadata = result.metadata if isinstance(result.metadata, dict) else {}
+            if self.policy is not None and (
+                "authorization_denied" in metadata or result.success or result.error
+            ):
+                reporter.emit(
+                    "authorization_completed",
+                    "authorization",
+                    "Execution permission check completed.",
+                    task_id=task.id,
+                    capability=capability,
+                    status="denied" if metadata.get("authorization_denied") else "completed",
+                )
+            reporter.emit(
+                "execution_progress",
+                "execution",
+                "Task execution completed.",
+                task_id=task.id,
+                capability=capability,
+                resource=task.metadata.get("resource") or task.input.get("source"),
+                status="completed" if result.success else "failed",
+                duration_ms=duration_ms(start),
+            )
+        metadata = result.metadata if isinstance(result.metadata, dict) else {}
+        resource = task.metadata.get("resource") or task.input.get("source")
+        log_event(
+            "execution.completed",
+            request_id=context.request_id,
+            session_id=context.session_id,
+            actor=context.user_id,
+            task_id=task.id,
+            capability=task.metadata.get("capability"),
+            resource=resource,
+            action=task.input.get("operation") or task.input.get("action") or "execute",
+            success=result.success,
+            duration_ms=duration_ms(start),
+            error_category=classify_error(result.error) if result.error else None,
+            authorization_decision="denied" if metadata.get("authorization_denied") else None,
+            error=result.error,
+        )
+        return result
+
+    def _execute_internal(
+        self,
+        task: Task,
+        context: AgentContext,
+    ) -> ExecutionResult:
 
         capability = task.metadata.get(
             "capability"
@@ -59,12 +129,21 @@ class ExecutionManager:
             if self.policy is not None:
                 decision = self.policy.authorize_execution(task, context)
                 if not decision.allowed:
-                    return ExecutionResult(success=False, error=f"Policy denied execution: {decision.reason}", metadata={"policy": decision.policy_name, "reason": decision.reason})
+                    return ExecutionResult(
+                        success=False,
+                        error=f"Policy denied execution: {decision.reason}",
+                        metadata={
+                            "policy": decision.policy_name,
+                            "reason": decision.reason,
+                            "authorization_denied": True,
+                        },
+                    )
 
             if capability == "retrieval":
 
                 return self._execute_retrieval(
-                    task
+                    task,
+                    context,
                 )
 
             if capability == "tool":
@@ -79,6 +158,9 @@ class ExecutionManager:
                     task,
                     context.conversation_history,
                 )
+
+            if capability == "workflow":
+                return self._execute_workflow(task, context)
 
             return ExecutionResult(
                 success=False,
@@ -95,9 +177,58 @@ class ExecutionManager:
                 error=str(exc),
             )
 
+    def _execute_workflow(
+        self,
+        task: Task,
+        context: AgentContext,
+    ) -> ExecutionResult:
+        if self.workflow_registry is None:
+            return ExecutionResult(success=False, error="Workflow capability unavailable")
+
+        workflow_name = task.input.get("workflow")
+        try:
+            workflow = self.workflow_registry.get(workflow_name)
+        except KeyError as exc:
+            return ExecutionResult(success=False, error=str(exc))
+
+        execute = getattr(workflow, "execute", None)
+        if not callable(execute):
+            return ExecutionResult(
+                success=False,
+                error=f"Workflow '{workflow_name}' is not executable.",
+            )
+
+        try:
+            output = execute(task.input, context)
+        except PermissionError as exc:
+            return ExecutionResult(
+                success=False,
+                error=str(exc),
+                metadata={"capability": "workflow", "workflow": workflow_name, "authorization_denied": True},
+            )
+        except WorkflowExecutionError as exc:
+            return ExecutionResult(
+                success=False,
+                error=str(exc),
+                metadata={
+                    "capability": "workflow",
+                    "workflow": workflow_name,
+                    "terminal": exc.terminal,
+                    "retryable": exc.retryable,
+                    "authoritative": exc.authoritative,
+                    "failure_category": exc.failure_category,
+                },
+            )
+        return ExecutionResult(
+            success=True,
+            output=output,
+            metadata={"capability": "workflow", "workflow": workflow_name},
+        )
+
     def _execute_retrieval(
         self,
         task: Task,
+        context: AgentContext | None = None,
     ) -> ExecutionResult:
 
         # Use the KnowledgeDecision component (if available) to normalize and
@@ -105,9 +236,124 @@ class ExecutionManager:
         query = task.input.get("query")
         explicit_source = task.input.get("source")
         top_k = task.input.get("top_k")
+        graph_requests = task.input.get("graph_requests") or task.input.get("multi_graph_requests") or task.input.get("requests")
 
         if not isinstance(query, str) or not query.strip():
             return ExecutionResult(success=False, error="Retrieval task missing 'query' field")
+
+        # Multi-graph requests are intentionally handled before the default
+        # source-routing logic. This preserves controlled failure semantics:
+        # missing or failing graphs are surfaced instead of silently falling back.
+        if graph_requests:
+            # Authorize each requested graph before any execution. Authorization must
+            # occur prior to submitting protected tasks for parallel execution.
+            if self.policy is not None:
+                from core.contracts.audit import make_event
+                from core.audit_logger import emit as emit_audit
+                # emit request_started for this multi-graph retrieval (use task.id as request id)
+                try:
+                    evt_start = make_event(
+                        event_type="request_started",
+                        request_id=context.request_id if context is not None else task.id,
+                        session_id=context.session_id if context is not None else None,
+                        status="started",
+                        metadata={
+                            "kind": "multi_graph",
+                            "actor_id": context.user_id if context is not None else None,
+                        },
+                    )
+                    emit_audit(evt_start)
+                except Exception:
+                    pass
+
+                for item in graph_requests:
+                    name = item.get("graph_name") or item.get("source")
+                    try:
+                        decision = self.policy.authorize_resource(
+                            context.user_id if context is not None else None,
+                            "knowledge_graph",
+                            name,
+                            "read",
+                            {
+                                "task_id": task.id,
+                                "request_id": context.request_id if context is not None else None,
+                                "session_id": context.session_id if context is not None else None,
+                                "security_context": context.security_context if context is not None else None,
+                            },
+                        )
+                    except Exception as exc:
+                        import traceback as _tb
+                        tb = _tb.format_exc()
+                        # emit authorization error event
+                        try:
+                            evt = make_event(event_type="authorization_denied", request_id=context.request_id if context is not None else task.id, session_id=context.session_id if context is not None else None, task_id=None, resource_type="knowledge_graph", resource_name=name, action="read", status="error", metadata={"error": str(exc), "actor_id": context.user_id if context is not None else None})
+                            emit_audit(evt)
+                        except Exception:
+                            pass
+                        return ExecutionResult(success=False, error=f"Authorization error: {exc}", metadata={"trace": tb})
+                    # emit authorization allowed/denied
+                    try:
+                        if decision.allowed:
+                            evt = make_event(event_type="authorization_allowed", request_id=context.request_id if context is not None else task.id, session_id=context.session_id if context is not None else None, resource_type="knowledge_graph", resource_name=name, action="read", status="allowed", metadata={"policy": decision.policy_name, "actor_id": context.user_id if context is not None else None})
+                        else:
+                            evt = make_event(event_type="authorization_denied", request_id=context.request_id if context is not None else task.id, session_id=context.session_id if context is not None else None, resource_type="knowledge_graph", resource_name=name, action="read", status="denied", metadata={"policy": decision.policy_name, "reason": decision.reason, "actor_id": context.user_id if context is not None else None})
+                        emit_audit(evt)
+                    except Exception:
+                        pass
+                    if not decision.allowed:
+                        return ExecutionResult(
+                            success=False,
+                            error=f"Unauthorized access to knowledge graph: {name}",
+                            metadata={
+                                "policy": decision.policy_name,
+                                "reason": decision.reason,
+                                "authorization_denied": True,
+                            },
+                        )
+                    reporter = getattr(self, "progress_reporter", None)
+                    if reporter is not None:
+                        reporter.emit(
+                            "execution_progress",
+                            "execution",
+                            "Registered resource access authorized.",
+                            task_id=task.id,
+                            capability="retrieval",
+                            resource=name,
+                            status="authorized",
+                        )
+            try:
+                result = self._execute_multi_graph_request(task, graph_requests)
+                reporter = getattr(self, "progress_reporter", None)
+                if reporter is not None:
+                    for item in result.output.get("results", []):
+                        reporter.emit(
+                            "execution_progress",
+                            "execution",
+                            "Registered resource execution completed.",
+                            task_id=task.id,
+                            capability="retrieval",
+                            resource=item.get("graph_name"),
+                            status="completed",
+                        )
+                # emit request_completed
+                try:
+                    from core.contracts.audit import make_event as _make_event
+                    from core.audit_logger import emit as _emit_audit
+                    evt_c = _make_event(event_type="request_completed", request_id=task.id, status="completed", metadata={"kind": "multi_graph"})
+                    _emit_audit(evt_c)
+                except Exception:
+                    pass
+                return result
+            except Exception as exc:
+                # emit request_failed
+                try:
+                    from core.contracts.audit import make_event as _make_event
+                    from core.audit_logger import emit as _emit_audit
+                    evt_fail = _make_event(event_type="request_completed", request_id=task.id, status="failed", metadata={"error": str(exc), "kind": "multi_graph"})
+                    _emit_audit(evt_fail)
+                except Exception:
+                    pass
+                return ExecutionResult(success=False, error=str(exc))
 
         # If an explicit source was provided and a KnowledgeSourceRegistry exists,
         # attempt to use it directly. This preserves the original error message
@@ -116,18 +362,32 @@ class ExecutionManager:
         if explicit_source and self.knowledge_source_registry is not None:
             try:
                 source = self.knowledge_source_registry.get(explicit_source)
-                return self._execute_retrieval_source(source, task)
+                return self._execute_retrieval_source(source, task, context)
             except KeyError as exc:
-                # Preserve the original KeyError string representation
-                return ExecutionResult(success=False, error=str(exc))
+                if self.knowledge_graph_registry is not None:
+                    try:
+                        self.knowledge_graph_registry.get(explicit_source)
+                    except KeyError:
+                        return ExecutionResult(success=False, error=str(exc))
+                    # A graph with this name should continue through the
+                    # knowledge decision path below.
+                else:
+                    return ExecutionResult(success=False, error=str(exc))
 
         if self.knowledge_decision is not None:
             try:
+                # Allow callers to specify a high-level operation and structured params in the task input.
+                operation = task.input.get("operation")
+                params = dict(task.input.get("params", {})) if isinstance(task.input.get("params"), dict) else {}
+                if top_k is not None:
+                    params.setdefault("top_k", top_k)
+
                 kr = self.knowledge_decision.create_request(
                     query=query,
                     explicit_source=explicit_source,
-                    operation=None,
-                    params={"top_k": top_k} if top_k is not None else {},
+                    operation=operation,
+                    params=params,
+                    graph_requests=graph_requests,
                 )
             except Exception as exc:
                 # Controlled failure: explicit unknown source or unavailable capability
@@ -142,7 +402,7 @@ class ExecutionManager:
                     return ExecutionResult(success=False, error=str(exc))
 
                 # Reuse existing source-based retrieval executor
-                return self._execute_retrieval_source(source, task)
+                return self._execute_retrieval_source(source, task, context)
 
             if kr.kind == "rag":
                 # Route to the RAG retrieval pipeline (self.retrieval). Keep the
@@ -175,10 +435,92 @@ class ExecutionManager:
                 return ExecutionResult(success=True, output=result, metadata={"capability": "retrieval"})
 
             if kr.kind == "graph":
-                # Knowledge graph execution is out-of-scope for Phase 11. Return a
-                # controlled failure indicating the decision is valid but execution
-                # is not yet implemented.
-                return ExecutionResult(success=False, error=f"Knowledge graph execution not implemented for graph: {kr.source}")
+                # Execute graph operations using the configured KnowledgeGraphRegistry.
+                if self.knowledge_graph_registry is None:
+                    return ExecutionResult(success=False, error="Knowledge graph capability unavailable")
+
+                if kr.source == "multi_graph":
+                    return self._execute_multi_graph_request(task, kr.graph_requests or task.input.get("graph_requests", []))
+
+                try:
+                    graph = self.knowledge_graph_registry.get(kr.source)
+                except Exception as exc:
+                    return ExecutionResult(success=False, error=str(exc))
+
+                # Authorize access to the resolved graph resource
+                if self.policy is not None:
+                    try:
+                        decision = self.policy.authorize_resource(context.user_id if context is not None else None, "knowledge_graph", graph.name if hasattr(graph, "name") else kr.source, "read", {"task_id": task.id})
+                    except Exception as exc:
+                        return ExecutionResult(success=False, error=f"Authorization error: {exc}")
+                    try:
+                        from core.audit_logger import emit as emit_audit
+                        from core.contracts.audit import make_event
+                        emit_audit(make_event(
+                            event_type=(
+                                "authorization_allowed"
+                                if decision.allowed
+                                else "authorization_denied"
+                            ),
+                            request_id=context.request_id if context is not None else task.id,
+                            task_id=task.id,
+                            resource_type="knowledge_graph",
+                            resource_name=graph.name if hasattr(graph, "name") else kr.source,
+                            action="read",
+                            status="allowed" if decision.allowed else "denied",
+                            metadata={
+                                "policy": decision.policy_name,
+                                "reason": decision.reason,
+                            },
+                        ))
+                    except Exception:
+                        pass
+                    if not decision.allowed:
+                        return ExecutionResult(success=False, error=f"Unauthorized access to knowledge graph: {graph.name}", metadata={"policy": decision.policy_name, "reason": decision.reason, "authorization_denied": True})
+
+                operation = kr.operation or kr.params.get("operation") if hasattr(kr, "params") else kr.operation
+                params = kr.params if hasattr(kr, "params") else {}
+
+                try:
+                    # Node lookup
+                    if operation in ("get_node", "node_lookup", "node"):
+                        node_id = params.get("node_id") or params.get("id")
+                        if not node_id:
+                            return ExecutionResult(success=False, error="Graph operation 'get_node' requires 'node_id' parameter")
+                        node = graph.get_node(node_id)
+                        evidence = EvidenceSet()
+                        evidence.add(Evidence(graph.name, str(node), "graph_node", metadata={"id": node_id}))
+                        output = {"query": query, "result": node, "context_found": True, "source": graph.name, "evidence": evidence}
+                        return ExecutionResult(success=True, output=output, metadata={"capability": "retrieval", "source": graph.name})
+
+                    # Relationship lookup
+                    if operation in ("get_relationship", "relationship_lookup", "relationship"):
+                        rel_id = params.get("rel_id") or params.get("id")
+                        if not rel_id:
+                            return ExecutionResult(success=False, error="Graph operation 'get_relationship' requires 'rel_id' parameter")
+                        rel = graph.get_relationship(rel_id)
+                        evidence = EvidenceSet()
+                        evidence.add(Evidence(graph.name, str(rel), "graph_relationship", metadata={"id": rel_id}))
+                        output = {"query": query, "result": rel, "context_found": True, "source": graph.name, "evidence": evidence}
+                        return ExecutionResult(success=True, output=output, metadata={"capability": "retrieval", "source": graph.name})
+
+                    # Neighbor traversal
+                    if operation in ("get_neighbors", "neighbors", "neighbor_traversal"):
+                        node_id = params.get("node_id") or params.get("id")
+                        direction = params.get("direction", "outgoing")
+                        if not node_id:
+                            return ExecutionResult(success=False, error="Graph operation 'get_neighbors' requires 'node_id' parameter")
+                        neighbors = graph.get_neighbors(node_id, direction=direction)
+                        evidence = EvidenceSet()
+                        for item in neighbors:
+                            evidence.add(Evidence(graph.name, str(item), "graph_neighbor", metadata={"node_id": node_id, "direction": item.get("direction")}))
+                        output = {"query": query, "results": neighbors, "context_found": bool(neighbors), "source": graph.name, "evidence": evidence}
+                        return ExecutionResult(success=True, output=output, metadata={"capability": "retrieval", "source": graph.name})
+
+                    return ExecutionResult(success=False, error=f"Unsupported graph operation: {operation}")
+
+                except Exception as exc:
+                    return ExecutionResult(success=False, error=str(exc))
 
             # Fallback safety
             return ExecutionResult(success=False, error=f"Unsupported knowledge request kind: {kr.kind}")
@@ -186,7 +528,7 @@ class ExecutionManager:
         # If KnowledgeDecision is not present, preserve existing behavior.
         if self.knowledge_source_registry is not None:
             source = self.knowledge_source_registry.get(task.input.get("source"))
-            return self._execute_retrieval_source(source, task)
+            return self._execute_retrieval_source(source, task, context)
 
         if self.retrieval is None:
             return ExecutionResult(success=False, error="Retrieval capability unavailable")
@@ -208,10 +550,58 @@ class ExecutionManager:
         result = self.retrieval.ask(query)
         return ExecutionResult(success=True, output=result)
 
+    def _execute_multi_graph_request(self, task: Task, graph_requests):
+        if self.knowledge_graph_registry is None:
+            raise ValueError("Knowledge graph capability unavailable")
+
+        if not isinstance(graph_requests, list) or not graph_requests:
+            raise ValueError("Multi-graph request requires a non-empty 'graph_requests' list")
+
+        requests = []
+        for item in graph_requests:
+            if isinstance(item, dict):
+                request = dict(item)
+            else:
+                request = item.as_dict() if hasattr(item, "as_dict") else dict(item)
+            if not request.get("graph_name") and request.get("source"):
+                request["graph_name"] = request.get("source")
+            if not request.get("operation") and request.get("params"):
+                request["operation"] = request.get("params", {}).get("operation")
+            if not request.get("parameters") and request.get("params"):
+                request["parameters"] = request.get("params")
+            requests.append(request)
+
+        try:
+            result = execute_multi_graph_request(self.knowledge_graph_registry, requests)
+        except Exception as exc:
+            raise ValueError(str(exc)) from exc
+
+        if self.graph_result_processor is not None:
+            processed = self.graph_result_processor(task.input, result)
+            if not isinstance(processed, dict):
+                raise TypeError("Graph result processor must return a dictionary.")
+            result.update(processed)
+
+        evidence = result.get("evidence")
+        output = {
+            "query": task.input.get("query"),
+            "results": result.get("results", []),
+            "context_found": result.get("context_found", bool(result.get("results"))),
+            "source": "multi_graph",
+            "evidence": evidence,
+        }
+        output.update({
+            key: value
+            for key, value in result.items()
+            if key not in {"query", "results", "context_found", "source", "evidence"}
+        })
+        return ExecutionResult(success=True, output=output, metadata={"capability": "retrieval", "source": "multi_graph"})
+
     def _execute_retrieval_source(
         self,
         source,
         task: Task,
+        context: AgentContext | None = None,
     ) -> ExecutionResult:
 
         query = task.input["query"]
@@ -228,11 +618,88 @@ class ExecutionManager:
                 error="Retrieval top_k must be a positive integer",
             )
 
-        retrieved = (
-            source.retrieve(query, k=top_k)
-            if top_k is not None
-            else source.retrieve(query)
-        )
+        # Authorize access to this knowledge source before retrieval
+        if self.policy is not None:
+            from core.contracts.audit import make_event
+            from core.audit_logger import emit as emit_audit
+            try:
+                reporter = getattr(self, "progress_reporter", None)
+                if reporter is not None:
+                    reporter.emit(
+                        "authorization_started",
+                        "authorization",
+                        "Checking registered source access.",
+                        task_id=task.id,
+                        capability="retrieval",
+                        resource=getattr(source, "name", None),
+                        status="started",
+                    )
+                decision = self.policy.authorize_resource(
+                    context.user_id if context is not None else None,
+                    "knowledge_source",
+                    getattr(source, "name", None),
+                    "read",
+                    {
+                        "task_id": task.id,
+                        "request_id": context.request_id if context is not None else None,
+                        "session_id": context.session_id if context is not None else None,
+                        "security_context": context.security_context if context is not None else None,
+                    },
+                )
+            except Exception as exc:
+                try:
+                    evt = make_event(event_type="authorization_denied", request_id=context.request_id if context is not None else task.id, session_id=context.session_id if context is not None else None, resource_type="knowledge_source", resource_name=getattr(source, "name", None), action="read", status="error", metadata={"error": str(exc), "actor_id": context.user_id if context is not None else None})
+                    emit_audit(evt)
+                except Exception:
+                    pass
+                return ExecutionResult(success=False, error=f"Authorization error: {exc}", metadata={})
+            try:
+                if decision.allowed:
+                    evt = make_event(event_type="authorization_allowed", request_id=context.request_id if context is not None else task.id, session_id=context.session_id if context is not None else None, resource_type="knowledge_source", resource_name=getattr(source, "name", None), action="read", status="allowed", metadata={"policy": decision.policy_name, "actor_id": context.user_id if context is not None else None})
+                else:
+                    evt = make_event(event_type="authorization_denied", request_id=context.request_id if context is not None else task.id, session_id=context.session_id if context is not None else None, resource_type="knowledge_source", resource_name=getattr(source, "name", None), action="read", status="denied", metadata={"policy": decision.policy_name, "reason": decision.reason, "actor_id": context.user_id if context is not None else None})
+                emit_audit(evt)
+            except Exception:
+                pass
+            if not decision.allowed:
+                return ExecutionResult(success=False, error=f"Unauthorized access to knowledge source: {getattr(source, 'name', None)}", metadata={"policy": decision.policy_name, "reason": decision.reason})
+            reporter = getattr(self, "progress_reporter", None)
+            if reporter is not None:
+                reporter.emit(
+                    "authorization_completed",
+                    "authorization",
+                    "Registered source access authorized.",
+                    task_id=task.id,
+                    capability="retrieval",
+                    resource=getattr(source, "name", None),
+                    status="allowed",
+                )
+
+        # emit resource_accessed (start)
+        try:
+            from core.contracts.audit import make_event as _make_event
+            from core.audit_logger import emit as _emit_audit
+            evt_start = _make_event(event_type="resource_accessed", request_id=task.id, resource_type="knowledge_source", resource_name=getattr(source, "name", None), action="read", status="started")
+            _emit_audit(evt_start)
+        except Exception:
+            pass
+
+        parameters = task.input.get("parameters")
+        if parameters is not None:
+            retrieved = source.retrieve(query, k=top_k, parameters=parameters)
+        elif top_k is not None:
+            retrieved = source.retrieve(query, k=top_k)
+        else:
+            retrieved = source.retrieve(query)
+
+        # emit resource_accessed (completed)
+        try:
+            from core.contracts.audit import make_event as _make_event
+            from core.audit_logger import emit as _emit_audit
+            evt_done = _make_event(event_type="resource_accessed", request_id=task.id, resource_type="knowledge_source", resource_name=getattr(source, "name", None), action="read", status="completed")
+            _emit_audit(evt_done)
+        except Exception:
+            pass
 
         if not retrieved:
             return ExecutionResult(

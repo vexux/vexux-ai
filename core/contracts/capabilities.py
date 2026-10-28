@@ -103,6 +103,7 @@ class ModelProviderContract(Protocol):
     def generate(
         self,
         prompt: str,
+        response_format: str | None = None,
         **kwargs
     ) -> str:
         ...

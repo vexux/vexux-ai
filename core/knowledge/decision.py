@@ -33,8 +33,20 @@ class KnowledgeDecision:
         explicit_source: Optional[str] = None,
         operation: Optional[str] = None,
         params: Optional[Dict[str, Any]] = None,
+        graph_requests: Optional[list[Dict[str, Any]]] = None,
     ) -> KnowledgeRequest:
         params = params or {}
+        graph_requests = list(graph_requests or []) if graph_requests is not None else []
+
+        if graph_requests:
+            return KnowledgeRequest(
+                kind="graph",
+                query=query,
+                source="multi_graph",
+                operation=operation or "multi_graph",
+                params={**params, "graph_requests": graph_requests},
+                graph_requests=graph_requests,
+            )
 
         # If a specific source was explicitly requested, validate it and
         # return a KnowledgeRequest targeted to that capability.
@@ -47,6 +59,11 @@ class KnowledgeDecision:
                 if self.rag is None:
                     raise ValueError("Requested source 'rag' is unavailable")
                 return KnowledgeRequest(kind="rag", query=query, source="rag", operation=operation, params=params)
+
+            if lname == "multi_graph":
+                if not graph_requests:
+                    raise ValueError("Requested source 'multi_graph' requires graph_requests")
+                return KnowledgeRequest(kind="graph", query=query, source="multi_graph", operation=operation or "multi_graph", params={**params, "graph_requests": graph_requests}, graph_requests=graph_requests)
 
             # Explicit knowledge source (SQL / API docs / other registered sources)
             if self.knowledge_source_registry is not None:
@@ -71,8 +88,14 @@ class KnowledgeDecision:
             # silently fallback to another capability.
             raise KeyError(f"Unknown or unavailable knowledge source: {name}")
 
-        # No explicit source: use discovery/default behavior in a deterministic order
-        # 1) If a KnowledgeSourceRegistry has a default, prefer it (preserves existing behavior)
+        # No explicit source: prefer generic RAG when available. Registered
+        # structured sources require an explicit source or validated query.
+        # 1) If RAG is available, use it as the generic fallback.
+        if self.rag is not None:
+            return KnowledgeRequest(kind="rag", query=query, source="rag", operation=operation, params=params)
+
+        # 2) If a KnowledgeSourceRegistry has a default, use it only when no
+        # generic RAG capability is available.
         if self.knowledge_source_registry is not None:
             try:
                 default = self.knowledge_source_registry.get()
@@ -80,10 +103,6 @@ class KnowledgeDecision:
             except KeyError:
                 # no registered sources available — continue discovery
                 pass
-
-        # 2) If RAG is available, use it as a fallback default
-        if self.rag is not None:
-            return KnowledgeRequest(kind="rag", query=query, source="rag", operation=operation, params=params)
 
         # 3) If a knowledge graph registry has a default graph, use it
         if self.knowledge_graph_registry is not None:

@@ -1,0 +1,626 @@
+"""Bounded, evidence-driven fraud investigation workflow."""
+
+from __future__ import annotations
+
+import uuid
+from dataclasses import dataclass, field
+from enum import Enum
+import re
+from typing import Any
+
+from agent.observer import Observer
+from core.audit_logger import emit
+from core.contracts.audit import make_event
+from core.contracts.evidence import Evidence, EvidenceSet
+from core.contracts.execution import AgentContext, ExecutionResult, Plan, Task
+from core.contracts.workflow import WorkflowExecutionError
+from core.observability import (
+    classify_error,
+    duration_ms,
+    log_event,
+    metrics,
+    timed,
+)
+
+from apps.fraud.domain import (
+    FraudComparisonResult,
+    FraudQueryResult,
+    InvestigationResult,
+)
+from apps.fraud.identity import DEFAULT_ACTOR, validate_actor
+
+
+class StepStatus(str, Enum):
+    PENDING = "pending"
+    RUNNING = "running"
+    SUCCEEDED = "succeeded"
+    FAILED = "failed"
+    BLOCKED = "blocked"
+
+
+@dataclass
+class InvestigationStep:
+    id: str
+    action: str
+    resource: str | None = None
+    input: dict[str, Any] = field(default_factory=dict)
+    expected_output: str = ""
+    depends_on: list[str] = field(default_factory=list)
+    max_retries: int = 1
+    status: StepStatus = StepStatus.PENDING
+    attempts: int = 0
+    output: Any = None
+    error: str | None = None
+    evidence: EvidenceSet = field(default_factory=EvidenceSet)
+
+    def as_task(self) -> Task:
+        capability = "retrieval" if self.action == "retrieve" else "tool"
+        return Task(
+            id=self.id,
+            description=self.expected_output or self.action,
+            input=self.input,
+            metadata={"capability": capability, "resource": self.resource},
+            depends_on=list(self.depends_on),
+        )
+
+
+@dataclass
+class InvestigationPlan:
+    goal: str
+    subject_id: str
+    steps: list[InvestigationStep]
+    max_steps: int = 10
+    max_replans: int = 2
+
+    def validate(self) -> None:
+        if not self.goal.strip() or not self.subject_id.strip():
+            raise ValueError("Investigation plan requires a goal and subject_id.")
+        if len(self.steps) > self.max_steps:
+            raise ValueError("Investigation plan exceeds maximum step limit.")
+        ids = {step.id for step in self.steps}
+        if len(ids) != len(self.steps):
+            raise ValueError("Investigation plan contains duplicate step ids.")
+        for step in self.steps:
+            if step.max_retries < 0 or any(dep not in ids for dep in step.depends_on):
+                raise ValueError(f"Invalid dependencies for step '{step.id}'.")
+        self._assert_acyclic()
+
+    def _assert_acyclic(self) -> None:
+        visiting: set[str] = set()
+        visited: set[str] = set()
+        by_id = {step.id: step for step in self.steps}
+
+        def visit(step_id: str) -> None:
+            if step_id in visiting:
+                raise ValueError("Investigation plan contains a dependency cycle.")
+            if step_id in visited:
+                return
+            visiting.add(step_id)
+            for dependency in by_id[step_id].depends_on:
+                visit(dependency)
+            visiting.remove(step_id)
+            visited.add(step_id)
+
+        for step in by_id:
+            visit(step)
+
+
+class FraudInvestigationPlanner:
+    """Deterministic planner for the bounded fraud investigation DAG."""
+
+    def __init__(self, max_steps: int = 10, max_replans: int = 2, max_retries_per_step: int = 1):
+        self.max_steps = max_steps
+        self.max_replans = max_replans
+        self.max_retries_per_step = max_retries_per_step
+
+    def create_plan(self, customer_id: str, goal: str | None = None) -> InvestigationPlan:
+        if not isinstance(customer_id, str) or not customer_id.strip():
+            raise ValueError("customer_id must be a non-empty string.")
+        customer_id = customer_id.strip()
+        plan = InvestigationPlan(
+            goal=goal or f"Investigate {customer_id} for suspicious activity.",
+            subject_id=customer_id,
+            max_steps=self.max_steps,
+            max_replans=self.max_replans,
+            steps=[
+                InvestigationStep(
+                    "resolve_subject", "retrieve", "customer_graph",
+                    {"query": f"Resolve customer {customer_id}", "source": "customer_graph",
+                     "operation": "get_node", "params": {"node_id": customer_id}},
+                    "customer subject", max_retries=self.max_retries_per_step,
+                ),
+                InvestigationStep(
+                    "customer_context", "retrieve", "customer_graph",
+                    {"query": f"Retrieve customer graph context for {customer_id}", "source": "customer_graph",
+                     "operation": "get_neighbors", "params": {"node_id": customer_id, "direction": "both"}},
+                    "customer relationships", ["resolve_subject"], self.max_retries_per_step,
+                ),
+                InvestigationStep(
+                    "transactions", "retrieve", "business_db",
+                    {"query": "SELECT transaction_id, account_id, customer_id, merchant_id, amount, status "
+                              "FROM transactions WHERE customer_id = %s ORDER BY occurred_at",
+                     "source": "business_db", "parameters": (customer_id,)},
+                    "transactions", ["resolve_subject"], self.max_retries_per_step,
+                ),
+                InvestigationStep(
+                    "alerts", "retrieve", "business_db",
+                    {"query": "SELECT alert_id, customer_id, transaction_id, alert_type, severity, status "
+                              "FROM fraud_alerts WHERE customer_id = %s ORDER BY created_at",
+                     "source": "business_db", "parameters": (customer_id,)},
+                    "fraud alerts", ["resolve_subject"], self.max_retries_per_step,
+                ),
+                InvestigationStep(
+                    "investigations", "retrieve", "business_db",
+                    {"query": "SELECT investigation_id, customer_id, fraud_case_id, status "
+                              "FROM investigations WHERE customer_id = %s ORDER BY opened_at",
+                     "source": "business_db", "parameters": (customer_id,)},
+                    "investigation records", ["resolve_subject"], self.max_retries_per_step,
+                ),
+                InvestigationStep(
+                    "fraud_context", "retrieve", "fraud_graph",
+                    {"query": f"Retrieve fraud graph context for {customer_id}", "source": "fraud_graph",
+                     "operation": "get_neighbors", "params": {"node_id": customer_id, "direction": "both"}},
+                    "fraud relationships", ["customer_context"], self.max_retries_per_step,
+                ),
+            ],
+        )
+        plan.validate()
+        return plan
+
+
+class FraudInvestigationWorkflow:
+    """Execute a deterministic fraud plan through the existing execution path."""
+
+    name = "fraud_investigation"
+    description = "Investigate a customer for suspicious activity using registered fraud resources."
+    input_schema = {"type": "object", "required": ["query", "customer_id"]}
+
+    def __init__(
+        self,
+        investigation_service,
+        execution_manager,
+        resource_router=None,
+        planner=None,
+        max_steps: int = 10,
+        max_replans: int = 2,
+        max_retries_per_step: int = 1,
+    ):
+        if min(max_steps, max_replans, max_retries_per_step) < 0:
+            raise ValueError("Workflow bounds must not be negative.")
+        self.service = investigation_service
+        self.execution_manager = execution_manager
+        self.resource_router = resource_router
+        self.planner = planner or FraudInvestigationPlanner(
+            max_steps=max_steps,
+            max_replans=max_replans,
+            max_retries_per_step=max_retries_per_step,
+        )
+        self.observer = Observer()
+        self.max_steps = max_steps
+        self.max_replans = max_replans
+        self.max_retries_per_step = max_retries_per_step
+
+    def execute(
+        self, workflow_input: dict[str, Any], context: AgentContext
+    ) -> InvestigationResult | FraudQueryResult | FraudComparisonResult:
+        try:
+            actor = validate_actor(
+                DEFAULT_ACTOR if context.user_id is None else context.user_id
+            )
+        except ValueError as exc:
+            raise PermissionError("Actor identity is not registered.") from exc
+        try:
+            query_kind = workflow_input.get("query_kind", "investigation")
+            if query_kind in {"investigation", "comparison"}:
+                for resource_type, resource_name in (
+                    ("knowledge_graph", "customer_graph"),
+                    ("knowledge_graph", "fraud_graph"),
+                    ("knowledge_source", "business_db"),
+                ):
+                    self.service._authorize(actor, resource_type, resource_name)
+            if query_kind == "comparison":
+                results = [
+                    self.run(customer_id, actor=actor, request_id=context.request_id)
+                    for customer_id in workflow_input["customer_ids"]
+                ]
+                return FraudComparisonResult(results)
+            if query_kind == "investigation":
+                return self.run(
+                    workflow_input["customer_id"],
+                    actor=actor,
+                    request_id=context.request_id,
+                )
+            return self._run_resource_query(workflow_input, context)
+        except PermissionError:
+            raise
+        except Exception as exc:
+            if "Node not found:" in str(exc):
+                raise WorkflowExecutionError(
+                    "The requested customer was not found in the authoritative customer graph.",
+                    terminal=True,
+                    retryable=False,
+                    authoritative=True,
+                    failure_category="not_found",
+                ) from exc
+            raise WorkflowExecutionError(
+                "Fraud investigation could not be completed because the required "
+                "fraud data source is unavailable.",
+                terminal=True,
+                retryable=False,
+                authoritative=True,
+                failure_category="infrastructure",
+            ) from exc
+
+    def _run_resource_query(
+        self, workflow_input: dict[str, Any], context: AgentContext
+    ) -> FraudQueryResult:
+        customer_id = workflow_input["customer_id"]
+        query_kind = workflow_input["query_kind"]
+        source = "customer_graph" if query_kind == "connections" else "business_db"
+        if query_kind == "transactions":
+            query = (
+                "SELECT * FROM transactions WHERE customer_id = %s "
+                "ORDER BY occurred_at"
+            )
+        elif query_kind == "alerts":
+            query = (
+                "SELECT * FROM fraud_alerts WHERE customer_id = %s ORDER BY created_at"
+            )
+        elif query_kind == "accounts":
+            query = (
+                "SELECT * FROM accounts WHERE customer_id = %s ORDER BY account_id"
+            )
+        else:
+            query = f"Retrieve connections for {customer_id}"
+        step = InvestigationStep(
+            id=f"query_{query_kind}",
+            action="retrieve",
+            resource=source,
+            input=(
+                {
+                    "query": query,
+                    "source": source,
+                    "operation": "get_neighbors",
+                    "params": {"node_id": customer_id, "direction": "both"},
+                }
+                if query_kind == "connections"
+                else {
+                    "query": query,
+                    "source": source,
+                    "parameters": (customer_id,),
+                }
+            ),
+            expected_output=f"{query_kind} for {customer_id}",
+            max_retries=self.max_retries_per_step,
+        )
+        self._execute_step(step, context)
+        return FraudQueryResult(
+            subject_ids=[customer_id],
+            query_label=query_kind,
+            records=self._results(step.output),
+            resources_consulted=[source],
+        )
+
+    def plan_query(self, query: str) -> Task | Plan | None:
+        identifiers = re.findall(r"\b[A-Z]\d+\b", query, re.IGNORECASE)
+        customer_ids = list(dict.fromkeys(item.upper() for item in identifiers))
+        normalized = query.lower()
+        query_kind = None
+        if len(customer_ids) >= 2 and re.search(r"\bcompare\b", normalized):
+            query_kind = "comparison"
+        elif customer_ids and re.search(r"\btransactions?\b", normalized):
+            query_kind = "transactions"
+        elif customer_ids and re.search(r"\balerts?\b", normalized):
+            query_kind = "alerts"
+        elif customer_ids and re.search(r"\bconnections?\b|\brelationships?\b", normalized):
+            query_kind = "connections"
+        elif customer_ids and re.search(r"\baccounts?\b", normalized):
+            query_kind = "accounts"
+
+        if query_kind is not None:
+            inputs: dict[str, Any] = {
+                "workflow": self.name,
+                "query": query,
+                "query_kind": query_kind,
+            }
+            if query_kind == "comparison":
+                inputs["customer_ids"] = customer_ids[:2]
+            inputs["customer_id"] = customer_ids[0]
+            workflow_task = Task(
+                id="task-1",
+                description=f"Retrieve deterministic {query_kind} information",
+                input=inputs,
+                metadata={"capability": "workflow", "workflow": self.name},
+            )
+            return self._with_policy_context(query, workflow_task)
+
+        if not customer_ids:
+            policy_task = self._policy_query_task(query)
+            if policy_task is not None:
+                return policy_task
+
+        investigation_request = re.search(
+            r"\binvestigat(?:e|ion|ing)\b|\bsuspicious activity\b",
+            query,
+            re.IGNORECASE,
+        )
+        detail_request = re.search(
+            r"\bfind\b.*\b(?:details?|information|records?)\b",
+            query,
+            re.IGNORECASE,
+        )
+        score_request = re.search(
+            r"\b(?:fraud )?(?:score|probability)\b", query, re.IGNORECASE
+        )
+        if (
+            investigation_request is None
+            and detail_request is None
+            and score_request is None
+        ):
+            return None
+        if not customer_ids:
+            return None
+        if score_request:
+            investigation_request = True
+        workflow_task = Task(
+            id="task-1",
+            description="Run the registered investigation workflow",
+            input={
+                "workflow": self.name,
+                "query": query,
+                "customer_id": customer_ids[0],
+                "query_kind": "investigation",
+            },
+            metadata={"capability": "workflow", "workflow": self.name},
+        )
+        return self._with_policy_context(query, workflow_task)
+
+    @staticmethod
+    def _policy_query_task(query: str) -> Task | None:
+        if not re.search(
+            r"\b(?:what is|what are|what does|what should|what evidence|how should|why|"
+            r"define|explain|describe)\b",
+            query,
+            re.IGNORECASE,
+        ):
+            return None
+        if not re.search(
+            r"\b(?:fraud|investigat|alert|transaction|velocity|shared|device|"
+            r"evidence|escalat|monitoring)\w*\b",
+            query,
+            re.IGNORECASE,
+        ):
+            return None
+
+        policy_query = re.sub(r"\b[A-Z]\d+\b", "", query, flags=re.IGNORECASE)
+        return Task(
+            id="task-1",
+            description="Retrieve fraud policy and domain reference guidance",
+            input={"query": policy_query.strip()},
+            metadata={"capability": "retrieval"},
+        )
+
+    @staticmethod
+    def _with_policy_context(query: str, workflow_task: Task) -> Task | Plan:
+        clauses = re.split(r",?\s+(?:and|also)\s+", query, maxsplit=1, flags=re.IGNORECASE)
+        if len(clauses) < 2:
+            return workflow_task
+        policy_clause = re.sub(r"\b[A-Z]\d+\b", "", clauses[1], flags=re.IGNORECASE).strip()
+        if not re.search(
+            r"\b(?:explain|what does|what should|how should|why|define)\b",
+            policy_clause,
+            re.IGNORECASE,
+        ) or not re.search(
+            r"\b(?:alert|device|evidence|escalat|guideline|investigation|"
+            r"monitoring|policy|transaction|velocity)\w*\b",
+            policy_clause,
+            re.IGNORECASE,
+        ):
+            return workflow_task
+
+        return Plan(
+            tasks=[
+                workflow_task,
+                Task(
+                    id="policy-context",
+                    description="Retrieve general fraud reference guidance",
+                    input={"query": policy_clause},
+                    metadata={"capability": "retrieval"},
+                    depends_on=[workflow_task.id],
+                ),
+            ]
+        )
+
+    def create_plan(self, customer_id: str, goal: str | None = None) -> InvestigationPlan:
+        return self.planner.create_plan(customer_id, goal)
+
+    @staticmethod
+    def _audit(event_type: str, request_id: str, **kwargs: Any) -> None:
+        emit(make_event(event_type=event_type, request_id=request_id, **kwargs))
+
+    @staticmethod
+    def _results(output: dict[str, Any] | None) -> list[dict[str, Any]]:
+        return list((output or {}).get("results") or [])
+
+    @staticmethod
+    def _has_suspicious_relationship(output: dict[str, Any] | None) -> bool:
+        for item in (output or {}).get("results", []):
+            relationship = item.get("relationship", {})
+            if str(relationship.get("type", "")).upper() in {
+                "SHARES_DEVICE_WITH", "SHARED_DEVICE", "LINKED_TO",
+            }:
+                return True
+        return False
+
+    def _execute_step(self, step: InvestigationStep, context: AgentContext) -> None:
+        step.status = StepStatus.RUNNING
+        start = timed()
+        if self.resource_router is not None and step.resource is not None:
+            selected = {item.name for item in self.resource_router.select(step.resource)}
+            if step.resource not in selected:
+                raise RuntimeError(f"Investigation resource is not registered: {step.resource}")
+        task = step.as_task()
+        for attempt in range(step.max_retries + 1):
+            step.attempts += 1
+            result: ExecutionResult = self.execution_manager.execute(task, context)
+            observation = self.observer.observe(result, task)
+            if observation.success or (
+                result.error == "No sufficiently relevant retrieval context found"
+                and isinstance(result.output, dict)
+                and result.output.get("results") == []
+            ):
+                step.status = StepStatus.SUCCEEDED
+                step.output = result.output or {"results": []}
+                step.evidence.add(Evidence(
+                    step.resource or "workflow",
+                    str(step.output),
+                    "workflow_observation",
+                    {"step_id": step.id, "attempt": step.attempts},
+                ))
+                metrics.increment("resource_executions")
+                log_event(
+                    "investigation.step.completed",
+                    request_id=context.request_id,
+                    actor=context.user_id,
+                    operation=step.action,
+                    resource=step.resource,
+                    status="completed",
+                    duration_ms=duration_ms(start),
+                    retry_count=step.attempts - 1,
+                )
+                return
+            step.error = observation.error or "step execution failed"
+            self._audit("step_execution", context.request_id, task_id=step.id, status="failed",
+                        resource_name=step.resource, duration_ms=duration_ms(start),
+                        metadata={"attempt": step.attempts, "error_class": classify_error(step.error)})
+            metrics.increment("resource_execution_failures")
+            if attempt < step.max_retries:
+                metrics.increment("retries")
+                self._audit("step_retry", context.request_id, task_id=step.id, status="retrying")
+                log_event(
+                    "investigation.step.retry",
+                    request_id=context.request_id,
+                    actor=context.user_id,
+                    operation=step.action,
+                    resource=step.resource,
+                    status="retrying",
+                    retry_count=step.attempts,
+                    error_class=classify_error(step.error),
+                )
+        step.status = StepStatus.FAILED
+        metrics.increment("retry_exhausted")
+        log_event(
+            "investigation.step.failed",
+            request_id=context.request_id,
+            actor=context.user_id,
+            operation=step.action,
+            resource=step.resource,
+            status="failed",
+            duration_ms=duration_ms(start),
+            retry_count=step.attempts - 1,
+            error_class=classify_error(step.error),
+        )
+        raise RuntimeError(f"Investigation step '{step.id}' failed: {step.error}")
+
+    def run(
+        self,
+        customer_id: str,
+        actor: str = DEFAULT_ACTOR,
+        request_id: str | None = None,
+    ) -> InvestigationResult:
+        plan = self.create_plan(customer_id)
+        correlation_id = request_id or str(uuid.uuid4())
+        context = AgentContext(request_id=correlation_id, user_id=actor)
+        self._audit("investigation_started", correlation_id, status="started",
+                    metadata={"subject_id": customer_id, "goal": plan.goal})
+        self._audit("plan_created", correlation_id, status="created",
+                    metadata={"step_count": len(plan.steps), "max_replans": plan.max_replans})
+        start = timed()
+        outputs: dict[str, Any] = {}
+        replans = 0
+        try:
+            index = 0
+            while index < len(plan.steps):
+                step = plan.steps[index]
+                if any(
+                    next(item for item in plan.steps if item.id == dependency).status
+                    != StepStatus.SUCCEEDED
+                    for dependency in step.depends_on
+                ):
+                    step.status = StepStatus.BLOCKED
+                    raise RuntimeError(f"Investigation step '{step.id}' is blocked by a failed dependency.")
+                self._audit("step_execution", correlation_id, task_id=step.id, status="started",
+                            resource_name=step.resource)
+                self._execute_step(step, context)
+                outputs[step.id] = step.output
+                self._audit("step_execution", correlation_id, task_id=step.id, status="completed",
+                            resource_name=step.resource)
+                if step.id == "fraud_context" and self._has_suspicious_relationship(step.output):
+                    if replans >= plan.max_replans:
+                        raise RuntimeError("Investigation replan limit exhausted.")
+                    replans += 1
+                    related = InvestigationStep(
+                        "related_entities",
+                        "retrieve",
+                        "fraud_graph",
+                        {"query": f"Inspect related entities for {customer_id}", "source": "fraud_graph",
+                         "operation": "get_neighbors", "params": {"node_id": customer_id, "direction": "both"}},
+                        "related entities",
+                        ["fraud_context"],
+                        self.max_retries_per_step,
+                    )
+                    if len(plan.steps) >= plan.max_steps:
+                        raise RuntimeError("Investigation step limit exhausted during replanning.")
+                    plan.steps.insert(index + 1, related)
+                    plan.validate()
+                    metrics.increment("replans")
+                    self._audit("replan", correlation_id, status="created",
+                                metadata={"replan_count": replans, "reason": "suspicious_relationship"})
+                    log_event(
+                        "investigation.replan",
+                        request_id=correlation_id,
+                        actor=actor,
+                        status="created",
+                        replan_count=replans,
+                        reason="suspicious_relationship",
+                    )
+                index += 1
+            evidence = EvidenceSet()
+            for step in plan.steps:
+                for item in step.evidence.items:
+                    evidence.add(item)
+            customer_node = outputs["resolve_subject"]["result"]
+            result = self.service.build_result(
+                customer_node=customer_node,
+                fraud_neighbors=self._results(outputs.get("fraud_context")),
+                transaction_rows=self._results(outputs.get("transactions")),
+                alert_rows=self._results(outputs.get("alerts")),
+                investigation_rows=self._results(outputs.get("investigations")),
+                evidence=evidence,
+                resources_consulted=[
+                    step.resource for step in plan.steps
+                    if step.status == StepStatus.SUCCEEDED and step.resource
+                ],
+            )
+            metrics.increment("successful_investigations")
+            self._audit("investigation_completed", correlation_id, status="completed",
+                        duration_ms=duration_ms(start),
+                        metadata={"risk_assessment": result.risk_assessment,
+                                  "replan_count": replans})
+            return result
+        except Exception as exc:
+            metrics.increment("failed_investigations")
+            self._audit("investigation_failed", correlation_id, status="failed",
+                        duration_ms=duration_ms(start),
+                        metadata={"error_class": classify_error(exc), "replans": replans})
+            raise
+
+
+__all__ = [
+    "FraudComparisonResult",
+    "FraudInvestigationWorkflow",
+    "FraudQueryResult",
+    "InvestigationPlan",
+    "InvestigationStep",
+    "StepStatus",
+]

@@ -16,12 +16,12 @@ This document outlines the environment setup, test execution, coding guidelines,
 1. **Create and activate a virtual environment**:
    ```bash
    # Windows (PowerShell)
-   python -m venv venv
-   .\venv\Scripts\Activate.ps1
+   python -m venv .venv
+   .\.venv\Scripts\Activate.ps1
 
    # Linux / macOS
-   python -m venv venv
-   source venv/bin/activate
+   python -m venv .venv
+   source .venv/bin/activate
    ```
 
 2. **Install runtime dependencies**:
@@ -46,44 +46,74 @@ The repository includes targeted verification scripts at the root level:
 ### 2.1 End-to-End Agent Verification
 Tests the complete loop: intent classification, plan creation, execution against capabilities (RAG, Tool, Model), observation, and response generation.
 ```bash
-python test_agent.py
+python scripts/manual/run_agent.py
 ```
 
-### 2.2 Component Verification Scripts
-- **Planner & Intent Classification**:
-  ```bash
-  python test_planner.py
-  ```
-  Validates model-based intent parsing (`retrieval`, `tool`, `general`) and `Plan` object generation.
+### 2.2 Authoritative commands
 
-- **Tool Registry & Calculator**:
-  ```bash
-  python test_tools.py
-  ```
-  Validates tool registration, listing, and execution with input argument dicts.
-
-- **Model Gateway & Qwen Provider**:
-  ```bash
-  python test_model.py
-  ```
-  Tests direct text generation via `ModelGateway` backed by `QwenProvider` and the local LoRA checkpoint.
-
-- **RAG Pipeline Test**:
-  ```bash
-  python test.py
-  ```
-  Tests document loading, FAISS vector search, and context-augmented response generation.
-
-- **Contract Integration Check**:
-  ```bash
-  python test_contracts.py
-  ```
-  Validates component initialization contracts between embedder, vector store, and retriever.
+The complete local setup, database bootstrap, provider behavior, and startup
+commands are maintained in [docs/SETUP.md](SETUP.md). Avoid relying on old
+root-level demo names; current manual entry points live under
+`scripts/manual/`.
 
 ### 2.3 Running Pytest
 ```bash
-pytest
+python -m pytest
 ```
+
+### 2.4 Canonical deterministic validation
+
+From the repository root, use these commands for the same checks run in CI:
+
+```bash
+python -m pytest
+python -m evaluation
+```
+
+CI sets `MODEL_PROVIDER=fake`, so deterministic tests do not require external
+credentials. The live Mistral test is separate and requires both
+`MISTRAL_API_KEY` and `RUN_LIVE_MISTRAL_TESTS=1`.
+
+### 2.5 Running the API
+
+```bash
+MODEL_PROVIDER=fake uvicorn api.main:app --host 0.0.0.0 --port 8000
+```
+
+On Windows PowerShell:
+
+```powershell
+$env:MODEL_PROVIDER = "fake"
+python -m uvicorn api.main:app --host 0.0.0.0 --port 8000
+```
+
+The API exposes `POST /api/v1/agent/run`, `POST /api/v1/orchestrator/run`,
+`GET /health`, and `GET /ready`. The fake provider is intended for local and CI
+validation; no provider credentials are required.
+
+### 2.6 Optional Neo4j graph backend
+
+The generic `KnowledgeGraphContract` is implemented by both the in-memory
+backend and the optional `Neo4jKnowledgeGraph` adapter. Configure
+`NEO4J_URI`, `NEO4J_USERNAME`, `NEO4J_PASSWORD`, and optionally
+`NEO4J_DATABASE`/`NEO4J_GRAPH_NAME`. Neo4j is registered through the existing
+`KnowledgeGraphRegistry` only when configured; normal startup and tests do not
+require a Neo4j server. The adapter uses parameterized queries and does not
+provide arbitrary Cypher execution.
+
+### 2.7 Optional SQL knowledge source
+
+`SQLKnowledgeSource` provides a contract-level adapter to relational data.
+Set `SQL_DATABASE_PATH` to an existing SQLite database to register the
+generic `sql` source. Queries are read-only single `SELECT` statements and
+support parameterized values; writes and multiple statements are rejected.
+An application that needs domain-specific source names or natural-language
+default queries supplies them in its own composition. The source runs through
+`KnowledgeSourceRegistry`, `KnowledgeDecision`, and `ExecutionManager`, so
+existing authorization, audit, and evidence behavior is preserved. Use
+[SETUP.md](SETUP.md) for the fraud application's authoritative local database
+bootstrap and verification flow. Historical demonstrations are retained under
+`scripts/history/` and are not authoritative entry points.
 
 ---
 

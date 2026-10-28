@@ -13,8 +13,9 @@ class MistralProvider:
         self,
         model_name: str = "mistral-small-latest",
         client: Any = None,
+        api_key: str | None = None,
     ):
-        api_key = os.getenv("MISTRAL_API_KEY")
+        api_key = api_key or os.getenv("MISTRAL_API_KEY")
 
         if not api_key:
             raise ValueError(
@@ -28,6 +29,10 @@ class MistralProvider:
     @property
     def name(self) -> str:
         return self._name
+
+    @property
+    def metadata(self) -> dict[str, str]:
+        return {"provider": self.name, "model": self.model_name, "runtime_mode": "remote"}
 
     def generate(
         self,

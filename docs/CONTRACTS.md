@@ -4,6 +4,74 @@ This document provides the authoritative documentation for all data structures a
 
 All inter-module communication in Vexux-AI is governed by these contracts.
 
+## API Contracts
+
+`POST /api/v1/agent/run` and `POST /api/v1/orchestrator/run` accept `query`,
+optional `session_id`/`user_id`, and the existing routing fields (`agent`,
+`workflow`, and `delegations`). Responses contain `success`, redacted `output`
+and `error`, request/session identity, optional `orchestration_id`, and safe
+metadata. Validation failures are handled by FastAPI; execution failures retain
+the existing controlled `AgentResponse` semantics.
+
+The API emits request start/completion audit events and the trace endpoint
+filters by request or orchestration ID. It never returns prompts, credentials,
+stack traces, or unredacted secret-bearing payloads. `/health` performs no
+dependency calls; `/ready` validates provider configuration only.
+
+---
+
+## Knowledge graph contract
+
+`KnowledgeGraphContract` defines generic node, relationship, and neighbor
+operations. `KnowledgeGraphRegistry` is the sole registration boundary. The
+repository includes `InMemoryKnowledgeGraph` and an optional
+`Neo4jKnowledgeGraph` adapter; Neo4j records are normalized into the contract's
+plain dictionaries before reaching execution, evidence, or audit layers.
+Neo4j identifiers are passed as query parameters, and arbitrary Cypher is not
+part of the contract.
+
+Multiple graph instances may use different contract implementations in one
+request. Authorization is evaluated for every named graph before execution;
+results retain each graph name as evidence provenance for cross-graph
+aggregation.
+
+## SQL knowledge source
+
+`SQLKnowledgeSource` implements `KnowledgeSourceContract` for structured
+relational reads. `SQLiteBackend` supplies real SQLite execution through the
+existing `KnowledgeSourceRegistry`; the source validates one read-only
+`SELECT`, passes optional DB-API parameters to the backend, and normalizes
+rows to `structured_data` evidence. Vendor-specific SQL drivers require their
+own backend adapter and configuration.
+
+A multi-source investigation may combine graph requests with a registered SQL
+source through the existing execution manager. Each source is authorized
+before its protected read, and evidence retains `customer_graph`,
+`fraud_graph`, or `business_db` provenance.
+
+## Fraud investigation workflow contracts
+
+`apps/fraud/workflow.py` defines the application-level
+`InvestigationPlan` and `InvestigationStep` contracts. Steps carry dependencies,
+resource names, structured inputs, bounded retries, status, and an
+`EvidenceSet`. Plans validate duplicate IDs, unknown dependencies, cycles, and
+maximum step counts before execution. `FraudInvestigationPlanner` creates the
+deterministic initial plan; `FraudInvestigationWorkflow` executes each step
+through the existing `ExecutionManager`, resource registries, and policy.
+Suspicious relationships may add one bounded continuation step, while the
+Phase 3 `FraudInvestigationService` remains the source of deterministic
+correlation facts.
+
+## Security and authorization
+
+`SecurityContext` is a frozen identity contract whose claims and attributes
+are copied into read-only mappings. `Agent.run()` rejects a conflicting legacy
+actor when a trusted context supplies an actor ID. `AuthorizationRequest`
+validates actor, resource, and action shape. The default policy rejects unknown
+resource types/actions, while application policies add domain-specific rules.
+Audit storage redacts sensitive metadata and credential-bearing strings before
+retaining events.
+
 ---
 
 ## 1. Execution Contracts (`core/contracts/execution.py`)
@@ -18,6 +86,15 @@ class Task:
     description: str
     input: Dict[str, Any] = field(default_factory=dict)
     metadata: Dict[str, Any] = field(default_factory=dict)
+    # Optional dependency list: other task IDs that must complete successfully
+    # before this task becomes ready. Backward compatible: omit or empty means
+    # no dependencies.
+    depends_on: list[str] = field(default_factory=list)
+
+```
+
+- **Fields (added behavior):**
+  - `depends_on` (`list[str]`): Optional list of task IDs this task depends on. When present, the Planner and Agent will validate that the referenced IDs exist, that no self-dependencies or cycles are present, and that execution follows dependency semantics (ready tasks only execute when all predecessors succeeded). Default: `[]`.
 ```
 
 - **Fields**:
@@ -45,6 +122,9 @@ class Plan:
 - **Producer**: `Planner` (`create_plan`, `replan`).
 - **Consumer**: `Agent` (`run`), `ContextManager` (`set_plan`).
 - **Purpose**: Represents the full execution plan devised by the planner.
+
+
+> Configuration note: Bounded local concurrency is exposed via the environment variable `AGENT_MAX_PARALLEL_TASKS` (integer). By default this is `1` to preserve legacy sequential behavior. When set to a value >1 the Agent may execute independent ready tasks concurrently (bounded ThreadPoolExecutor). This configuration does not change the Task/Plan contracts themselves; it only affects the Agent's scheduling behavior.
 
 ---
 
@@ -80,6 +160,13 @@ class AgentContext:
 - **Producer**: `ContextManager` (`create`, `set_plan`, `set_task`, `add_observation`, `add_completed_task`).
 - **Consumer**: `Agent` (`run`), `ExecutionManager` (`execute`).
 - **Purpose**: Holds runtime state, active pointers, and execution traces for a single agent invocation.
+
+`SecurityContext` (`core/contracts/identity.py`) is an optional application-
+supplied identity contract with `actor_id`, `roles`, `claims`, `attributes`,
+and `authentication_method`. It carries authenticated identity information
+without coupling core contracts to a particular identity provider or domain
+role. `Agent.run(security_context=...)` uses its `actor_id` when no legacy
+`user_id` is supplied.
 
 ---
 
@@ -124,6 +211,127 @@ class Intent:
 - **Producer**: `Planner` (`understand_intent`, `_parse_intent`) for compatibility and focused intent tests.
 - **Consumer**: Intent-specific callers and tests; the active Agent path uses structured `create_plan()` directly.
 - **Purpose**: Retained intent representation; it is not the active multi-task planning contract.
+
+---
+
+### 1.6 Specialized Agent Contract (`core/contracts/orchestrator.py`)
+A thin protocol for role-specific adapters that can be selected by the orchestrator.
+
+```python
+class SpecializedAgentContract(Protocol):
+    @property
+    def name(self) -> str: ...
+
+    @property
+    def description(self) -> str: ...
+
+    def run(self, request: Any, session_id: str | None = None, user_id: str | None = None) -> AgentResponse:
+        ...
+```
+
+- **Fields**:
+  - `name` (`str`): Stable identifier used for deterministic explicit selection, e.g. `"research"`.
+  - `description` (`str`): Short capability description for discovery and metadata.
+- **Producer**: Any specialized adapter implementing a role-specific entrypoint.
+- **Consumer**: `Orchestrator` when an explicit `agent` key is present in the request.
+- **Purpose**: Keeps role-specific execution opt-in and domain-agnostic without duplicating the base `Agent` control loop.
+
+> Explicit deterministic specialization is currently the only supported model. Automatic agent selection and multi-agent coordination remain future work.
+
+### Integration contract usage
+
+Phase 29 integration tests exercise these existing contracts together rather than
+introducing new execution contracts. Multi-graph retrieval carries explicit graph
+names and identifiers into `ExecutionManager`, authorization decisions remain
+resource-level, and results retain `EvidenceSet` provenance. Delegation uses the
+existing `DelegationPlan` and `DelegationResult` contracts. Audit records and
+responses must contain safe metadata only; prompts, credentials, and raw
+secret-bearing outputs are not part of these application contracts.
+
+---
+
+### 1.7 Authorization Contracts (`core/contracts/authorization.py`)
+A minimal resource-level authorization contract used by the policy layer to decide whether an actor may perform an action on a named resource.
+
+```python
+@dataclass
+class AuthorizationRequest:
+    actor: Optional[str]
+    resource_type: str
+    resource_name: Optional[str]
+    action: str
+    context: Optional[dict] = None
+
+@dataclass
+class AuthorizationDecision:
+    allowed: bool
+    reason: Optional[str] = None
+    policy_name: str = "authorization"
+```
+
+- **Purpose**: Encapsulate a simple allow/deny decision for resource types such as `knowledge_graph`, `knowledge_source`, `specialized_agent`, and `workflow`.
+- **Producer**: Policy implementations (e.g., `DefaultPolicy.authorize_resource`).
+- **Consumer**: Enforcement points in `ExecutionManager` and `Orchestrator` which call into the policy to make deterministic allow/deny decisions before using protected resources.
+
+Notes:
+- The contract is intentionally small and resource-oriented — it is not a full RBAC/IAM model and deliberately omits external identity provider integration.
+- Decisions must be surfaced as controlled failures (error + safe metadata) and must not leak raw protected outputs.
+
+### 1.8 DelegationPlan Contract
+
+The controlled multi-agent planning layer uses a domain-agnostic, explicit delegation plan that reuses the existing `Task` dependency semantics without introducing a second graph abstraction.
+
+```python
+@dataclass
+class DelegationRequest:
+    target_agent: str
+    request: Any
+    metadata: Dict[str, Any] = field(default_factory=dict)
+    delegation_id: Optional[str] = None
+    depends_on: list[str] = field(default_factory=list)
+    input: Any = None
+
+@dataclass
+class DelegationPlan:
+    delegations: list[DelegationRequest] = field(default_factory=list)
+```
+
+- **Fields**:
+  - `target_agent` (`str`): registered agent name to invoke.
+  - `request` (`Any`): request payload or query for that agent.
+  - `delegation_id` (`Optional[str]`): stable identifier for the work unit.
+  - `depends_on` (`list[str]`): IDs of upstream delegated work that must complete before this delegation becomes eligible.
+  - `input` (`Any`): optional structured input payload or dataflow-bound object.
+- **Producer**: `DelegationPlanner` in the specialized-agent planning layer.
+- **Consumer**: `Orchestrator` to validate, order, and execute the explicit plan.
+- **Purpose**: small, structured, deterministic delegation scheduling without autonomous agent spawning or multi-agent memory.
+
+### Orchestration metadata
+The orchestrator enriches every delegation run with minimal, privacy-conscious observability metadata. When a request contains `delegations` the returned `AgentResponse` will include an `orchestration_id` in `response.metadata` and each `DelegationResult.metadata` will include:
+- `orchestration_id`: stable id for this fan-out run
+- `delegation_id`: the delegation's id
+- `selected_agent`: the agent name used
+- `dependency_status`: one of `executed` or `blocked`
+
+This metadata is intentionally small and safe for logging and trace correlation. Sensitive raw outputs remain subject to existing policy and redaction rules.
+
+### 1.8 Delegation Request / Result Contracts
+The orchestrator still returns per-delegation results in a minimal, deterministic structure.
+
+```python
+@dataclass
+class DelegationResult:
+    target_agent: str
+    success: bool
+    output: Any = None
+    error: Optional[str] = None
+    delegation_id: Optional[str] = None
+    metadata: Dict[str, Any] = field(default_factory=dict)
+```
+
+- **Producer**: `Orchestrator` when a request includes an explicit `delegations` list or a single `agent` selection.
+- **Consumer**: callers that need a structured result for each delegated execution without introducing a separate agent messaging protocol.
+- **Purpose**: preserves the target agent, per-delegation identity, success/failure state, and safe metadata while keeping all execution inside the existing `Agent` and `SpecializedAgent` contracts.
 
 ---
 
@@ -324,7 +532,7 @@ class MemoryContract(Protocol):
 A small, domain-agnostic dataclass used by the KnowledgeDecision component to express which knowledge capability should be used to satisfy a query.
 
 ```python
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Optional, Dict, Any
 
 @dataclass
@@ -334,6 +542,7 @@ class KnowledgeRequest:
     source: Optional[str] = None
     operation: Optional[str] = None
     params: Dict[str, Any] = field(default_factory=dict)
+    graph_requests: list[Dict[str, Any]] = field(default_factory=list)
 ```
 
-- **Purpose**: Normalize and validate the intent to use a particular knowledge capability without executing retrievals. The contract is intentionally small and domain-agnostic so it can be used across the Planner, Decision, and Execution components.
+- **Purpose**: Normalize and validate the intent to use a particular knowledge capability without executing retrievals. The contract is intentionally small and domain-agnostic so it can be used across the Planner, Decision, and Execution components. When a single high-level request needs multiple independent graph lookups, callers may populate `graph_requests` with explicit `graph_name`, `operation`, and `parameters` entries; the execution layer executes those requests in parallel and returns raw results with evidence. Applications may inject their own schema-aware result processor without adding domain rules to core.

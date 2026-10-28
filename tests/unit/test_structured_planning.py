@@ -6,21 +6,24 @@ from agent.agent import Agent
 from agent.decision import DecisionMaker
 from agent.execution_manager import ExecutionManager
 from agent.observer import Observer
-from agent.planner import Planner
+from agent.planner import Planner, UnsupportedCapabilityError
 from agent.response_synthesizer import ResponseSynthesizer
 from core.context.context_manager import ContextManager
 from core.contracts.execution import AgentContext, Task
 from core.tools.calculator import CalculatorTool
 from core.tools.registry import ToolRegistry
+from core.workflows.registry import WorkflowRegistry
 
 
 class MockGateway:
     def __init__(self, response):
         self.response = response
         self.prompts = []
+        self.kwargs = []
 
     def generate(self, prompt, **kwargs):
         self.prompts.append(prompt)
+        self.kwargs.append(kwargs)
         return self.response
 
 
@@ -33,6 +36,34 @@ def registry():
 def planner_for(response):
     tools = registry()
     return Planner(MockGateway(response), tools)
+
+
+class CustomerInvestigationWorkflow:
+    name = "customer_investigation"
+    description = "Investigate a customer for suspicious activity."
+    input_schema = {"type": "object", "required": ["query", "customer_id"]}
+
+    def build_tasks(self, workflow_input):
+        return []
+
+    def plan_query(self, query):
+        if "investigat" not in query.lower() and "suspicious activity" not in query.lower():
+            return None
+        import re
+
+        match = re.search(r"\b[A-Z]\d+\b", query)
+        if match is None:
+            return None
+        return Task(
+            id="task-1",
+            description="Run the registered workflow",
+            input={
+                "workflow": self.name,
+                "query": query,
+                "customer_id": match.group(0),
+            },
+            metadata={"capability": "workflow", "workflow": self.name},
+        )
 
 
 def plan(*tasks):
@@ -56,6 +87,85 @@ def test_single_retrieval_task():
     assert len(result.tasks) == 1
     assert result.tasks[0].metadata["capability"] == "retrieval"
     assert result.tasks[0].input == {"query": "EC2"}
+
+
+def test_planner_requests_json_for_plan_generation():
+    gateway = MockGateway(
+        plan(task("task-1", "retrieval", {"query": "EC2"}))
+    )
+
+    Planner(gateway, registry()).create_plan("What is EC2?")
+
+    assert gateway.kwargs[0]["response_format"] == "json"
+
+
+def test_planner_requests_json_for_intent_generation():
+    gateway = MockGateway(
+        '{"intent": "general", "confidence": 1.0, "entities": {}}'
+    )
+
+    Planner(gateway, registry()).understand_intent("Hello")
+
+    assert gateway.kwargs[0]["response_format"] == "json"
+
+
+def test_planner_requests_json_for_replanning():
+    gateway = MockGateway(
+        plan(task("task-1", "model", {"query": "recover"}))
+    )
+    planner = Planner(gateway, registry())
+    failed_task = Task(
+        id="task-1",
+        description="Failed task",
+        input={"query": "original"},
+        metadata={"capability": "model"},
+    )
+    observation = type(
+        "Observation",
+        (),
+        {"success": False, "summary": "failed", "error": "error"},
+    )()
+
+    planner.replan("recover", observation, failed_task)
+
+    assert gateway.kwargs[0]["response_format"] == "json"
+
+
+def test_greeting_is_guarded_to_model_capability():
+    gateway = MockGateway(plan(task("task-1", "retrieval", {"query": "hey"})))
+    workflow_registry = WorkflowRegistry()
+    workflow_registry.register(CustomerInvestigationWorkflow())
+
+    result = Planner(gateway, registry(), workflow_registry=workflow_registry).create_plan("hey")
+
+    assert result.tasks[0].metadata["capability"] == "model"
+    assert result.tasks[0].input == {"query": "hey"}
+
+
+@pytest.mark.parametrize(
+    "query",
+    [
+        "Investigate C1001 for suspicious activity.",
+        "Run a fraud investigation for customer C1001.",
+    ],
+)
+def test_customer_investigation_is_guarded_to_registered_workflow(query):
+    gateway = MockGateway(plan(task("task-1", "retrieval", {"query": query})))
+    workflow_registry = WorkflowRegistry()
+    workflow_registry.register(CustomerInvestigationWorkflow())
+
+    result = Planner(
+        gateway,
+        registry(),
+        workflow_registry=workflow_registry,
+    ).create_plan(query)
+
+    assert result.tasks[0].metadata["capability"] == "workflow"
+    assert result.tasks[0].input == {
+        "workflow": "customer_investigation",
+        "query": query,
+        "customer_id": "C1001",
+    }
 
 
 def test_single_tool_task():
@@ -247,6 +357,24 @@ def test_invalid_planner_json_is_rejected():
         planner_for("not json").create_plan("Hello")
 
 
+def test_extra_json_data_is_rejected():
+    response = (
+        '{"tasks":[{"id":"task-1","description":"x",'
+        '"capability":"model","input":{"query":"x"}}]} trailing'
+    )
+
+    with pytest.raises(ValueError, match="Invalid structured plan response"):
+        planner_for(response).create_plan("Hello")
+
+
+def test_valid_single_json_response_is_accepted():
+    result = planner_for(
+        plan(task("task-1", "model", {"query": "Hello"}))
+    ).create_plan("Hello")
+
+    assert result.tasks[0].id == "task-1"
+
+
 def test_missing_required_task_fields_are_rejected():
     response = plan({
         "id": "task-1",
@@ -263,6 +391,40 @@ def test_unknown_capability_is_rejected():
 
     with pytest.raises(ValueError, match="unknown capability"):
         planner_for(response).create_plan("Query the database")
+
+
+def test_unknown_capability_returns_clean_actionable_agent_failure():
+    gateway = MockGateway(plan(task(
+        "task-1",
+        "fraud_investigation",
+        {"query": "what connections do they have?"},
+    )))
+    tools = registry()
+    events = []
+    agent = Agent(
+        execution_manager=ExecutionManager(tool_registry=tools),
+        planner=Planner(gateway, tools),
+        observer=Observer(),
+        decision_maker=DecisionMaker(),
+        context_manager=ContextManager(),
+        response_synthesizer=ResponseSynthesizer(gateway),
+        progress_callback=events.append,
+    )
+
+    response = agent.run("what connections do they have?")
+
+    assert response.success is False
+    assert response.output is None
+    assert "supported capability" in response.error
+    assert "unknown capability" not in response.error
+    assert any(event.event_type == "planning_failed" for event in events)
+
+
+def test_unsupported_capability_remains_a_planner_validation_error():
+    response = plan(task("task-1", "fraud_investigation", {"query": "x"}))
+
+    with pytest.raises(UnsupportedCapabilityError):
+        planner_for(response).create_plan("unregistered request")
 
 
 def test_pipe_separated_capability_is_rejected():

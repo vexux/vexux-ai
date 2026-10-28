@@ -17,6 +17,9 @@ class KnowledgeRequest:
       generic and domain-agnostic.
     - params: optional structured parameters forwarded to the executing
       capability (kept generic).
+    - graph_requests: optional list of graph-level requests when a single
+      high-level request needs multiple independent graph lookups. This stays
+      domain-agnostic and reuses the existing KnowledgeRequest contract.
     """
 
     kind: str
@@ -24,3 +27,4 @@ class KnowledgeRequest:
     source: Optional[str] = None
     operation: Optional[str] = None
     params: Dict[str, Any] = field(default_factory=dict)
+    graph_requests: list[Dict[str, Any]] = field(default_factory=list)

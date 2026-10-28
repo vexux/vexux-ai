@@ -35,4 +35,8 @@ def test_execution_denial_is_observable_in_observation_trace():
 
     assert result.success is False
     assert "Policy denied execution" in result.error
-    assert observation.metadata == {"policy": "test_policy", "reason": "Denied for test."}
+    assert observation.metadata == {
+        "policy": "test_policy",
+        "reason": "Denied for test.",
+        "authorization_denied": True,
+    }

@@ -1,0 +1,241 @@
+# Local setup and reproducibility
+
+This is the authoritative zero-budget setup path for Vexux-AI. It targets
+Python 3.11, local Neo4j and local MySQL. Deterministic tests do not require
+either database or any model provider service.
+
+## 1. Create an environment and install dependencies
+
+From the repository root:
+
+```powershell
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install --upgrade pip
+python -m pip install -r requirements.txt -r requirements-dev.txt
+```
+
+On Linux/macOS, activate with `source .venv/bin/activate` instead.
+
+The pinned runtime file contains the existing provider, database, FastAPI, and
+optional local ML dependencies. The development file contains test and
+formatting tools. Heavy Qwen/Transformers imports remain lazy; selecting
+`fake` does not load them.
+
+## 2. Configure the environment
+
+```powershell
+Copy-Item .env.example .env
+```
+
+`.env` is local-only and ignored by Git. The loader reads it from the
+repository root. Explicit process environment variables take precedence over
+`.env`; for example:
+
+```powershell
+$env:MODEL_PROVIDER = "fake"
+```
+
+The local observability store is generated at
+`data/observability/vexux_observability.db` by default and is ignored by Git.
+It is runtime state, not a checked-in fixture; it is created when observability
+is initialized. Set `OBSERVABILITY_DB_PATH` to use another local path. The
+fraud demo SQLite fixture at `apps/fraud/data/sqlite/demo.sql` is separate and
+is not covered by the runtime database ignore rule.
+
+`MODEL_PROVIDER` is required and must be one of `fake`, `ollama`, `mistral`, or
+`qwen`. Missing or invalid values produce a configuration error; Vexux never
+falls back to an unexpected remote provider. `FAKE_MODEL`, `MISTRAL_MODEL`,
+`OLLAMA_MODEL`, `QWEN_MODEL`, and `QWEN_ADAPTER_PATH` are also resolved by the
+same centralized loader.
+
+`fake` is the deterministic, credential-free provider. The repository's local
+development `.env` selects `ollama` with `OLLAMA_MODEL=phi3:latest`; this
+requires an already-running local Ollama server and installed model. `mistral`
+requires `MISTRAL_API_KEY` and remains an explicitly selected optional remote
+provider, with no automatic fallback. `qwen` requires the existing local
+adapter/model files and is optional.
+
+The live Mistral test is opt-in only:
+
+```powershell
+$env:RUN_LIVE_MISTRAL_TESTS = "1"
+python -m pytest tests/live/test_mistral_recovery.py -q
+```
+
+Do not set that flag for normal offline validation.
+
+## 3. Bootstrap local fraud databases
+
+The real fraud composition expects Neo4j database `neo4j` (or the configured
+`NEO4J_DATABASE`) and a MySQL database explicitly selected with
+`MYSQL_DATABASE`. The setup commands below use `vexux_fraud` as the fraud
+application's local database name; core does not provide a domain-specific
+database default.
+Create the MySQL database and application user using local administrative
+credentials, then grant that user access:
+
+```sql
+CREATE DATABASE vexux_fraud;
+CREATE USER 'vexux_app'@'localhost' IDENTIFIED BY '<local-password>';
+GRANT ALL PRIVILEGES ON vexux_fraud.* TO 'vexux_app'@'localhost';
+FLUSH PRIVILEGES;
+```
+
+Run the repeatable MySQL schema and seed from the repository root:
+
+```powershell
+mysql -h 127.0.0.1 -P 3306 -u vexux_app -p vexux_fraud `
+  < apps\fraud\data\mysql\schema.sql
+mysql -h 127.0.0.1 -P 3306 -u vexux_app -p vexux_fraud `
+  < apps\fraud\data\mysql\seed.sql
+```
+
+In Neo4j Browser or with `cypher-shell`, run these files against the configured
+Neo4j database in order:
+
+```text
+apps/fraud/data/neo4j/schema.cypher
+apps/fraud/data/neo4j/seed.cypher
+```
+
+The scripts are repeatable for the seeded records. The MySQL seed includes
+10 customers, 16 accounts, 50 transactions, 12 alerts, and 6 investigation
+records. The graph seed provides matching customer/account identities and
+representative device, address, merchant, case, and alert nodes with 40
+relationships declared by the seed. Existing records are preserved, so an
+already-populated Neo4j database can contain more relationships than the seed
+declares.
+The SQLite demo fixture is maintained separately at
+`apps/fraud/data/sqlite/demo.sql`; it is intentionally small and is not a
+replacement for the Neo4j/MySQL seed.
+
+Verify the expected C1001 and C1002 states with:
+
+```sql
+SELECT customer_id, full_name, risk_level
+FROM customers WHERE customer_id = 'C1001';
+SELECT COUNT(*) AS transaction_count
+FROM transactions WHERE customer_id = 'C1001';
+SELECT alert_id, alert_type, severity, status
+FROM fraud_alerts WHERE customer_id = 'C1001';
+SELECT customer_id, COUNT(*) AS transaction_count
+FROM transactions WHERE customer_id IN ('C1001', 'C1002')
+GROUP BY customer_id;
+```
+
+Expected facts include Alice Smith, five seeded transactions, and two open
+high-severity alerts for C1001. C1002 has four transactions and a closed
+low-severity alert; Neo4j links C1001 and C1002 through a shared device. The
+deterministic investigation should therefore retain C1001 as high risk and
+C1002 as medium risk. Apply the updated seed files after the schemas are
+present to add the expanded fixture records to an existing local dataset.
+
+## 4. Run deterministic validation
+
+```powershell
+$env:MODEL_PROVIDER = "fake"
+python -m pytest -q
+python -m evaluation
+python -m evaluation.benchmark --json
+```
+
+The benchmark uses one stable scenario set for each configured provider and
+reports capability/intent, selected resources, structured-output validity,
+authorization outcomes, latency, and error category. Model/planning failures
+are distinct from deterministic authorization and identity rejection results.
+For the Phase 2 local comparison, run:
+
+```powershell
+python -m evaluation.benchmark --models phi3:latest qwen3:4b `
+  --repetitions 2 --json --output phase2-results.json
+```
+
+The deterministic demo composition supplies synthetic graph and SQLite
+fixtures and uses the same RAG pipeline with the fraud reference corpus.
+Use `--composition real` only when local Neo4j and MySQL are running.
+
+The live database tests are separate and are skipped unless their local
+credentials are configured:
+
+```powershell
+python -m pytest tests/live/test_fraud_databases.py -q
+```
+
+## 5. Fraud policy knowledge (local RAG)
+
+The fraud reference corpus lives in `apps/fraud/knowledge/` and contains
+project-authored guidance on investigation policy, alert handling, transaction
+monitoring, and shared devices. These files are not official bank policy and
+contain no customer records. The fraud application's composition selects this
+corpus for both the deterministic demo and real fraud composition; generic
+applications continue using `data/documents/`.
+
+The loader reads local Markdown and text files in stable path order. Markdown
+sections are chunked independently using a 600-character sliding window with
+100 characters of overlap. Each chunk keeps its source path, document name,
+section title, and zero-based chunk index. On first retrieval, the existing
+`sentence-transformers` embedder lazily loads `BAAI/bge-small-en-v1.5`,
+normalizes vectors, and builds an in-memory FAISS flat inner-product index.
+The index is reproducibly rebuilt from the source files and is not saved or
+committed. Runtime dependencies are already listed in `requirements.txt`;
+the BGE model must be present in the local Hugging Face cache or available to
+download on first use. Retrieval defaults to three results and filters
+similarities below 0.5.
+
+Run a production-embedder smoke retrieval:
+
+```powershell
+python -m scripts.rag_smoke "What should investigators consider when customers share a device?"
+```
+
+Run the separate no-network RAG evaluation:
+
+```powershell
+python -m evaluation.rag
+```
+
+The RAG evaluation uses a deterministic lexical stand-in for embeddings to
+test corpus loading, FAISS indexing, relevance handling, and routing without
+downloading a model. It does not replace the production BGE smoke test.
+
+General policy questions may use RAG, with the retrieved document and section
+shown as source attribution. Queries for a customer's transactions, alerts,
+accounts, connections, investigations, or comparisons are routed to the
+fraud workflow and its authoritative MySQL/Neo4j sources. RAG is not used to
+create customer-specific evidence or determine a risk assessment. A mixed
+request that explicitly asks for customer records runs the deterministic
+operational workflow first, followed by policy retrieval only when a separate
+policy clause is recognized. The policy retrieval depends on successful
+operational execution, so authorization or workflow failure prevents the
+supplemental RAG task from running.
+
+## 6. Start the application
+
+Credential-free API smoke run:
+
+```powershell
+$env:MODEL_PROVIDER = "fake"
+python -m uvicorn api.main:app --host 127.0.0.1 --port 8000
+```
+
+Check process health and configuration readiness:
+
+```powershell
+Invoke-RestMethod http://127.0.0.1:8000/health
+Invoke-RestMethod http://127.0.0.1:8000/ready
+```
+
+`/health` reports process liveness. `/ready` validates provider
+configuration; it does not prove that Mistral or Ollama is reachable and does
+not replace database verification.
+
+For the real fraud application after both databases are bootstrapped, set the
+Neo4j/MySQL variables and run:
+
+```powershell
+python -m scripts.manual.run_agent
+```
+
+The interactive runner uses the real Neo4j/MySQL composition and has no
+synthetic database fallback.

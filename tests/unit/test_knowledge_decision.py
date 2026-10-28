@@ -40,6 +40,17 @@ class FakeGraph:
         return self._name
 
 
+def test_generic_request_prefers_rag_over_registered_structured_source():
+    registry = KnowledgeSourceRegistry()
+    registry.register(FakeSource("business_db"))
+    decision = KnowledgeDecision(rag=FakeRAG(), knowledge_source_registry=registry)
+
+    req = decision.create_request("hey")
+
+    assert req.kind == "rag"
+    assert req.source == "rag"
+
+
 def test_knowledge_request_contract_can_be_created():
     req = KnowledgeRequest(kind="rag", query="What is EC2?", source="rag")
     assert req.kind == "rag"

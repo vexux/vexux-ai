@@ -1,4 +1,6 @@
 import pytest
+import sys
+import types
 
 from agent.decision import DecisionMaker, DecisionType
 from agent.execution_manager import ExecutionManager
@@ -7,6 +9,7 @@ from agent.response_synthesizer import ResponseSynthesizer
 from core.contracts.execution import AgentContext, Task
 from core.contracts.observation import Observation
 from rag.pipeline import RAGPipeline
+from rag.embedder import Embedder
 
 
 class FakeRetrieval:
@@ -52,6 +55,106 @@ def test_rag_pipeline_retrieve_filters_by_existing_similarity_score():
 
     assert results == [{"score": 0.95, "document": "relevant"}]
     assert pipeline.retriever.calls == [("query", 3)]
+
+
+def test_rag_pipeline_does_not_initialize_embedder_on_construction(monkeypatch):
+    class FailingEmbedder:
+        def __init__(self):
+            raise AssertionError("embedder must be lazy")
+
+    monkeypatch.setattr("rag.pipeline.Embedder", FailingEmbedder)
+    pipeline = RAGPipeline(enable_inference=False)
+
+    assert pipeline.embedder is None
+    assert pipeline.retriever is None
+
+
+def test_embedder_initializes_sentence_transformer_on_first_encode(monkeypatch):
+    created = []
+
+    class FakeSentenceTransformer:
+        def __init__(self, model_name):
+            created.append(model_name)
+
+        def encode(self, texts, normalize_embeddings):
+            return [[1.0] for _ in texts]
+
+    monkeypatch.setitem(
+        sys.modules,
+        "sentence_transformers",
+        types.SimpleNamespace(SentenceTransformer=FakeSentenceTransformer),
+    )
+
+    embedder = Embedder()
+    assert created == []
+    embedder.encode("query")
+    embedder.encode("query again")
+
+    assert created == ["BAAI/bge-small-en-v1.5"]
+
+
+def test_rag_retrieval_initializes_pipeline_once(monkeypatch):
+    calls = []
+
+    class FakeEmbedder:
+        pass
+
+    class FakeRetriever:
+        def retrieve(self, query, k):
+            return [{"query": query, "k": k}]
+
+    pipeline = RAGPipeline(enable_inference=False)
+
+    def initialize():
+        calls.append("initialize")
+        pipeline.embedder = FakeEmbedder()
+        pipeline.retriever = FakeRetriever()
+
+    monkeypatch.setattr(pipeline, "initialize", initialize)
+
+    assert pipeline.retrieve("first") == [{"query": "first", "k": 3}]
+    assert pipeline.retrieve("second") == [{"query": "second", "k": 3}]
+    assert calls == ["initialize"]
+
+
+def test_rag_embedding_initialization_failure_is_clear(monkeypatch):
+    class FailingEmbedder:
+        def __init__(self):
+            raise RuntimeError("model files unavailable")
+
+    monkeypatch.setattr("rag.pipeline.Embedder", FailingEmbedder)
+    pipeline = RAGPipeline(enable_inference=False)
+
+    with pytest.raises(RuntimeError, match="RAG retrieval initialization failed"):
+        pipeline.retrieve("query")
+
+
+def test_local_rag_inference_remains_explicit_and_lazy(monkeypatch):
+    created = []
+
+    class FakeInference:
+        def __init__(self):
+            created.append("created")
+
+        def generate(self, prompt):
+            return "local answer"
+
+    class FakeRetriever:
+        def retrieve(self, query, k):
+            return [{"document": "context", "score": 0.9}]
+
+    monkeypatch.setitem(
+        sys.modules,
+        "training.inference",
+        types.SimpleNamespace(InferencePipeline=FakeInference),
+    )
+    pipeline = RAGPipeline(enable_inference=True)
+    pipeline.retriever = FakeRetriever()
+    pipeline._initialized = True
+
+    assert created == []
+    assert pipeline.ask("question") == "local answer"
+    assert created == ["created"]
 
 
 def test_execution_manager_returns_structured_retrieval_result():
