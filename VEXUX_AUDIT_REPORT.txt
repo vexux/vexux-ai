@@ -1,359 +1,437 @@
-VEXUX AI COMPANY-LAPTOP DEMO AUDIT
-Read-only findings consolidated from two audits
+VEXUX AI — SYNTHETIC DEMO AUDIT
+Consolidated audit and dependency findings
 
-Scope and handling
-------------------
-The audits were performed without running project code or tests, installing
-packages, starting services, inspecting .env contents, or accessing production
-or customer data. No secrets or credential values are included here. The
-follow-up specifically prohibited edits; this report is the only file created
-for this request. No source, test, configuration, or dependency files were
-changed. No changes were staged, committed, or pushed.
+Scope
+-----
+This report consolidates the earlier repository/API/security audits and the
+current static dependency audit. Source code and test files were read only.
+No application code, tests, or evaluation scripts were run; no packages were
+installed; no services were started; no model was downloaded; and no .env
+contents or secret values were inspected. The audit did not access production
+or customer data. This report is the only file changed for the report refresh.
 
-Labels used below:
-  CONFIRMED    directly observed in repository files or Git output
-  INFERENCE    conclusion based on inspected code, not runtime verification
-  RECOMMENDATION
-               proposed course of action, not an implemented change
-  UNKNOWN      not inspected, verified, or settled
+Evidence labels:
+CONFIRMED       Directly visible in source, manifests, docs, or Git output.
+INFERENCE       Reasoned from source; not demonstrated at runtime.
+RECOMMENDATION  Proposed action, not implemented.
+UNKNOWN         Not inspected, established, or tested.
+HISTORICAL      A result claimed in checked-in older verification material.
+
+Change summary from the prior report
+------------------------------------
+- Updated Git branch/commit facts to the current verified checkout.
+- Added the demo's actual import/call path and static runtime dependency
+  findings, including the eager FAISS/NumPy imports.
+- Qualified the previous claim that the fake synthetic demo needs no Neo4j:
+  the factory first invokes generic composition, which conditionally
+  constructs a Neo4j adapter when configuration supplies a Neo4j URI.
+- Clarified that the operational workflow avoids RAG embeddings, while RAG
+  remains registered and general retrieval can initialize/download BGE.
+- Preserved prior API integration, security, laptop setup, test coverage,
+  historical-result, and unresolved-question findings.
 
 1. Repository and Git status
----------------------------
+----------------------------
 CONFIRMED
-- Repository root: C:\Users\varpundl\Documents\NatWest Training\vexux-ai
-- Branch: prod.
-- Working tree was clean at both audits.
-- Current commit at the audits: 05a44831d238ec30233b6fe3631b76921de90f03
-  with message "Merge branch 'dev'".
-- A local main branch was also present. The inspected Git log showed prod
-  and origin/main at the same commit, and origin/dev one commit behind at
-  2ca3e79. Recent history included QLoRA and adapter-related commits.
-- Repository content is a Python Vexux AI project with agent, fraud workflow,
-  RAG, providers, database adapters, FastAPI, and training modules. It is not
-  merely a different Mistral/Qwen/PEFT-only implementation.
+- Current branch: prod.
+- Current commit at this audit: 748ba401ef461d9dde31ed5752aa056167739626.
+- Working tree was clean before this report was replaced.
+- The project contains Python agent orchestration, fraud application logic,
+  model providers, RAG, graph/SQL adapters, FastAPI, and training code.
+- The current source was rechecked against the prior report; see the sections
+  below for corrected environment-sensitive conclusions.
 
 UNKNOWN
-- Whether this exact prod checkout is the user's intended final demo version
-  or whether a separate intended branch/repository exists.
-- Actual laptop Python installation, permissions, hardware, available
-  services, network access, package approvals, proxy rules, and port policy.
+- Whether this checkout is the exact intended final demo implementation or
+  whether another branch, commit, or repository was intended.
+- Laptop Python installation, hardware, available disk/RAM, network/proxy,
+  package approvals, admin rights, service installation rights, and port
+  restrictions.
+- Effective local .env and process settings. The file was not inspected.
 
-2. Is this the intended implementation?
----------------------------------------
+2. Architecture and provider configuration
+------------------------------------------
 CONFIRMED
-- The project documents a modular agent framework and fraud-specific
-  application (README.md; docs/ARCHITECTURE.md).
-- Code includes deterministic fraud workflow and categorical assessment,
-  Ollama, Mistral and Qwen providers, fraud-focused RAG, Neo4j/MySQL
-  adapters, and synthetic in-memory/SQLite demo composition.
-- The checked-in .env.example selects fake; it does not establish what the
-  actual local .env or process environment selects.
+- The documented architecture separates Agent orchestration, Planner,
+  ExecutionManager, observation, decisions, context, ModelGateway, tools, and
+  capabilities (README.md; docs/ARCHITECTURE.md).
+- Provider choices in core.config.SUPPORTED_MODEL_PROVIDERS are fake, ollama,
+  mistral, and qwen. Configuration requires MODEL_PROVIDER; provider selection
+  is explicitly wired in core.composition.create_agent().
+- core.config.Config's code default for Ollama is llama3.2. README/docs describe
+  a development configuration using Phi-3, while .env.example describes fake.
+  The effective local setting is unknown and was not inspected.
+- Mistral is a remote API provider; Ollama is a local Ollama client; Qwen loads
+  a Transformers model and optional PEFT adapter; fake is deterministic.
+- Fraud risk assessment is categorical (low/medium/high) and deterministic.
+  FraudInvestigationService derives it from explicit alert, transaction,
+  relationship, and investigation signals; the LLM is not the risk scorer.
 
-INFERENCE
-- The repository appears to be the Vexux AI project, and much of the intended
-  demo architecture exists. The intended API-to-fraud behavior is not wired
-  or verified: the public API currently constructs the generic agent rather
-  than the fraud-specific composition.
-- Provider configuration is inconsistent across defaults and documentation:
-  core.config.Config uses Ollama model llama3.2; docs/SETUP.md describes a
-  local development .env using phi3:latest; .env.example documents fake.
-  The effective local value is unknown. Do not silently substitute a provider
-  or model.
+Relevant source:
+  core/config.py:16 — SUPPORTED_MODEL_PROVIDERS; :56 — Config;
+    :102 — load_config_from_env
+  core/composition.py:40 — create_agent
+  models/providers/fake.py — FakeProvider
+  models/providers/ollama.py — OllamaProvider
+  models/providers/mistral.py — MistralProvider
+  models/providers/qwen.py — QwenProvider
+  apps/fraud/investigation.py:35 — FraudInvestigationService.build_result
+  apps/fraud/domain.py:123 — InvestigationResult
 
-RECOMMENDATION
-- Before setup, establish whether this prod checkout and its existing
-  composition are the intended demo implementation. Compare existing branches,
-  commits, or the correct repository before considering code changes.
+3. API route and fraud-specific call path
+-----------------------------------------
+CONFIRMED: API ROUTE
+- api.main.get_agent() returns core.composition.create_agent().
+- POST /api/v1/agent/run injects that generic agent through get_agent() and
+  run_agent() calls agent.run(query, session_id, user_id).
+- AgentRunRequest contains optional workflow, agent, and delegations fields,
+  but run_agent() does not forward these fields.
+- The generic composition registers KnowledgeGroundedAnswerWorkflow, not
+  FraudInvestigationWorkflow. Therefore, the current API endpoint does not
+  construct the fraud-specific demo or real composition.
+- FastAPI's default interactive documentation route is /docs.
+- API request handling emits request audit events and redacts serialized
+  output, but does not authenticate the requestor.
 
-3. API route and actual composition
------------------------------------
-CONFIRMED
-- api.main.get_agent() returns core.composition.create_agent()
-  (api/main.py, get_agent).
-- FastAPI POST /api/v1/agent/run injects that dependency in run_agent()
-  (api/main.py, run_agent), then calls agent.run(query, session_id, user_id).
-- get_agent is cached. AgentRunRequest has optional workflow, agent and
-  delegations fields, but run_agent does not forward these fields.
-- core.composition.create_agent() selects the configured model provider,
-  constructs RAGPipeline and generic tools, and registers the generic
-  KnowledgeGroundedAnswerWorkflow. It does not register the fraud workflow.
-- The FastAPI app is named "Vexux-AI Agent API"; FastAPI's default interactive
-  API docs path is /docs. The API route is not proven to implement a fraud
-  investigation.
-- The route emits request_started/request_completed audit events and redacts
-  serialized output. It does not authenticate the requestor.
+Locations:
+  api/main.py:23 — AgentRunRequest; :55 — get_agent; :84 — FastAPI app;
+    :90 — run_agent; :114 — agent.run invocation
+  core/composition.py:40 — create_agent
+  agent/agent.py:110 — Agent.run
 
-Relevant locations:
-  api/main.py:23       AgentRunRequest
-  api/main.py:55       get_agent
-  api/main.py:84       FastAPI app
-  api/main.py:90       run_agent route
-  api/main.py:114      agent.run invocation
-  core/composition.py:40 create_agent
-
-4. Fraud workflow and synthetic demo
-------------------------------------
-CONFIRMED
+CONFIRMED: SYNTHETIC FRAUD PATH
 - apps.fraud.demo.create_demo_agent() creates a generic agent with the fraud
-  knowledge directory, a temporary SQLite database seeded from
-  apps/fraud/data/sqlite/demo.sql, in-memory customer/fraud graphs, fraud
-  policy, and a registered FraudInvestigationWorkflow.
-- If MODEL_PROVIDER is absent from the process environment,
-  create_demo_agent temporarily selects fake. If explicitly set, it preserves
-  that provider choice; fake is not forced over a caller's existing setting.
-- The workflow's plan_query() maps recognizable customer investigation,
-  account, transaction, alert, connection, and comparison requests to
-  deterministic workflow tasks. FraudInvestigationService computes low,
-  medium, or high risk from explicit evidence/signals; the risk score is not
-  delegated to the model.
-- The demo's normal operational investigations use synthetic SQLite and
-  in-memory graph data; they do not construct Neo4j or MySQL backends.
-- The smallest demonstrated application invocation is to use the
-  create_demo_agent() context manager and call agent.run("Investigate C1001",
-  user_id="investigator"). The investigator identity is required by the
-  fraud policy for access to all necessary resources. The default actor is
-  support_user, who is explicitly denied fraud_graph access.
-- The separate apps.fraud.real.create_real_agent() requires configured
-  Neo4j and MySQL connections and intentionally has no synthetic fallback.
-- Agent.run_workflow() is an additional direct path for invoking a registered
-  workflow by name. It is not wired into the current HTTP route.
+  knowledge directory, then creates a temporary SQLite database from
+  apps/fraud/data/sqlite/demo.sql, builds synthetic in-memory graphs, installs
+  FraudPolicy, and registers FraudInvestigationWorkflow.
+- The shortest demonstrated use is to enter the create_demo_agent() context
+  and call agent.run("Investigate C1001", user_id="investigator").
+- FraudInvestigationWorkflow.plan_query() deterministically maps recognized
+  customer queries to workflow tasks. Agent/Planner routes those tasks through
+  ExecutionManager to FraudInvestigationWorkflow.execute()/run().
+- Agent.run_workflow() is another direct workflow invocation method, but is
+  also not wired to the current API route.
+- apps.fraud.real.create_real_agent() is a separate real-service composition
+  that requires Neo4j and MySQL and has no synthetic fallback.
 
-Relevant locations:
-  apps/fraud/demo.py:27          create_demo_agent
-  apps/fraud/demo.py:41          temporary SQLite fixture
-  apps/fraud/demo.py:50          in-memory graphs
-  apps/fraud/demo.py:75          fraud workflow registration
-  apps/fraud/workflow.py:108     FraudInvestigationPlanner
-  apps/fraud/workflow.py:203     FraudInvestigationWorkflow.execute
-  apps/fraud/workflow.py:304     FraudInvestigationWorkflow.plan_query
-  apps/fraud/workflow.py:525     FraudInvestigationWorkflow.run
-  apps/fraud/investigation.py:85 deterministic signals and categorical risk
-  apps/fraud/identity.py         trusted actor identifiers
-  apps/fraud/real.py:27          real-service composition
-  agent/agent.py:1186            Agent.run_workflow
+Locations:
+  apps/fraud/demo.py:27 — create_demo_agent; :41 — temporary SQLite;
+    :75 — workflow registration
+  apps/fraud/composition.py:8 — build_fraud_investigation_graphs
+  apps/fraud/workflow.py:203 — execute; :304 — plan_query; :525 — run
+  apps/fraud/investigation.py:35 — build_result; :104 — categorical assessment
+  apps/fraud/real.py:27 — create_real_agent
+  agent/planner.py:113 — plan_registered_workflow
+  agent/execution_manager.py:188 — _execute_workflow
+  agent/agent.py:1186 — run_workflow
 
 INFERENCE
-- The direct synthetic demo can run without Ollama, Neo4j, or MySQL if its
-  runtime package dependencies are present and an appropriate fake-provider
-  configuration is effective.
-- The current API endpoint cannot be used to select the demo workflow merely
-  by sending the optional workflow field; it is not forwarded, and the
-  generic composition does not register the fraud workflow.
+- The direct synthetic workflow call can avoid external database services and
+  model services when the relevant configuration is constrained as described
+  in section 5. This is a source-based expectation, not a confirmed successful
+  run.
 
-5. RAG and model downloads
--------------------------
-CONFIRMED
-- Generic create_agent() constructs and registers RAGPipeline even when the
-  fake model provider is selected.
-- Constructing the pipeline is lazy: _ensure_initialized() is called when a
-  retrieval request reaches RAGPipeline.retrieve(). Initialization reads the
-  corpus, embeds chunks, and builds an in-memory FAISS index.
-- Embedder.encode() lazily creates SentenceTransformer with default model
-  BAAI/bge-small-en-v1.5. If not cached, first retrieval may need network
-  access to download model assets.
-- ENABLE_LOCAL_RAG_INFERENCE controls the local generation path used by
-  RAGPipeline.ask(); it does not disable embedding initialization when
-  retrieve() is used.
-- Fraud operational requests use the deterministic fraud workflow and its
-  SQLite/graph sources; general fraud-policy RAG requests may trigger BGE
-  embedding initialization.
-- Qwen uses Transformers from_pretrained for the model and optional PEFT
-  adapter; Ollama needs an already-running local Ollama server and selected
-  model; Mistral sends requests to a remote API and requires MISTRAL_API_KEY.
+4. Dependency audit: import path and minimum packages
+-----------------------------------------------------
+CONFIRMED: IMPORT AND CALL PATH
+1. Importing apps.fraud.demo imports core.composition plus fraud workflow,
+   graph, policy, investigation, SQLite-source and standard-library modules.
+2. Importing core.composition imports rag.pipeline. rag.pipeline imports
+   rag.vectorstore, which unconditionally imports faiss and numpy. As a result,
+   importing the demo module reaches FAISS and NumPy even if no RAG query will
+   be made and the fake provider is selected.
+3. On entering create_demo_agent(), the factory selects fake only if
+   MODEL_PROVIDER was not already set in the process environment; otherwise
+   it preserves the caller's provider. It calls core.composition.create_agent().
+4. create_agent() calls core.config.get_config(); configuration imports
+   python-dotenv and its loader may read the repository .env at runtime.
+   This audit did not inspect .env.
+5. If provider is fake, create_agent() imports FakeProvider; optional provider
+   branches import provider-specific libraries only when selected.
+6. create_agent() constructs and registers RAGPipeline but does not retrieve
+   documents or call the embedding model at construction time.
+7. create_demo_agent() adds temporary SQLite and synthetic graphs, then
+   registers FraudInvestigationWorkflow.
+8. For "Investigate C1001", workflow planning selects the deterministic fraud
+   workflow. The workflow accesses the in-memory graph registry and SQLite
+   backend. Python sqlite3 is part of the standard library.
 
-Relevant locations:
-  core/composition.py:98-101  RAGPipeline construction
-  rag/pipeline.py:46          _ensure_initialized
-  rag/pipeline.py:65          initialize
-  rag/pipeline.py:99          retrieve
-  rag/pipeline.py:128         ask and local inference switch
-  rag/embedder.py:1           Embedder default
-  rag/embedder.py:6           lazy embedding model
-  models/providers/qwen.py:34  Hugging Face model loading
+CONFIRMED: SMALLEST DEFENSIBLE EXTERNAL DEPENDENCIES
+- `faiss-cpu==1.15.0`: listed in requirements.txt; imported unconditionally
+  through rag.vectorstore on the demo import path.
+- `numpy`: imported directly in rag.vectorstore, but not separately pinned in
+  requirements.txt. Exact compatible version was not verified. It should be
+  declared explicitly in a minimal dependency manifest even if a resolver
+  currently brings it in transitively.
+- `python-dotenv==1.1.1`: listed in requirements.txt; imported by core.config
+  and used during create_agent configuration loading.
+- Python standard library: includes sqlite3, tempfile, pathlib and other
+  modules used by the direct synthetic demo; these are not pip dependencies.
 
-INFERENCE
-- Choosing fake avoids an LLM service, not all model assets: a general RAG
-  retrieval can still load/download the embedding model.
-- A demo that must be offline and avoid model downloads should use only the
-  operational synthetic workflow, not RAG/policy questions, unless the
-  embedding model is already present and approved.
+INFERENCE / LIMITS
+- The above is the smallest defensible direct third-party set visible from the
+  import path, not a tested or locked environment. Transitive package metadata,
+  supported platform wheels, exact NumPy compatibility, and a successful run
+  were not verified.
+- The operational direct call does not itself need FastAPI, Pydantic, Uvicorn,
+  HTTPX, pytest, or API-serving packages. They are relevant for API/test runs,
+  not this direct agent invocation.
+- This repository has no separate minimal-runtime requirements file, pyproject,
+  setup.py/setup.cfg, Pipfile, Poetry lock, uv lock, or environment.yml.
+  requirements.txt is a broad combined runtime/training/ML manifest;
+  requirements-dev.txt contains development/test packages.
 
-6. Dependencies and setup requirements
---------------------------------------
-CONFIRMED
-- Python 3.11 is identified as the canonical development/setup version in
-  README.md, docs/SETUP.md and CI (.github/workflows/ci.yml). docs/DEVELOPMENT.md
-  also mentions Python 3.10. Python 3.11 is the CI target and is compatible
-  with the documented project target; no laptop runtime was checked.
-- requirements.txt pins a broad combined runtime/training/ML set: PyTorch,
-  Transformers, datasets, TRL, PEFT, Accelerate, bitsandbytes, SentencePiece,
-  Hugging Face Hub, Sentence Transformers, FAISS CPU, PyYAML, FastAPI,
-  Mistral, Neo4j, MySQL connector, python-dotenv and Ollama.
-- requirements-dev.txt contains black, flake8, pytest, ipykernel and httpx.
-  There is no dedicated minimal-runtime manifest.
-- The documented API command is `python -m uvicorn api.main:app ...`.
-  Uvicorn is not declared in requirements.txt or requirements-dev.txt.
-- NumPy is imported directly by rag/vectorstore.py but is not separately
-  pinned in requirements.txt. FAISS and NumPy are imported on the API import
-  path through core.composition -> rag.pipeline -> rag.vectorstore, even if
-  fake is selected. FastAPI/Pydantic and python-dotenv are also needed on
-  that path; Uvicorn is needed to run the documented server command.
-- Sentence Transformers is needed when RAG embeds, not just to instantiate a
-  pipeline. Neo4j/MySQL adapters import their client packages lazily when
-  those backends are initialized. Ollama/Mistral/Qwen packages and services
-  are provider-specific.
-- MODEL_PROVIDER is the required configuration name. Real fraud composition
-  also requires NEO4J_URI, NEO4J_USERNAME, NEO4J_PASSWORD, MYSQL_PASSWORD,
-  and MYSQL_DATABASE. Other supported names are documented in .env.example
-  and core/config.py. No environment values are included in this report.
-
-INFERENCE / ESTIMATES
-- Full ML dependency and model installation may require multiple gigabytes,
-  network access, and materially more disk and memory than fake/synthetic
-  operation. Any RAM/disk estimate (including a suggested 16-GB planning
-  target) is not a verified repository minimum.
-- Corporate package/proxy access, execution policy, administrative rights,
-  GPU availability, service installation rights, and port availability are
-  unknown.
+CONFIRMED: OPTIONAL PACKAGE FAMILIES
+- Ollama: models/providers/ollama.py imports the ollama client when the Ollama
+  provider constructs its client; not required when explicitly using fake.
+- Mistral: models/providers/mistral.py imports mistralai for that provider.
+- Transformers, PEFT, PyTorch, bitsandbytes and related model/training stack:
+  imported by Qwen/model-loader/training code paths, not by the fake provider
+  branch or deterministic operational fraud workflow.
+- Sentence Transformers: imported inside rag.embedder.Embedder._ensure_model;
+  not needed just to construct the pipeline, and not called for the
+  deterministic operational investigation.
+- Neo4j Python package: imported inside Neo4jKnowledgeGraph.__init__ only when
+  that adapter is actually constructed.
+- MySQL connector: imported inside MySQLBackend._connect; synthetic demo uses
+  SQLiteBackend instead.
+- FastAPI/Uvicorn: unnecessary for a direct create_demo_agent() call. Uvicorn
+  is not declared in requirements.txt or requirements-dev.txt, although the
+  documented API command uses `python -m uvicorn api.main:app ...`.
+- Evaluation/testing extras (pytest, httpx, black, flake8, ipykernel) are not
+  required for the direct demo call.
 
 Relevant locations:
+  apps/fraud/demo.py:7-18 — top-level imports; :27 — create_demo_agent
+  core/composition.py:1-35 — top-level imports; :40 — create_agent;
+    :75 — fake branch; :98-101 — RAG; :190 — conditional Neo4j
+  rag/pipeline.py:46 — _ensure_initialized; :65 — initialize;
+    :99 — retrieve; :128 — ask
+  rag/vectorstore.py:1-2 — unconditional faiss/numpy imports
+  rag/embedder.py:1 — default model; :6-10 — lazy SentenceTransformer
+  core/config.py:12 — dotenv import; :19-25 — local env loader; :234 — get_config
+  core/knowledge/neo4j_graph.py:20, :38 — adapter and lazy client import
+  core/knowledge/mysql_backend.py:29-33 — lazy MySQL connector import
   requirements.txt
   requirements-dev.txt
-  docs/SETUP.md:1
-  docs/SETUP.md:219
-  docs/DEVELOPMENT.md:10
-  .github/workflows/ci.yml
-  rag/vectorstore.py:1
-  core/knowledge/neo4j_graph.py:38
-  core/knowledge/mysql_backend.py:29
-  core/config.py:102
+
+5. Synthetic demo configuration and RAG risks
+----------------------------------------------
+CONFIRMED
+- The synthetic demo factory uses fake only when MODEL_PROVIDER is absent from
+  the process environment. If another provider is explicitly set, the factory
+  preserves it. To target the fake path reliably, the caller must explicitly
+  select fake.
+- create_agent() conditionally constructs Neo4jKnowledgeGraph when
+  config.neo4j_uri is nonempty. This occurs before create_demo_agent() replaces
+  the graph registries with synthetic graphs. Therefore, the synthetic factory
+  does not unconditionally avoid the Neo4j Python package: a configured
+  NEO4J_URI can cause Neo4j driver construction and require the neo4j package.
+- No MySQL backend is built by the synthetic demo or generic create_agent()
+  path. The MySQL package/service is not needed for this path.
+- If no Neo4j URI is configured, Ollama is not selected, and fake is selected,
+  the synthetic workflow itself uses no Neo4j, MySQL, Ollama, Transformers,
+  PEFT, PyTorch, Sentence Transformers, or embedding assets.
+- FAISS and NumPy remain required for import because RAG/vectorstore modules
+  are imported eagerly. Thus “fake provider” does not remove all RAG
+  dependencies.
+- First retrieval calls RAGPipeline._ensure_initialized(), loads local
+  documents, embeds them with default BAAI/bge-small-en-v1.5, and builds an
+  in-memory FAISS index. If the model is not cached, the embedding library may
+  need network access to download it.
+- ENABLE_LOCAL_RAG_INFERENCE controls the optional local text-generation
+  branch in RAGPipeline.ask(); it does not prevent embedding initialization
+  during retrieve().
+- Operational investigation requests route to the fraud workflow and do not
+  require RAG retrieval. General policy questions can route through RAG and
+  therefore can trigger embedding model loading/download.
+- create_demo_agent() creates a temporary business SQLite file. Fraud workflow
+  audit events also invoke best-effort persistent observability storage, whose
+  default path is data/observability/vexux_observability.db; this may create a
+  directory/database on the first event. This write was not executed in audit.
+
+CORRECTED / QUALIFIED FROM THE PRIOR REPORT
+- Earlier wording that the synthetic demo “does not require Neo4j” was too
+  categorical. The workflow's selected data is synthetic and does not use a
+  Neo4j service, but core.composition may instantiate the Neo4j adapter before
+  the demo replaces its graph registry if NEO4J_URI is configured.
+- The actual .env and process environment were not inspected, so whether this
+  conditional adapter is triggered on a particular machine is unknown.
+- To keep setup independent of Neo4j package/config, explicitly ensure the
+  process configuration has no nonempty NEO4J_URI before creating the demo.
+  This report does not execute or prescribe a value copied from .env.
+
+Locations:
+  apps/fraud/demo.py — provider handling and graph replacement
+  core/composition.py — provider selection and `if config.knowledge_graph_enabled
+                        or config.neo4j_uri`
+  core/config.py — environment precedence and .env loading
+  rag/pipeline.py — _ensure_initialized, initialize, retrieve, ask
+  rag/embedder.py — Embedder._ensure_model
+  core/audit_logger.py — event persistence
+  core/observability_store.py — default SQLite store and schema creation
+
+6. Existing manifest pins and setup requirements
+------------------------------------------------
+CONFIRMED
+- Python 3.11 is the CI/setup target; docs/DEVELOPMENT.md also mentions
+  Python 3.10. Python 3.11 is documented and used in CI, but the laptop's
+  installed runtime was not checked.
+- requirements.txt pins a broad set including:
+  torch==2.7.1, torchvision==0.22.1, torchaudio==2.7.1,
+  transformers==4.55.2, datasets==4.0.0, trl==0.21.0, peft==0.17.1,
+  accelerate==1.10.1, bitsandbytes==0.47.0, sentencepiece==0.2.0,
+  huggingface_hub==0.34.4, sentence-transformers==5.6.1,
+  faiss-cpu==1.15.0, pyyaml==6.0.2, fastapi==0.116.1,
+  mistralai==2.9.3, neo4j==5.28.1, mysql-connector-python==9.4.0,
+  python-dotenv==1.1.1, and ollama==0.6.0.
+- NumPy is imported directly but has no explicit version pin in the manifest.
+- requirements-dev.txt lists black, flake8, pytest, ipykernel, and httpx.
+- Uvicorn is not listed in either dependency file, despite the documented
+  API startup command depending on it.
+- No supported runtime-only/minimal installation mechanism was found.
+- Model/package installation may use substantial disk and network resources.
+  Exact laptop space/RAM needs are not established; any previous suggested
+  hardware target was an estimate, not a verified minimum.
+
+Configuration names used in source/docs include MODEL_PROVIDER,
+FAKE_MODEL, OLLAMA_HOST, OLLAMA_MODEL, MISTRAL_API_KEY, QWEN_MODEL,
+QWEN_ADAPTER_PATH, ENABLE_KNOWLEDGE_GRAPH, NEO4J_URI, NEO4J_USERNAME,
+NEO4J_PASSWORD, NEO4J_DATABASE, MYSQL_HOST, MYSQL_PORT, MYSQL_USER,
+MYSQL_PASSWORD, MYSQL_DATABASE, SQL_DATABASE_PATH,
+ENABLE_LOCAL_RAG_INFERENCE, OBSERVABILITY_DB_PATH, and
+PERSISTENT_MEMORY_DB. Names only; no values are reported.
+
+UNKNOWN
+- Whether the installed package versions support the company's target Windows
+  environment or Python installation.
+- Exact compatible NumPy pin, wheel availability, full transitive dependency
+  resolution, model-cache state, and package/network policy.
+- Actual laptop memory/disk headroom, GPU/CUDA availability, and port/service
+  availability.
 
 7. Security, evidence and auditability
 --------------------------------------
 CONFIRMED
-- Fraud investigation authorizes each protected resource before I/O, checks
-  actor identity, and records bounded Evidence objects from graph and
-  structured-data observations.
-- The actor allowlist is application logic. FastAPI accepts caller-provided
-  user_id, and no HTTP authentication is implemented; user_id is not proof
-  of identity.
+- Fraud workflows authorize named graph and business-data resources before
+  I/O, validate against a small actor allowlist, and collect bounded evidence.
+- The fraud default actor is support_user; that actor is denied fraud_graph
+  access. investigator is the intended authorized demo actor.
+- This application policy is not HTTP authentication. The API accepts
+  caller-supplied user_id and does not verify its identity.
 - The generic DefaultPolicy is permissive for execution by default; fraud
-  policy applies application-specific actor/resource checks.
-- API response and event handling redacts some sensitive-looking values.
-  Evidence is size/count bounded and redacts content. Audit events are held
-  in memory and also persisted to a local SQLite observability store on a
-  best-effort basis; persistence errors are logged and do not stop application
-  work. This is not demonstrated to be tamper-proof enterprise audit.
-- docs/SETUP.md describes MySQL and Neo4j schema/seed steps. It states seeds
-  preserve existing records; running them against existing data may alter
-  database state. The local observability store can create a SQLite file.
-- Docs include startup examples bound to loopback as well as examples bound
-  to 0.0.0.0. For a company device, binding beyond loopback requires explicit
-  approval.
+  checks are application-level behavior.
+- API responses and audit metadata redact some sensitive-looking values;
+  evidence is bounded and redacted. Audit events are persisted locally to
+  SQLite on a best-effort basis, not demonstrated as tamper-proof enterprise
+  audit.
+- docs/SETUP.md describes database schema/seed commands. It warns seeded data
+  is preserved, so running against an existing database can change it.
+- Some docs show loopback API binding; other examples use 0.0.0.0. Any
+  non-loopback exposure needs explicit company approval.
+- Documented/local default ports include API 8000, Ollama 11434, Neo4j 7687,
+  and MySQL 3306. Availability and company firewall policy are unknown.
 
 Relevant locations:
-  apps/fraud/investigation.py:115  pre-I/O authorization
-  apps/fraud/identity.py           trusted actor definitions
-  apps/fraud/policy.py             fraud policy
-  core/policy/default.py           default policy behavior
-  core/contracts/evidence.py       evidence bounds/redaction
-  core/audit_logger.py             audit emission/persistence
-  core/observability_store.py      local SQLite persistence
-  api/main.py:23                   caller-provided user_id
-  docs/SETUP.md:70-106             database bootstrap/seed caveats
+  apps/fraud/identity.py — TRUSTED_ACTORS and DEFAULT_ACTOR
+  apps/fraud/policy.py:6-29 — FraudPolicy
+  apps/fraud/investigation.py:20-27, :115-127 — authorization
+  core/policy/default.py — DefaultPolicy
+  core/contracts/evidence.py — EvidenceSet bounds/redaction
+  api/main.py:23-26, :90-131 — caller-provided user_id and audit events
+  core/audit_logger.py; core/observability_store.py — local audit persistence
+  docs/SETUP.md:70-106 — database bootstrap instructions
 
 RECOMMENDATION
-- Keep the demo loopback-only, use synthetic fixture data and isolated fresh
-  databases if real services are ever used. Do not use customer data or treat
-  request-supplied user_id as authenticated identity.
+- Keep any future demo local/loopback-only and synthetic. Do not send customer
+  or production records. Do not treat caller-supplied user_id as proof of
+  identity. Use fresh isolated local databases if the real composition is
+  later approved; do not run seed scripts against existing data.
 
-8. Tests and historical verification
-------------------------------------
+8. Tests and validation status
+------------------------------
 CONFIRMED: TESTS THAT EXIST
 - API route serialization, redaction, request validation, and error handling:
   tests/unit/test_api.py and tests/integration/test_api_operational_readiness.py.
-- Fraud workflow, synthetic demo composition, actor authorization, categorical
-  result, evidence, and RAG routing:
+- Fraud workflow, synthetic demo, actor authorization, evidence, categorical
+  output and RAG routing:
   tests/unit/test_fraud_workflow.py, tests/unit/test_demo_fixtures.py,
-  tests/unit/test_fraud_rag.py, tests/unit/test_fraud_presentation_and_failure.py.
-- Separate live database/provider tests also exist under tests/live/.
-- CI runs Python 3.11, `python -m pytest`, and `python -m evaluation`, using
-  MODEL_PROVIDER=fake for deterministic validation.
+  tests/unit/test_fraud_rag.py, and
+  tests/unit/test_fraud_presentation_and_failure.py.
+- Separate live database/provider tests exist under tests/live/.
+- CI specifies Python 3.11, `python -m pytest`, and `python -m evaluation`
+  with MODEL_PROVIDER=fake for deterministic validation.
 
 CONFIRMED: COVERAGE GAP
-- API tests inject stub agents; fraud tests separately invoke the demo agent
-  or workflow. The inspected tests do not integrate FastAPI's API route with
-  create_demo_agent() or prove that POST /api/v1/agent/run reaches
-  FraudInvestigationWorkflow.
+- API tests use stub agents; fraud tests separately invoke the demo/workflow.
+  No inspected test integrates the API route with create_demo_agent() to prove
+  that POST /api/v1/agent/run invokes FraudInvestigationWorkflow.
 
-HISTORICAL RESULTS ONLY
-- docs/history/FINAL_VERIFICATION_REPORT.md reports:
-  - 7/7 task-ID-preservation regression tests passed.
-  - 8/8 multi-task failure tests passed.
-  - 4/4 live smoke tests passed.
-  - 19/19 custom tests passed.
-  - Evaluation 43/44 (97.73%), with a reported pre-existing
-    session-isolation failure.
-- These are checked-in historical claims for an earlier reported fix; they
-  are not verification of the current commit or this demo setup.
+HISTORICAL
+- docs/history/FINAL_VERIFICATION_REPORT.md reports 7/7 task-ID-preservation
+  regression tests, 8/8 multi-task failure tests, 4/4 live smoke tests, and
+  19/19 custom tests passing; it also reports evaluation 43/44 (97.73%) with
+  one pre-existing session-isolation failure.
+- These are historical report claims and do not validate the current commit,
+  the dependency set, or this demo on the target laptop.
 
-TESTS RUN DURING AUDITS
-- None. Both audits were read-only and did not execute tests, evaluation
-  scripts, application code, or services.
+ACTUALLY RUN DURING AUDITS
+- No tests, evaluation commands, application code, dependency checks that
+  execute Python, or services were run in either audit.
 
-9. Blockers, unresolved questions and proposed next step
---------------------------------------------------------
-BLOCKERS BEFORE A RELIABLE HTTP FRAUD DEMO
-1. POST /api/v1/agent/run constructs the generic composition, not the
-   synthetic fraud demo or real fraud composition.
-2. Request workflow/agent/delegations fields are not forwarded by the route.
-3. No API-to-fraud integration test proves intended HTTP behavior.
-4. Uvicorn, required by the documented startup command, is absent from both
-   dependency manifests; NumPy is imported directly but not explicitly pinned.
-5. Fake provider does not prevent RAG embedding downloads if retrieval is
-   invoked; RAG initialization needs to be considered for an offline demo.
-6. API identity is unauthenticated and caller-controlled user_id must not be
-   trusted for a real deployment.
+9. Blockers, unknowns, and recommended next step
+------------------------------------------------
+BLOCKERS BEFORE AN HTTP FRAUD DEMO
+1. POST /api/v1/agent/run constructs the generic agent, not the synthetic
+   fraud-demo agent; its optional workflow field is not forwarded.
+2. No API-to-fraud integration test proves the desired endpoint behavior.
+3. Uvicorn is absent from the dependency manifests used by the documented
+   API startup command.
+4. NumPy is imported directly but not explicitly pinned; no minimal runtime
+   manifest exists.
+5. Neo4j package construction is conditional on NEO4J_URI in generic
+   composition, even though the demo replaces its graph registry afterward.
+6. API user identity is unauthenticated and caller-controlled.
+7. RAG retrieval may require downloading BAAI/bge-small-en-v1.5. Fake provider
+   alone does not avoid this. FAISS/NumPy imports remain eager even without
+   retrieval.
 
 UNRESOLVED
-- Which fraud composition the demo endpoint should use: synthetic demo or real
-  local Neo4j/MySQL.
-- Whether Phi-3 and its Ollama runtime/model are available or approved on the
-  target laptop. Actual .env and process settings remain intentionally
-  uninspected.
-- Whether Python 3.11, package installation, network/model caches, memory,
-  disk, service ports, and local database services are available on the
-  company laptop.
-- Whether another branch, commit or repository contains the intended API
-  integration.
+- Whether the endpoint should use synthetic demo or real local Neo4j/MySQL.
+- Whether Phi-3/Ollama are required for the intended demo or are installed,
+  cached, and approved.
+- Laptop Python/package compatibility, installation permissions, download
+  policy, memory/disk availability, and service/port policy.
+- Whether another branch, commit, or repository was intended.
+- Whether the direct synthetic demo works on the target laptop. It was not run.
 
-SAFEST MINIMAL SYNTHETIC DEMO PATH
-- Use the existing apps.fraud.demo.create_demo_agent() context manager
-  directly with MODEL_PROVIDER=fake (or with MODEL_PROVIDER absent, for which
-  the factory defaults to fake), then call
-  agent.run("Investigate C1001", user_id="investigator").
-- This path uses in-memory graphs and a temporary SQLite fixture without
-  Ollama, Neo4j or MySQL. Keep requests to operational fraud workflow queries
-  to avoid triggering RAG embedding initialization. This is a direct local
-  code path, not the current FastAPI endpoint.
-- If an HTTP demo is required, do not claim the current API endpoint serves
-  fraud workflow until its composition is explicitly integrated and verified.
+SAFEST MINIMAL SYNTHETIC DEMO PATH — RECOMMENDATION
+- Invoke apps.fraud.demo.create_demo_agent() directly, explicitly select
+  MODEL_PROVIDER=fake, and call
+  agent.run("Investigate C1001", user_id="investigator") inside the context.
+- Ensure no nonempty NEO4J_URI reaches core.composition.create_agent(), since
+  that generic composition can construct a Neo4j adapter before the demo
+  installs synthetic graphs.
+- Keep requests to operational fraud workflow types to avoid RAG embedding
+  initialization. Account for the local observability SQLite write on the
+  first audit event. This is a direct local path, not the current HTTP API.
+- The proposed minimal direct-call dependencies are python-dotenv==1.1.1,
+  faiss-cpu==1.15.0, and an explicitly chosen compatible NumPy version;
+  this set is static analysis only and has not been installed or validated.
 
-PROPOSED MINIMAL PATCH (PLAIN ENGLISH; NOT IMPLEMENTED)
-- Add an explicit synthetic-fraud API mode that uses the existing demo
-  composition and correctly manages its temporary-resource context for the
-  application lifetime. Preserve generic API behavior as a separate explicit
-  option; do not silently substitute a provider or database.
-- Define how the API supplies a trusted actor rather than trusting caller-
-  provided user_id. Keep real Neo4j/MySQL composition separate and opt-in.
-- Add Uvicorn to the reviewed runtime dependency declarations and declare
-  NumPy explicitly if required by the chosen installation policy.
-- Add a focused integration test proving the API endpoint executes a
-  synthetic fraud workflow without initializing the embedding model for an
-  operational investigation.
-- Document that general RAG queries may require the BGE embedding asset, and
-  that the API is local-demo-only unless authentication and company controls
-  are supplied.
+PROPOSED MINIMAL PATCH — NOT IMPLEMENTED
+- Add an explicit synthetic-fraud API composition with lifecycle-safe
+  management of create_demo_agent()'s context and temporary resources; keep
+  generic and real Neo4j/MySQL compositions explicit and separate.
+- Establish a trusted actor source instead of trusting request user_id.
+- Add Uvicorn and an explicit compatible NumPy pin to an approved runtime
+  dependency strategy; consider a dedicated minimal-runtime manifest rather
+  than installing the training/ML stack for this demo.
+- Add an API-to-synthetic-fraud integration test proving an operational
+  investigation avoids RAG embedding initialization.
+- Document that general RAG retrieval may need the BGE model download and that
+  the unauthenticated API is not suitable for real customer data.
 
-No patch has been applied. Awaiting explicit approval before any setup or code
-changes.
+No implementation or environment setup has been performed. Await explicit
+approval before changing source, tests, dependencies, configuration, or
+installing anything.
