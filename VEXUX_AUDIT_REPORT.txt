@@ -6,11 +6,13 @@ Scope and evidence labels
 This report consolidates previous repository, architecture, dependency,
 security, API, and Python-version audits; the company-laptop virtual
 environment milestone; the user-reported successful synthetic C1001
-investigation; and static fixture/test analysis for other demo customers.
-Python 3.12.4 and pip availability were verified inside the approved
-repository `.venv`. The C1001 application run was reported by the user; no
-additional investigations or tests were run for this report. No `.env`
-contents, secrets, or real/customer data were inspected or used.
+investigation; static fixture/test analysis for other demo customers; and a
+read-only provider/RAG compatibility review for a hypothetical
+enterprise-approved model service. Python 3.12.4 and pip availability were
+verified inside the approved repository `.venv`. The C1001 application run
+was reported by the user; no further application run or tests were performed
+for this report. No `.env` contents, secrets, network calls, or real/customer
+data were accessed.
 
 CONFIRMED       Observed in repository source/docs/manifests/Git output.
 USER-SUPPLIED   Runtime result supplied by the user; not rerun here.
@@ -35,6 +37,9 @@ Change summary from the previous report
 - Recorded the user-reported successful synthetic C1001 investigation.
 - Added static inventory of demo customer IDs, expected fixture evidence and
   risk outcomes, and the degree of coverage in existing tests.
+- Added provider-contract and RAG-embedding integration findings for a
+  hypothetical company-approved internal service; no vendor or service is
+  assumed approved or available.
 - Preserved prior architecture, provider, API, RAG, security, dependency,
   setup, and test-history findings.
 
@@ -42,7 +47,7 @@ Change summary from the previous report
 ----------------------------
 CONFIRMED at report refresh
 - Repository branch: prod.
-- Current commit: 20bdb35f41985cc1fcde159b733634a157214626.
+- Current commit: 580ae96d1e076acefbf650b25904082e155d729a.
 - Before this report was refreshed, `git status --short --branch` showed
   `## prod...origin/prod` with no tracked or untracked changes.
 - This is a Python Vexux AI project with agent orchestration, fraud workflow,
@@ -669,13 +674,154 @@ RECOMMENDATION
 - Wait for explicit user approval before running additional cases or tests,
   or changing the environment.
 
+13. Enterprise-approved model service compatibility
+----------------------------------------------------
+CONFIRMED: current provider seam
+- `core.contracts.capabilities.ModelProviderContract` is a structural
+  Protocol requiring a `name` property and
+  `generate(prompt, response_format=None, **kwargs) -> str`.
+- `ModelGateway` accepts that provider, forwards prompt and generation
+  kwargs, returns the provider's string, logs success/failure metrics and
+  re-raises failures. `provider_metadata()` allowlists provider, model,
+  runtime_mode, host, and adapter_path fields; implementations should not
+  put credentials, tokens, or sensitive endpoint details in metadata.
+- `core.composition.create_agent()` explicitly maps a fixed set of provider
+  names to implementations. `core.config.SUPPORTED_MODEL_PROVIDERS` also
+  explicitly limits values to fake, ollama, mistral, and qwen. There is no
+  provider-plugin discovery mechanism or generic HTTP provider configuration.
+- Ollama is lazy-client based; Mistral wraps a chat-completions client;
+  Qwen loads its local ML stack at provider construction. All adapt their
+  request/response format to the same synchronous string-returning contract.
+
+FEASIBILITY — INFERENCE FROM THE SEAM
+- An internally approved HTTP model gateway could be implemented as another
+  `ModelProviderContract` implementation and passed to the existing
+  `ModelGateway`. The fraud investigation/scoring code need not change just
+  to swap text-generation providers: `FraudInvestigationService.build_result`
+  computes categorical risk from retrieved deterministic signals, rather
+  than asking the provider to score risk.
+- To select it through normal app composition, implementation would still
+  need a new supported provider identifier, configuration fields, and a
+  construction branch in `core.composition.create_agent()` (or another
+  explicitly injected provider in the composition root). The existing
+  contract alone does not make an unregistered provider selectable.
+- The provider must map prompts, response-format requests (including JSON
+  where requested), and generation kwargs to the approved gateway's actual
+  protocol; validate response shape and text; apply bounded timeouts and
+  clear error handling; and avoid logging prompt bodies, credentials, or
+  confidential payloads. Compatibility with any actual internal API is
+  unknown until its approved contract is supplied and reviewed.
+
+INTERNAL HTTP GATEWAY REQUIREMENTS — RECOMMENDATION, NOT VERIFIED
+- Obtain the company's approved endpoint, protocol/schema, model identifier,
+  authentication mechanism, TLS/certificate/proxy requirements, timeout and
+  rate-limit policy, and data-handling classification through approved
+  internal documentation. None is known from this repository review.
+- Store any required credentials only through the approved secret mechanism;
+  never put them in source, report text, logs, provider metadata, or command
+  output. Do not send customer or production information unless explicitly
+  authorized by company policy.
+- Add focused provider tests using a mocked HTTP client: request mapping,
+  string/JSON response handling, malformed/non-text response errors,
+  timeout/network failures, redaction-safe diagnostics, and metadata
+  allowlisting. Add composition/config tests proving explicit provider
+  selection and rejection of unknown names. Do not silently fall back on
+  remote failures.
+- Existing model-provider tests cover fake, Ollama, Mistral, and provider
+  diagnostics, but no internal HTTP provider exists or is tested.
+
+FAKE PROVIDER AS DETERMINISTIC OPTION
+- `FakeProvider` remains usable independently of local or remote model
+  availability and satisfies the same minimal provider shape. It provides
+  deterministic intent/planning/delegation examples and a generic
+  `FAKE_RESPONSE` for ordinary prompts; it is not semantically equivalent
+  to a production LLM.
+- The fake provider is selected explicitly via `MODEL_PROVIDER=fake`.
+  `create_demo_agent()` supplies fake only when MODEL_PROVIDER is absent and
+  preserves an explicit setting. There is no automatic failover from an
+  unavailable enterprise provider to fake. This is appropriate: automatic
+  fake fallback could make a real generation failure look successful or
+  silently change demo semantics.
+- Fake can remain the offline deterministic test/demo mode; if a fallback is
+  desired, make the mode visible and explicit, preserve the original
+  provider failure in the trace/log, and obtain approval for that behavior.
+
+RAG EMBEDDING COMPATIBILITY
+- Current `rag.Embedder` lazily imports `SentenceTransformer` and defaults to
+  `BAAI/bge-small-en-v1.5`. `RAGPipeline` accepts an optional embedder object
+  with `encode(texts)` and validates that document embeddings are a 2-D
+  matrix with one row per chunk. `Retriever` uses the same embedder to encode
+  queries. A custom approved remote/local adapter could satisfy this
+  duck-typed behavior without changing fraud scoring.
+- The standard `core.composition.create_agent()` currently constructs
+  `RAGPipeline` without passing an embedder, so the default Sentence
+  Transformers path is used if retrieval initializes. No setting for an
+  approved embedding endpoint or local asset directory exists in inspected
+  configuration.
+- A company-approved embedding service would require a separately approved
+  endpoint/protocol and explicit injection/wiring into RAG composition. It
+  would need to embed both corpus chunks and queries in the same vector
+  space, preserve dimensions and normalization/metric expectations, and
+  receive only documents/query data authorized for that service.
+- A pre-approved local model may be usable by supplying a local model path
+  to SentenceTransformer-compatible loading, but this code does not enforce
+  local-only loading or demonstrate a bundled/cache-ready asset. Verify
+  approved asset provenance and prevent unapproved downloads before use.
+- Even with remote embeddings, current retrieval still uses in-process FAISS
+  and NumPy (`rag.vectorstore`); replacing those with a hosted vector service
+  is a separate adapter/design change. `FakeProvider` generates text and
+  cannot substitute for embedding vectors.
+- RAG tests demonstrate embedder injection, including deterministic lexical
+  embeddings, but no approved enterprise embedding provider or local-asset
+  policy is implemented or verified.
+
+UNKNOWN / NOT ASSUMED
+- Whether any enterprise-approved HTTP model or embedding service exists,
+  which protocols or models it supports, whether this laptop can reach it,
+  and what authorization/data policy applies.
+- Whether external Azure/OpenAI/Mistral services or any other vendor is
+  approved. This report does not recommend or assume any vendor.
+- Whether approved model/embedding assets are already present locally or can
+  be provisioned by company IT without network download.
+- No HTTP calls, credentials, provider code, or tests were used to validate
+  this possibility.
+
+References:
+  core/contracts/capabilities.py — ModelProviderContract
+  core/model_gateway/gateway.py — ModelGateway.generate, provider_metadata
+  core/config.py — SUPPORTED_MODEL_PROVIDERS, Config, load_config_from_env
+  core/composition.py — create_agent provider selection and gateway wiring
+  models/providers/fake.py — deterministic FakeProvider
+  models/providers/ollama.py; models/providers/mistral.py; models/providers/qwen.py
+  apps/fraud/investigation.py — FraudInvestigationService.build_result
+  rag/embedder.py — Embedder._ensure_model, encode
+  rag/pipeline.py — RAGPipeline.__init__, _ensure_initialized, initialize
+  rag/retriever.py — Retriever.retrieve
+  rag/vectorstore.py — FAISS/NumPy vector storage
+  tests/unit/test_fake_provider.py
+  tests/unit/test_ollama_provider.py
+  tests/unit/test_mistral_provider.py
+  tests/unit/test_provider_diagnostics.py
+  tests/unit/test_model_gateway_portability.py
+  tests/unit/test_fraud_rag.py — injected deterministic lexical embedder
+
+RECOMMENDED NEXT STEP — NO IMPLEMENTATION
+- Ask the appropriate internal platform/security team for the approved
+  inference and embedding service contracts, if such services are available.
+  Then design a contract-conforming provider plus explicit config/composition
+  wiring and focused mock-based tests. Keep fake selectable as an explicit
+  deterministic mode; do not silently fail over. Treat RAG embedding
+  integration and model-generation integration as separate changes.
+- Wait for approval before implementation or any network/service validation.
+
 Verification note
 -----------------
 The existing report was read and updated in place. The company-laptop
 milestones and C1001 result are recorded as user-reported verified; this
 refresh independently checked branch `prod`, commit
-20bdb35f41985cc1fcde159b733634a157214626, and the clean pre-edit worktree.
-Fixture analysis was static. Only VEXUX_AUDIT_REPORT.txt was modified. No
-dependencies were installed, additional investigations or tests run,
-services started, or models downloaded during this update. Nothing was
-staged, committed, or pushed.
+580ae96d1e076acefbf650b25904082e155d729a, and the clean pre-edit worktree.
+Fixture and provider compatibility analysis was static. Only
+VEXUX_AUDIT_REPORT.txt was modified. No dependencies were installed,
+additional investigations or tests run, network calls made, services
+started, or models downloaded during this update. Nothing was staged,
+committed, or pushed.
