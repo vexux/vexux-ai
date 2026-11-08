@@ -3,49 +3,63 @@ Consolidated current report and deferred setup checklist
 
 Scope and evidence labels
 ------------------------
-This report consolidates previous read-only repository, architecture,
-dependency, security, API, and Python-version audits, plus the requested
-next-step checklist. No application code or tests were run; no packages or
-runtimes were installed; no virtual environment was created; no services
-were started; no model was downloaded; and no .env contents or secrets were
-inspected. No production/customer data was accessed.
+This report consolidates previous repository, architecture, dependency,
+security, API, and Python-version audits, the deferred setup checklist, and
+the company-laptop virtual-environment milestone. Python 3.12.4 and pip
+availability were verified inside the approved repository `.venv`; no
+project dependencies were installed. No application code or tests were run,
+no services were started, no model or external asset was downloaded, and no
+.env contents or secrets were inspected. No production/customer data was
+accessed.
 
 CONFIRMED       Observed in repository source/docs/manifests/Git output.
 USER-SUPPLIED   Terminal result supplied by the user; not rerun here.
+VERIFIED SETUP  Company-laptop setup milestone reported as completed and
+                verified by the user; no project execution implied.
 INFERENCE       Reasoned from source, not a runtime test.
 UNKNOWN         Not established or tested.
 HISTORICAL      Reported by older checked-in verification material.
 RECOMMENDATION  Proposed action only; not executed.
-DEFERRED        Command or step is for a later explicitly approved setup.
+DEFERRED        Command or step is for later explicit approval.
 
 Change summary from the previous report
 ----------------------------------------
-- Added a staged Windows setup checklist, separating read-only inspection
-  from commands that create an environment, install packages, or run the demo.
-- Added interpreter verification, package-pin inspection, process-scoped
-  fake-provider/Neo4j safeguards, the planned direct synthetic invocation,
-  result checks, and narrowly scoped .venv rollback guidance.
-- Rechecked Git state before refreshing this report: branch prod, commit
-  18e9a065675a61d9039945673211cd8ef060d6db, clean tracked working tree.
+- Added the company-approved Python 3.12.4 setup milestone: `.venv` was
+  created with the Python launcher, and its interpreter path/version and pip
+  availability were verified.
+- Corrected the previous report's prospective/no-venv checklist: `.venv`
+  now exists, while `venv` was absent before creation. Dependency install,
+  application execution, tests, and model downloads remain unperformed.
+- Updated the Git branch and commit from the current Git inspection.
 - Preserved prior architecture, provider, API, RAG, security, dependency,
-  Python-installation, and test-history findings.
+  setup, and test-history findings.
 
 1. Repository and Git status
 ----------------------------
 CONFIRMED at report refresh
 - Repository branch: prod.
-- Current commit: 18e9a065675a61d9039945673211cd8ef060d6db.
+- Current commit: 57321badc098f42d3d756603c95a8b2da46ab6b5.
 - Before this report was refreshed, `git status --short --branch` showed
   `## prod...origin/prod` with no tracked or untracked changes.
 - This is a Python Vexux AI project with agent orchestration, fraud workflow,
   RAG, providers, database adapters, FastAPI, and training modules.
 
-USER-SUPPLIED terminal results (not rerun)
-- `python` selected Python 3.12.4.
-- The Python launcher lists Python 3.12 and 3.13.
-- No existing `.venv` or `venv` directory was found.
-- The user reports branch prod; this was independently confirmed at the
-  previous and current report refreshes.
+VERIFIED SETUP MILESTONE (user-reported as verified)
+- Python 3.12.4 was selected with company permission.
+- `.venv` was created using `py -3.12 -m venv .venv`.
+- `.venv\Scripts\python.exe` reported Python 3.12.4; `sys.executable` was
+  verified to point inside this repository's `.venv`.
+- pip 24.0 is available inside the environment.
+- `.venv` and `venv` did not exist before the new `.venv` was created.
+- No project dependencies have been installed. No application code or tests
+  have been executed. No models or external assets have been downloaded.
+- These setup results were supplied as verified results; they were not
+  independently rerun during this report refresh.
+
+Earlier terminal result, now superseded:
+- The Python launcher had listed Python 3.12 and 3.13; Python 3.12.4 is now
+  selected in the project virtual environment. No claim is made about
+  Python 3.13 compatibility.
 
 UNKNOWN
 - Whether this checkout is the exact intended final demo implementation or
@@ -72,18 +86,18 @@ WHY PYTHON 3.11 IS PREFERRED
   configuration. This is a conservative alignment recommendation, not proof
   that 3.12 is incompatible.
 
-APPROVED INSTALLATION MECHANISM
+APPROVED RUNTIME
 - Confirmed: repository setup instructions describe creating a virtual
   environment and installing Python packages, but do not document a
   company-approved method for installing Python itself.
-- User-supplied: the Python launcher currently lists 3.12 and 3.13; Python
-  3.11 was not reported among installed launcher versions.
+- Verified setup milestone: Python 3.12.4 was selected with company
+  permission and used to create the repository `.venv`.
 - Unknown: whether the company offers Software Center, managed package
   deployment, an internal Python distribution, an approved package manager,
-  or another way to request Python 3.11. No such tool or permission is
-  evidenced by the information supplied.
+  or another way to request Python 3.11. No such mechanism for 3.11 is
+  established by the information supplied.
 
-RECOMMENDATION IF IT APPROVAL IS REQUIRED
+RECOMMENDATION IF PYTHON 3.11 IS DESIRED
 - Ask company IT/software support for an approved, managed Python 3.11
   installation (or approved portable/runtime distribution) suitable for this
   project. Explain that repository CI and primary setup target Python 3.11;
@@ -95,20 +109,20 @@ PYTHON 3.12.4 ALTERNATIVE
 - Source syntax inspected previously uses Python 3.10+ features, including
   PEP 604 unions and built-in generic annotations; these are valid in 3.12.
 - No definite Python 3.12 source incompatibility was found in that static
-  inspection. Python 3.12.4 remains a reasonable candidate for the narrowly
-  scoped direct synthetic demo if company policy permits it.
-- This is not verified runtime compatibility. Dependency resolution,
-  Windows wheel availability, package-mirror support, imports, and execution
-  on 3.12.4 have not been tested. Full ML dependencies may have different
-  constraints.
+  inspection. Python 3.12.4 is now the company-permitted selected runtime.
+- The interpreter version, executable location, and pip availability were
+  verified; project dependency resolution, imports, and application
+  execution remain untested. This is not verified project compatibility.
+  Full ML dependencies may have different constraints.
 - Do not treat Python 3.13 being listed by the launcher as evidence that the
   repo supports it; repository evidence targets 3.11 and mentions 3.10.
 
 UNKNOWN
-- Whether IT can provide 3.11, how long approval may take, whether supplied
-  Python 3.12.4 is company-approved, or whether the approved package source
+- Whether IT can provide 3.11 or whether the approved package source
   supports needed Windows wheels.
-- No runtime compatibility has been tested on 3.11, 3.12, or 3.13.
+- Project dependency compatibility and application runtime behavior have
+  not been tested under Python 3.12.4.
+- No runtime compatibility has been tested on 3.11 or 3.13.
 
 References:
   .github/workflows/ci.yml — Python 3.11 CI jobs
@@ -350,8 +364,10 @@ HISTORICAL
 ACTUALLY RUN
 - No application code, tests, evaluation commands, Python compatibility
   checks, package checks that execute Python, or services were run during
-  these audits. Python launcher/version facts are user-supplied terminal
-  results, not tests run by this audit.
+  these audits. The reported Python version, executable path, and pip
+  availability checks verify the virtual environment only; they do not
+  test project compatibility. Those setup checks were reported as verified
+  by the user and were not rerun during this report refresh.
 
 9. Blockers, unresolved items, and recommended next step
 --------------------------------------------------------
@@ -367,45 +383,38 @@ BLOCKERS BEFORE AN HTTP FRAUD DEMO
 7. RAG retrieval may download BGE; fake alone does not prevent that.
 
 PYTHON / COMPANY INSTALLATION RECOMMENDATION
-- Preferred: request or use Python 3.11 through the company's approved
-  software installation/request process because it matches CI and the primary
-  setup target.
-- The information provided does not show that Python 3.11 is available via
-  an approved company tool or that the user has permission. Availability
-  remains UNKNOWN.
-- If IT approval is required, submit a request to company IT/software
-  support for a managed Python 3.11 runtime and approved package source.
-  Do not bypass controls or install from an unapproved source.
-- Python 3.12.4 remains a reasonable candidate for the narrowly scoped
-  direct synthetic demo if company policy permits it; it is not verified.
+- Python 3.12.4 has now been selected with company permission and verified
+  inside this repository's `.venv`.
+- Python 3.11 remains the repository-aligned alternative because CI and
+  primary setup target it, but no approved 3.11 installation method is known.
+- Do not bypass controls or install a different runtime from an unapproved
+  source.
 - Do not choose Python 3.13 based only on it appearing in the launcher.
 
 UNRESOLVED
-- Whether IT can provide Python 3.11 and whether Python 3.12.4 is approved.
+- Whether IT can provide Python 3.11 and whether the approved package source
+  supports the needed Windows wheels.
 - Whether needed dependency wheels/packages are available from the company
   source and compatible with the laptop's Windows/Python version.
 - Laptop capacity, network, caches, permissions, service and port restrictions.
 - Whether the HTTP demo should use synthetic resources or real Neo4j/MySQL.
 - Whether another branch/repository contains intended API integration.
-- Whether the synthetic demo works on the laptop; it was not run.
+- Whether dependency installation and the synthetic demo work on this laptop;
+  neither has been attempted.
 
-10. Deferred next-step checklist — do not execute without approval
------------------------------------------------------------------
-The following is a plan only. No setup, package resolution, project
-invocation, or rollback command below was run while refreshing this report.
-Obtain explicit approval for runtime selection and execution before proceeding.
+10. Next-step checklist — dependencies and demo still deferred
+--------------------------------------------------------------
+The Python runtime and isolated virtual environment have been created and
+verified as described above. The remaining package resolution/installation
+and project invocation are recommendations only and require explicit
+approval. No such package or project commands were run for this report.
 
 A. Approved-runtime decision
 ----------------------------
-1. Preferred runtime: company-approved Python 3.11, because CI and primary
-   setup documentation target 3.11.
-2. Alternative: existing Python 3.12.4 only if company policy explicitly
-   permits it for this work. Static inspection found no specific source
-   incompatibility, but there is no runtime/dependency verification.
+1. The selected runtime is company-permitted Python 3.12.4 in `.venv`.
+2. Python 3.11 remains the CI/documentation-aligned choice if a future
+   runtime change is desired and can be made through an approved process.
 3. Do not select Python 3.13 based on launcher availability alone.
-4. If 3.11 is not already available, ask IT/software support for managed
-   installation and approved package-source guidance. Do not install Python
-   independently or bypass endpoint controls.
 
 B. Read-only inspection commands
 ---------------------------------
@@ -427,32 +436,19 @@ copy pip configuration if it could contain credentials or internal URLs.
 The source and permissions are UNKNOWN. Never use `Get-Content .env`,
 `type .env`, environment dumps, or commands that print secret-bearing values.
 
-C. Deferred environment creation and interpreter verification
---------------------------------------------------------------
-Only after the runtime is approved and the read-only checks confirm that
-`.venv` does not already exist, choose ONE matching creation command:
+C. Verified virtual-environment milestone
+-----------------------------------------
+CONFIRMED AS USER-REPORTED VERIFIED SETUP:
+- Before creation, neither `.venv` nor `venv` existed.
+- The environment was created with:
 
-  py -3.11 -m venv .venv
+    py -3.12 -m venv .venv
 
-Use the alternative only if Python 3.12.4 is approved:
-
-  py -3.12 -m venv .venv
-
-If the approved runtime is not registered with `py`, use the exact
-IT-provided interpreter path instead, e.g.:
-
-  & 'C:\approved\path\to\python.exe' -m venv .venv
-
-The path above is an illustrative placeholder, not a verified laptop path.
-Do not run both creation commands. After creating the venv, verify its
-interpreter explicitly (do not rely on shell activation/PATH):
-
-  .\.venv\Scripts\python.exe --version
-  .\.venv\Scripts\python.exe -c "import sys; print(sys.executable)"
-
-Expected: version matches the approved choice and `sys.executable` points
-inside this repository's `.venv\Scripts\python.exe`. These verification
-commands are deferred; they were not run in this audit.
+- `.venv\Scripts\python.exe` was verified as Python 3.12.4.
+- `sys.executable` was verified to point inside this repository's `.venv`.
+- pip 24.0 was verified available inside the environment.
+- No dependencies were installed as part of this milestone. These checks do
+  not verify project imports or runtime compatibility.
 
 D. Deferred minimal dependency resolution/installation
 ------------------------------------------------------
@@ -530,14 +526,14 @@ been observed on this laptop.
 
 F. Deferred rollback and remaining side effects
 -----------------------------------------------
-Rollback only the newly created repository `.venv`, and only after verifying
-that it is the environment created for this checklist (never remove a
-pre-existing directory). First inspect:
+If rollback is later explicitly authorized, first verify that the repository
+`.venv` is the environment created in this reported milestone; never remove
+a pre-existing or different environment. First inspect:
 
   Test-Path -LiteralPath '.\.venv'
 
-If and only if this checklist created that exact `.venv`, the targeted
-PowerShell removal command is:
+If and only if the target is confirmed to be this newly created `.venv`, the
+targeted PowerShell removal command is:
 
   Remove-Item -LiteralPath '.\.venv' -Recurse -Confirm
 
@@ -550,8 +546,9 @@ delete those automatically; inspect and obtain approval before cleanup.
 11. Safest path and final recommendation
 ----------------------------------------
 RECOMMENDATION
-- For the narrow synthetic demo, prefer approved Python 3.11; use approved
-  Python 3.12.4 only if company policy allows it.
+- The approved Python 3.12.4 `.venv` is already created and interpreter
+  verified. Python 3.11 remains the repository-aligned option, but changing
+  runtimes is not necessary for the current next step.
 - Resolve only FAISS CPU, python-dotenv, and a compatible NumPy through the
   company-approved package source. Do not install the broad ML/training
   requirements.
@@ -560,14 +557,15 @@ RECOMMENDATION
   investigation query. Do not invoke RAG retrieval.
 - Do not rely on POST /api/v1/agent/run to reach the fraud workflow until its
   composition/wiring is changed and an integration test is added.
-- No setup or execution is approved or performed by this report. Wait for
-  explicit user approval before creating `.venv`, resolving/installing
-  packages, or running the synthetic demo.
+- The runtime setup milestone is complete. Wait for explicit user approval
+  before resolving/installing dependencies or running the synthetic demo.
 
 Verification note
 -----------------
-At the start of this report refresh, the existing report was read and Git
-state was checked. This report was then replaced in place. The only intended
-file change is VEXUX_AUDIT_REPORT.txt. No files were staged, committed, or
-pushed. No application code, tests, setup commands, installers, services, or
-model downloads were run.
+The existing report was read and updated in place. The company-laptop
+milestone is recorded as user-reported verified; this refresh independently
+checked branch `prod`, commit 57321badc098f42d3d756603c95a8b2da46ab6b5, and
+the clean pre-edit worktree. Only VEXUX_AUDIT_REPORT.txt was modified. No
+dependencies were installed; no application code or tests were run; no
+services or model downloads were started. Nothing was staged, committed, or
+pushed.
