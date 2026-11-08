@@ -1,42 +1,42 @@
 VEXUX AI — COMPANY-LAPTOP SYNTHETIC DEMO AUDIT
-Consolidated current report
+Consolidated current report and deferred setup checklist
 
 Scope and evidence labels
 ------------------------
 This report consolidates previous read-only repository, architecture,
-dependency, security, API, and Python-version audits with the current review
-of Python 3.11 availability. No application code or tests were run; no
-packages or runtimes were installed; no virtual environment was created; no
-services were started; no model was downloaded; and no .env contents or
-secrets were inspected. No production/customer data was accessed.
+dependency, security, API, and Python-version audits, plus the requested
+next-step checklist. No application code or tests were run; no packages or
+runtimes were installed; no virtual environment was created; no services
+were started; no model was downloaded; and no .env contents or secrets were
+inspected. No production/customer data was accessed.
 
 CONFIRMED       Observed in repository source/docs/manifests/Git output.
 USER-SUPPLIED   Terminal result supplied by the user; not rerun here.
 INFERENCE       Reasoned from source, not a runtime test.
 UNKNOWN         Not established or tested.
 HISTORICAL      Reported by older checked-in verification material.
-RECOMMENDATION  Proposed action only.
+RECOMMENDATION  Proposed action only; not executed.
+DEFERRED        Command or step is for a later explicitly approved setup.
 
 Change summary from the previous report
 ----------------------------------------
-- Added a review of whether Python 3.11 installation is available through an
-  approved company process. No such availability is established by the
-  repository or terminal facts supplied.
-- Added guidance to request a company-managed Python 3.11 installation via
-  IT/software support if approval is required; do not bypass company controls.
-- Reiterated Python 3.12.4 is a plausible, unverified alternative for a
-  narrow direct synthetic workflow, not demonstrated compatibility.
-- Updated the current Git commit from current Git output.
-- Preserved previous API, fraud workflow, dependency, RAG, security, and test
-  findings, including the conditional Neo4j-construction caveat.
+- Added a staged Windows setup checklist, separating read-only inspection
+  from commands that create an environment, install packages, or run the demo.
+- Added interpreter verification, package-pin inspection, process-scoped
+  fake-provider/Neo4j safeguards, the planned direct synthetic invocation,
+  result checks, and narrowly scoped .venv rollback guidance.
+- Rechecked Git state before refreshing this report: branch prod, commit
+  18e9a065675a61d9039945673211cd8ef060d6db, clean tracked working tree.
+- Preserved prior architecture, provider, API, RAG, security, dependency,
+  Python-installation, and test-history findings.
 
 1. Repository and Git status
 ----------------------------
-CONFIRMED
-- Current branch: prod.
-- Current commit at this report refresh: 680ac04704b8b306af463bf41b9df284202ffa12.
-- Git status before refreshing this report showed a clean tracked working
-  tree on prod tracking origin/prod.
+CONFIRMED at report refresh
+- Repository branch: prod.
+- Current commit: 18e9a065675a61d9039945673211cd8ef060d6db.
+- Before this report was refreshed, `git status --short --branch` showed
+  `## prod...origin/prod` with no tracked or untracked changes.
 - This is a Python Vexux AI project with agent orchestration, fraud workflow,
   RAG, providers, database adapters, FastAPI, and training modules.
 
@@ -44,14 +44,15 @@ USER-SUPPLIED terminal results (not rerun)
 - `python` selected Python 3.12.4.
 - The Python launcher lists Python 3.12 and 3.13.
 - No existing `.venv` or `venv` directory was found.
-- The user reports branch prod; this was independently confirmed.
+- The user reports branch prod; this was independently confirmed at the
+  previous and current report refreshes.
 
 UNKNOWN
 - Whether this checkout is the exact intended final demo implementation or
   another branch/commit/repository was intended.
 - Laptop hardware, available disk/RAM, network/proxy, package approvals,
   administrative rights, service installation rights, and port restrictions.
-- Effective .env and process settings; the file was not inspected.
+- Effective .env and process settings; .env was not inspected.
 
 2. Python version and approved installation availability
 --------------------------------------------------------
@@ -64,14 +65,15 @@ CONFIRMED: repository version guidance
 - No `requires-python`, `python_requires`, packaging metadata, or Python
   3.12 support matrix was found in the repository inspected previously.
 
-WHY 3.11 IS PREFERRED — CONFIRMED / INFERENCE
-- Confirmed: 3.11 is the CI interpreter and primary setup/documentation target.
+WHY PYTHON 3.11 IS PREFERRED
+- Confirmed: 3.11 is the CI interpreter and primary setup/documentation
+  target.
 - Inference: using 3.11 minimizes differences from the repository's tested
   configuration. This is a conservative alignment recommendation, not proof
   that 3.12 is incompatible.
 
 APPROVED INSTALLATION MECHANISM
-- Confirmed: the repository setup instructions describe creating a virtual
+- Confirmed: repository setup instructions describe creating a virtual
   environment and installing Python packages, but do not document a
   company-approved method for installing Python itself.
 - User-supplied: the Python launcher currently lists 3.12 and 3.13; Python
@@ -82,35 +84,31 @@ APPROVED INSTALLATION MECHANISM
   evidenced by the information supplied.
 
 RECOMMENDATION IF IT APPROVAL IS REQUIRED
-- Ask the company IT/software-support team for an approved, managed Python
-  3.11 installation (or approved portable/runtime distribution) suitable for
-  this project. Include the reason: repository CI and primary setup target
-  Python 3.11, and request confirmation of the approved package source and
-  any required PATH/launcher configuration.
+- Ask company IT/software support for an approved, managed Python 3.11
+  installation (or approved portable/runtime distribution) suitable for this
+  project. Explain that repository CI and primary setup target Python 3.11;
+  ask for approved package-source and PATH/launcher guidance.
 - Do not download/install Python independently, use an unapproved package
-  manager, bypass endpoint controls, or change system policy. Follow the
-  company's software-request process.
+  manager, bypass endpoint controls, or change system policy.
 
 PYTHON 3.12.4 ALTERNATIVE
 - Source syntax inspected previously uses Python 3.10+ features, including
   PEP 604 unions and built-in generic annotations; these are valid in 3.12.
 - No definite Python 3.12 source incompatibility was found in that static
-  inspection. Python 3.12.4 therefore remains a reasonable candidate for the
-  narrowly scoped direct synthetic demo if company policy permits it.
+  inspection. Python 3.12.4 remains a reasonable candidate for the narrowly
+  scoped direct synthetic demo if company policy permits it.
 - This is not verified runtime compatibility. Dependency resolution,
   Windows wheel availability, package-mirror support, imports, and execution
   on 3.12.4 have not been tested. Full ML dependencies may have different
-  constraints; they are not necessary for the direct fake-provider workflow
-  under the configuration qualifications below.
+  constraints.
 - Do not treat Python 3.13 being listed by the launcher as evidence that the
-  repo supports it; repository evidence only targets 3.11 and mentions 3.10.
+  repo supports it; repository evidence targets 3.11 and mentions 3.10.
 
 UNKNOWN
-- Whether IT can provide 3.11, how long approval may take, whether the
-  supplied Python 3.12.4 is company-approved for this work, or whether the
-  approved package source supports needed Windows wheels.
-- No runtime compatibility has been tested on 3.11, 3.12, or 3.13 in these
-  audits.
+- Whether IT can provide 3.11, how long approval may take, whether supplied
+  Python 3.12.4 is company-approved, or whether the approved package source
+  supports needed Windows wheels.
+- No runtime compatibility has been tested on 3.11, 3.12, or 3.13.
 
 References:
   .github/workflows/ci.yml — Python 3.11 CI jobs
@@ -120,7 +118,7 @@ References:
   requirements.txt — dependency pins without Python-version markers
 
 3. Architecture, providers, and fraud logic
--------------------------------------------
+--------------------------------------------
 CONFIRMED
 - The documented architecture separates Agent orchestration, Planner,
   ExecutionManager, observation, decisions, context, ModelGateway, tools, and
@@ -186,19 +184,19 @@ References:
 
 5. Minimal synthetic-demo dependencies and RAG
 ----------------------------------------------
-CONFIRMED: direct import/call path
+CONFIRMED: direct import/call path (static source analysis)
 1. Importing `apps.fraud.demo` loads `core.composition` plus fraud workflow,
    investigation, policy, graph and SQL components.
-2. `core.composition` imports `rag.pipeline`; this imports `rag.vectorstore`,
-   which imports FAISS and NumPy at module import time.
+2. `core.composition` imports `rag.pipeline`; this imports
+   `rag.vectorstore`, which imports FAISS and NumPy at module import time.
 3. Calling `create_demo_agent()` selects fake only if MODEL_PROVIDER is absent
-   from the process environment; otherwise it preserves that setting. It then
-   calls `core.composition.create_agent()`.
+   from the process environment; otherwise it preserves that setting. It
+   then calls `core.composition.create_agent()`.
 4. `create_agent()` calls `core.config.get_config()`. `core.config` imports
-   python-dotenv; its loader may read the repository .env at runtime. The file
-   was not inspected.
-5. Fake selects FakeProvider. Ollama/Mistral/Qwen packages are provider paths,
-   not imports needed by the fake branch.
+   python-dotenv; its loader may read the repository .env at runtime. The
+   file was not inspected.
+5. Fake selects FakeProvider. Ollama/Mistral/Qwen packages are provider
+   paths, not imports needed by the fake branch.
 6. Generic composition constructs and registers RAGPipeline but does not
    retrieve documents or call the embedding model at construction time.
 7. Demo composition seeds temporary SQLite, installs synthetic graphs and
@@ -212,12 +210,12 @@ CONFIRMED: smallest defensible direct third-party dependency candidate
 - `numpy`: directly imported by rag.vectorstore, not independently pinned
   in requirements.txt; exact compatible version is unknown.
 - `python-dotenv==1.1.1`: pinned in requirements.txt; imported by core.config.
-- This is static source analysis, not a tested or locked installation recipe.
-  Transitive dependencies, Windows wheels, and successful Python imports are
-  unverified.
+- This is static source analysis, not a tested or locked installation
+  recipe. Transitive dependencies, Windows wheels, and successful Python
+  imports are unverified.
 
-Optional or unnecessary for a direct operational demo, subject to the
-conditional Neo4j note in section 6:
+OPTIONAL OR UNNECESSARY FOR A DIRECT OPERATIONAL DEMO
+(provided fake is selected and Neo4j construction is prevented)
 - Ollama package/service/model if fake is selected.
 - Mistral package/API credentials if Mistral is not selected.
 - Transformers, PEFT, PyTorch, bitsandbytes and related model/training stack.
@@ -240,8 +238,9 @@ CONFIRMED: manifests
   or environment.yml was found.
 - Uvicorn is not declared in either requirements file, though the documented
   API command uses `python -m uvicorn api.main:app ...`.
+- NumPy is directly imported but not explicitly pinned.
 
-CONFIRMED: RAG behavior
+CONFIRMED: RAG behavior and asset risks
 - First RAG retrieval calls `RAGPipeline._ensure_initialized()`, reads local
   documents, embeds using default `BAAI/bge-small-en-v1.5`, and builds an
   in-memory FAISS index. If uncached, first use may need network access to
@@ -285,6 +284,10 @@ RECOMMENDATION
 - For a direct offline synthetic demo, explicitly select fake, ensure the
   effective configuration does not trigger Neo4j construction, and use only
   operational fraud workflow queries to avoid RAG embedding downloads.
+- `.env` must not be printed or inspected to accomplish this. Use
+  process-scoped environment overrides in the future approved demo process;
+  see the deferred checklist below. This does not prevent python-dotenv from
+  loading configuration internally, but it avoids exposing its values.
 
 7. Security, evidence and laptop risks
 --------------------------------------
@@ -342,7 +345,7 @@ HISTORICAL
   tests, 8/8 multi-task failure tests, 4/4 live smoke tests, 19/19 custom
   tests, and evaluation 43/44 (97.73%) with one pre-existing
   session-isolation failure. These claims do not validate the current commit,
-  the laptop, Python 3.12, or the dependency candidate set.
+  laptop, Python 3.12, or the dependency candidate set.
 
 ACTUALLY RUN
 - No application code, tests, evaluation commands, Python compatibility
@@ -368,32 +371,14 @@ PYTHON / COMPANY INSTALLATION RECOMMENDATION
   software installation/request process because it matches CI and the primary
   setup target.
 - The information provided does not show that Python 3.11 is available via
-  an approved company tool or that the user has permission to install it.
-  Availability remains UNKNOWN.
-- If IT approval is required, submit a request to the company's IT/software
-  support channel for a managed Python 3.11 runtime and approved package
-  source. State that repo CI/setup targets 3.11 and ask for the approved
-  installation and launcher/PATH guidance. Do not bypass controls or install
-  from an unapproved source.
-- Python 3.12.4 remains a reasonable candidate for the narrowly scoped direct
-  synthetic demo if company policy permits it: inspected syntax is compatible
-  with Python 3.12 and no specific incompatibility was found. It is not
-  verified; dependency wheels, imports, and execution remain unknown.
+  an approved company tool or that the user has permission. Availability
+  remains UNKNOWN.
+- If IT approval is required, submit a request to company IT/software
+  support for a managed Python 3.11 runtime and approved package source.
+  Do not bypass controls or install from an unapproved source.
+- Python 3.12.4 remains a reasonable candidate for the narrowly scoped
+  direct synthetic demo if company policy permits it; it is not verified.
 - Do not choose Python 3.13 based only on it appearing in the launcher.
-
-SAFEST MINIMAL SYNTHETIC DEMO PATH — RECOMMENDATION
-- Use `apps.fraud.demo.create_demo_agent()` directly with fake provider and
-  call `agent.run("Investigate C1001", user_id="investigator")` inside its
-  context.
-- Avoid a nonempty NEO4J_URI during generic composition. Use operational
-  fraud queries rather than RAG queries. This direct path uses in-memory
-  graphs and temporary SQLite but has not been run on the laptop.
-- It is not the current FastAPI endpoint. Resolve API wiring before relying
-  on HTTP fraud-demo behavior.
-- Candidate direct-call third-party dependencies from static inspection:
-  faiss-cpu==1.15.0, python-dotenv==1.1.1, and an explicitly selected
-  compatible NumPy version. This is not an install recommendation until
-  approved package compatibility is confirmed.
 
 UNRESOLVED
 - Whether IT can provide Python 3.11 and whether Python 3.12.4 is approved.
@@ -404,10 +389,185 @@ UNRESOLVED
 - Whether another branch/repository contains intended API integration.
 - Whether the synthetic demo works on the laptop; it was not run.
 
-PROPOSED NEXT STEP — NO CHANGES MADE
-- Ask IT/software support for managed Python 3.11 availability and approved
-  package-source guidance. If 3.11 is unavailable or approval is delayed,
-  ask whether existing Python 3.12.4 is an approved runtime for this narrowly
-  scoped demo. Only after approval, prepare an isolated environment and
-  validate the minimal dependency set and direct synthetic workflow.
-- Do not install, execute, or modify anything until explicitly approved.
+10. Deferred next-step checklist — do not execute without approval
+-----------------------------------------------------------------
+The following is a plan only. No setup, package resolution, project
+invocation, or rollback command below was run while refreshing this report.
+Obtain explicit approval for runtime selection and execution before proceeding.
+
+A. Approved-runtime decision
+----------------------------
+1. Preferred runtime: company-approved Python 3.11, because CI and primary
+   setup documentation target 3.11.
+2. Alternative: existing Python 3.12.4 only if company policy explicitly
+   permits it for this work. Static inspection found no specific source
+   incompatibility, but there is no runtime/dependency verification.
+3. Do not select Python 3.13 based on launcher availability alone.
+4. If 3.11 is not already available, ask IT/software support for managed
+   installation and approved package-source guidance. Do not install Python
+   independently or bypass endpoint controls.
+
+B. Read-only inspection commands
+---------------------------------
+These commands inspect local state and manifest pins; they do not create an
+environment, install packages, run project code, or read .env:
+
+  git branch --show-current
+  git status --short --branch
+  py -0p
+  python --version
+  Test-Path -LiteralPath '.\.venv'
+  Test-Path -LiteralPath '.\venv'
+  Select-String -Path .\requirements.txt,.\requirements-dev.txt `
+    -Pattern '^(faiss-cpu|numpy|python-dotenv|uvicorn)(==|[<>=~!])'
+
+Use the approved package portal/documentation or ask IT to determine the
+approved Python package source and Windows wheel support. Do not print or
+copy pip configuration if it could contain credentials or internal URLs.
+The source and permissions are UNKNOWN. Never use `Get-Content .env`,
+`type .env`, environment dumps, or commands that print secret-bearing values.
+
+C. Deferred environment creation and interpreter verification
+--------------------------------------------------------------
+Only after the runtime is approved and the read-only checks confirm that
+`.venv` does not already exist, choose ONE matching creation command:
+
+  py -3.11 -m venv .venv
+
+Use the alternative only if Python 3.12.4 is approved:
+
+  py -3.12 -m venv .venv
+
+If the approved runtime is not registered with `py`, use the exact
+IT-provided interpreter path instead, e.g.:
+
+  & 'C:\approved\path\to\python.exe' -m venv .venv
+
+The path above is an illustrative placeholder, not a verified laptop path.
+Do not run both creation commands. After creating the venv, verify its
+interpreter explicitly (do not rely on shell activation/PATH):
+
+  .\.venv\Scripts\python.exe --version
+  .\.venv\Scripts\python.exe -c "import sys; print(sys.executable)"
+
+Expected: version matches the approved choice and `sys.executable` points
+inside this repository's `.venv\Scripts\python.exe`. These verification
+commands are deferred; they were not run in this audit.
+
+D. Deferred minimal dependency resolution/installation
+------------------------------------------------------
+Static source analysis identifies this candidate set for the direct
+operational synthetic path:
+- `faiss-cpu==1.15.0` — existing requirements pin and unconditional import.
+- `python-dotenv==1.1.1` — existing requirements pin and config import.
+- NumPy — directly imported, but not pinned; an exact compatible version
+  must be selected by the approved package resolver/IT guidance.
+
+Before any installation, inspect only the non-secret manifest files with the
+read-only Select-String command above, and confirm the Python/Windows wheel
+and NumPy compatibility using the company-approved package source. No exact
+NumPy pin or package-source URL has been verified. Do not install the broad
+requirements.txt / requirements-dev.txt sets for this minimal direct demo:
+they include optional API, database, provider, ML/training, and development
+dependencies.
+
+After explicit package-install approval, and only if the approved package
+source is already configured or IT supplies its approved invocation, the
+candidate command shape is:
+
+  .\.venv\Scripts\python.exe -m pip install faiss-cpu==1.15.0 python-dotenv==1.1.1 numpy
+
+This command intentionally leaves NumPy to the approved resolver. If company
+policy requires a reviewed exact NumPy pin, obtain that version first and
+replace `numpy` with `numpy==<approved-version>` (do not type the angle
+brackets literally). Do not add a guessed `--index-url` or use a public
+package source unless the company explicitly approves it. Nothing above was
+installed or resolved in this audit.
+
+E. Deferred safeguards and direct synthetic demo invocation
+------------------------------------------------------------
+Before the future project invocation, use process-scoped overrides in the
+same PowerShell process that launches Python:
+
+  $env:MODEL_PROVIDER = 'fake'
+  $env:NEO4J_URI = ''
+  $env:ENABLE_KNOWLEDGE_GRAPH = '0'
+
+These settings are process environment overrides, not edits to `.env` or
+repository configuration. The empty NEO4J_URI prevents the nonempty-URI
+condition in generic composition from constructing Neo4j; explicitly
+selecting fake prevents an inherited provider selection from choosing
+Ollama/Mistral/Qwen. Do not display the environment or inspect `.env`.
+Restore any previous shell values after the approved run, or close that
+PowerShell process. Their effective behavior has not been runtime-tested.
+
+Use only the operational synthetic investigation query; do not make a
+general RAG/policy retrieval request. The direct planned invocation is:
+
+  $demoScript = @'
+  from apps.fraud.demo import create_demo_agent
+
+  with create_demo_agent() as agent:
+      result = agent.run("Investigate C1001", user_id="investigator")
+      print("success:", result.success)
+      print("response:", result.output)
+  '@
+  $demoScript | .\.venv\Scripts\python.exe -
+
+This is a future command only and was not executed. After approval, verify
+that the call reports success, the response corresponds to the registered
+fraud investigation workflow, and it contains the expected categorical
+assessment for the synthetic C1001 fixture. Do not use real/customer data.
+The direct path is not the FastAPI route; API-to-fraud wiring remains a
+separate blocker if an HTTP demo is required.
+
+The factory still constructs the RAG pipeline, but static analysis indicates
+that construction alone does not initialize the embedder. Avoiding retrieval
+is necessary to avoid first-use BGE model loading/download. Audit
+observability may create a local SQLite database. The temporary business
+SQLite fixture is managed by the demo context. These side effects have not
+been observed on this laptop.
+
+F. Deferred rollback and remaining side effects
+-----------------------------------------------
+Rollback only the newly created repository `.venv`, and only after verifying
+that it is the environment created for this checklist (never remove a
+pre-existing directory). First inspect:
+
+  Test-Path -LiteralPath '.\.venv'
+
+If and only if this checklist created that exact `.venv`, the targeted
+PowerShell removal command is:
+
+  Remove-Item -LiteralPath '.\.venv' -Recurse -Confirm
+
+This command was not run. It removes only the named `.venv` path, subject to
+confirmation; do not substitute a wildcard or a broader directory.
+Removing `.venv` does not remove pip caches, Hugging Face/model caches,
+observability SQLite files, logs, or other runtime side effects. Do not
+delete those automatically; inspect and obtain approval before cleanup.
+
+11. Safest path and final recommendation
+----------------------------------------
+RECOMMENDATION
+- For the narrow synthetic demo, prefer approved Python 3.11; use approved
+  Python 3.12.4 only if company policy allows it.
+- Resolve only FAISS CPU, python-dotenv, and a compatible NumPy through the
+  company-approved package source. Do not install the broad ML/training
+  requirements.
+- After explicit approval, run the direct `create_demo_agent()` workflow
+  with fake provider, an empty process-scoped NEO4J_URI, and an operational
+  investigation query. Do not invoke RAG retrieval.
+- Do not rely on POST /api/v1/agent/run to reach the fraud workflow until its
+  composition/wiring is changed and an integration test is added.
+- No setup or execution is approved or performed by this report. Wait for
+  explicit user approval before creating `.venv`, resolving/installing
+  packages, or running the synthetic demo.
+
+Verification note
+-----------------
+At the start of this report refresh, the existing report was read and Git
+state was checked. This report was then replaced in place. The only intended
+file change is VEXUX_AUDIT_REPORT.txt. No files were staged, committed, or
+pushed. No application code, tests, setup commands, installers, services, or
+model downloads were run.
