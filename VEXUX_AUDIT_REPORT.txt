@@ -4,16 +4,16 @@ Consolidated current report and deferred setup checklist
 Scope and evidence labels
 ------------------------
 This report consolidates previous repository, architecture, dependency,
-security, API, and Python-version audits, the deferred setup checklist, and
-the company-laptop virtual-environment milestone. Python 3.12.4 and pip
-availability were verified inside the approved repository `.venv`; no
-project dependencies were installed. No application code or tests were run,
-no services were started, no model or external asset was downloaded, and no
-.env contents or secrets were inspected. No production/customer data was
-accessed.
+security, API, and Python-version audits; the company-laptop virtual
+environment milestone; the user-reported successful synthetic C1001
+investigation; and static fixture/test analysis for other demo customers.
+Python 3.12.4 and pip availability were verified inside the approved
+repository `.venv`. The C1001 application run was reported by the user; no
+additional investigations or tests were run for this report. No `.env`
+contents, secrets, or real/customer data were inspected or used.
 
 CONFIRMED       Observed in repository source/docs/manifests/Git output.
-USER-SUPPLIED   Terminal result supplied by the user; not rerun here.
+USER-SUPPLIED   Runtime result supplied by the user; not rerun here.
 VERIFIED SETUP  Company-laptop setup milestone reported as completed and
                 verified by the user; no project execution implied.
 INFERENCE       Reasoned from source, not a runtime test.
@@ -28,9 +28,13 @@ Change summary from the previous report
   created with the Python launcher, and its interpreter path/version and pip
   availability were verified.
 - Corrected the previous report's prospective/no-venv checklist: `.venv`
-  now exists, while `venv` was absent before creation. Dependency install,
-  application execution, tests, and model downloads remain unperformed.
+  now exists, while `venv` was absent before creation. A direct C1001
+  application run has since been reported; later dependency-install details
+  remain unknown, and tests remain unreported.
 - Updated the Git branch and commit from the current Git inspection.
+- Recorded the user-reported successful synthetic C1001 investigation.
+- Added static inventory of demo customer IDs, expected fixture evidence and
+  risk outcomes, and the degree of coverage in existing tests.
 - Preserved prior architecture, provider, API, RAG, security, dependency,
   setup, and test-history findings.
 
@@ -38,7 +42,7 @@ Change summary from the previous report
 ----------------------------
 CONFIRMED at report refresh
 - Repository branch: prod.
-- Current commit: 57321badc098f42d3d756603c95a8b2da46ab6b5.
+- Current commit: 20bdb35f41985cc1fcde159b733634a157214626.
 - Before this report was refreshed, `git status --short --branch` showed
   `## prod...origin/prod` with no tracked or untracked changes.
 - This is a Python Vexux AI project with agent orchestration, fraud workflow,
@@ -51,8 +55,13 @@ VERIFIED SETUP MILESTONE (user-reported as verified)
   verified to point inside this repository's `.venv`.
 - pip 24.0 is available inside the environment.
 - `.venv` and `venv` did not exist before the new `.venv` was created.
-- No project dependencies have been installed. No application code or tests
-  have been executed. No models or external assets have been downloaded.
+- At the time of this setup milestone, no project dependencies had been
+  installed; the current dependency installation state after the later demo
+  run was not provided.
+- No tests were reported as run. The later C1001 direct application run is
+  recorded separately below.
+- The setup milestone reported no model or external asset downloads. Whether
+  any asset/cache side effect occurred during the later run is unknown.
 - These setup results were supplied as verified results; they were not
   independently rerun during this report refresh.
 
@@ -111,17 +120,19 @@ PYTHON 3.12.4 ALTERNATIVE
 - No definite Python 3.12 source incompatibility was found in that static
   inspection. Python 3.12.4 is now the company-permitted selected runtime.
 - The interpreter version, executable location, and pip availability were
-  verified; project dependency resolution, imports, and application
-  execution remain untested. This is not verified project compatibility.
-  Full ML dependencies may have different constraints.
+  verified. A single direct synthetic C1001 path has since been reported
+  successful, but dependency resolution, installed package versions, and
+  broader application compatibility remain unverified. Full ML dependencies
+  may have different constraints.
 - Do not treat Python 3.13 being listed by the launcher as evidence that the
   repo supports it; repository evidence targets 3.11 and mentions 3.10.
 
 UNKNOWN
 - Whether IT can provide 3.11 or whether the approved package source
   supports needed Windows wheels.
-- Project dependency compatibility and application runtime behavior have
-  not been tested under Python 3.12.4.
+- Apart from the user-reported successful direct C1001 path, project
+  dependency compatibility and other runtime behavior under Python 3.12.4
+  remain unverified.
 - No runtime compatibility has been tested on 3.11 or 3.13.
 
 References:
@@ -186,6 +197,18 @@ CONFIRMED: synthetic fraud path
 - `apps.fraud.real.create_real_agent()` is a separate Neo4j/MySQL composition
   and intentionally has no synthetic fallback.
 
+USER-REPORTED ACTUAL SYNTHETIC RUN (not rerun during this report update)
+- Query: `Investigate C1001`.
+- Result: `success=True`, categorical risk HIGH.
+- Reported findings: an open high-severity alert, a shared-device
+  connection, and an associated investigation record.
+- Reported resources consulted: `customer_graph`, `business_db`, and
+  `fraud_graph`; provider: fake. User reports Neo4j and MySQL were not
+  required.
+- This confirms one direct synthetic case on the company laptop. It does not
+  verify the HTTP API route, other customer cases, test-suite status, or
+  current dependency versions/provenance.
+
 References:
   api/main.py — AgentRunRequest, get_agent, FastAPI app, run_agent
   core/composition.py — create_agent
@@ -224,9 +247,14 @@ CONFIRMED: smallest defensible direct third-party dependency candidate
 - `numpy`: directly imported by rag.vectorstore, not independently pinned
   in requirements.txt; exact compatible version is unknown.
 - `python-dotenv==1.1.1`: pinned in requirements.txt; imported by core.config.
-- This is static source analysis, not a tested or locked installation
-  recipe. Transitive dependencies, Windows wheels, and successful Python
-  imports are unverified.
+- This remains static dependency analysis, not a tested or locked
+  installation recipe. The C1001 result demonstrates that its import path
+  succeeded once, but current package versions/provenance, dependency
+  resolution, transitive dependencies, and Windows wheel availability are
+  unverified.
+- The later user-reported successful C1001 run demonstrates that the direct
+  import/investigation path did execute on the laptop, but does not establish
+  which package versions or installation source supplied these imports.
 
 OPTIONAL OR UNNECESSARY FOR A DIRECT OPERATIONAL DEMO
 (provided fake is selected and Neo4j construction is prevented)
@@ -339,8 +367,84 @@ RECOMMENDATION
   present caller-supplied user_id as authentication.
 - Follow company-approved software and package installation procedures.
 
-8. Tests and validation status
------------------------------
+8. Synthetic customer fixture inventory and expected outcomes
+------------------------------------------------------------
+The following inventory is from the demo's SQLite seed and in-memory graph
+factory, not real/customer data. "Expected" outcomes are static deductions
+from the fixture rows and `FraudInvestigationService.build_result`; they
+were not run during this review.
+
+All customer IDs in the combined demo fixture:
+- C1001 — appears in `apps/fraud/composition.py` and
+  `apps/fraud/data/sqlite/demo.sql`.
+- C1002 — appears in the graph fixture and SQLite seed.
+- C2001 — appears in both in-memory graph fixtures only; it has no account,
+  transaction, fraud-alert, or investigation rows in the SQLite seed.
+
+Case analysis:
+- C1001 — expected HIGH. The SQLite seed provides one open high-severity
+  alert (AL1001), one transaction (T1001, 120.0), and one open investigation
+  (I1001/F900). The graph connects C1001 to D500, which is also connected to
+  C2001. Scoring signals: `open_high_severity_alerts`,
+  `shared_device_relationship`, and `active_investigation`. The elevated
+  transaction signal does not apply: there is only one transaction and its
+  amount is below the aggregate threshold. This matches the user-reported
+  actual C1001 result in section 4.
+- C1002 — expected MEDIUM. It has two transactions (70.0 and 25.0), one
+  low-severity closed alert, and no investigation row. Its D501 device is
+  also connected to C2001. Only `shared_device_relationship` should score:
+  the two-transaction sum is below 2000, and the alert is neither high nor
+  open. One signal gives MEDIUM under the deterministic rule.
+- C2001 — expected MEDIUM, with graph-only evidence. It shares D500 with
+  C1001 and D501 with C1002. It has no matching SQLite business rows, so no
+  transaction, alert, or investigation signals should be added. The
+  `LINKED_TO` relationships satisfy the service's shared-device signal
+  predicate, leaving one signal and therefore MEDIUM. This assumes the
+  complete demo graph registry and demo SQLite fixture are composed as in
+  `create_demo_agent()`; this particular case was not executed.
+
+Risk-category coverage in the bundled demo data:
+- HIGH and MEDIUM are represented by these three customers.
+- No customer in the bundled demo fixture appears to produce LOW: each has
+  at least one shared-device relationship, and C1001 also has an open high
+  alert and an investigation.
+- The scoring implementation can produce LOW for no-signal input, but that
+  is not an expected category for any of the three demo fixture customers.
+
+Relevant existing tests (present, not run in this review):
+- `tests/unit/test_demo_fixtures.py::test_demo_business_fixture_is_application_owned_and_referentially_valid`
+  verifies row counts and selected referential integrity; it does not assert
+  each customer's investigation risk.
+- `tests/unit/test_fraud_investigation.py::test_investigation_correlates_seeded_suspicious_signals_and_evidence`
+  verifies a constructed C1001 HIGH case with four signals and evidence, but
+  its custom graph/source data is not the complete application demo fixture.
+- `tests/unit/test_fraud_workflow.py::test_workflow_branches_replans_and_preserves_structured_evidence`
+  verifies a constructed C1001 HIGH workflow case, not the complete app demo
+  fixture. `test_find_customer_details_is_planned_as_one_authoritative_workflow`
+  uses a separate C1002 graph with empty business results and expects LOW;
+  that is not the demo C1002 fixture described above.
+- `tests/unit/test_fraud_workflow.py::test_other_obvious_fraud_queries_execute_without_model`
+  includes a C1001/C2001 comparison query; it does not assert a standalone
+  C2001 investigation risk.
+- `tests/live/test_fraud_databases.py::test_live_investigation_keeps_c1002_medium_and_c1001_high`
+  covers C1001/C1002 against configured live database fixtures, not the
+  synthetic SQLite demo, and was not run here.
+- No inspected test invokes the full `create_demo_agent()` investigation for
+  each of C1001, C1002, and C2001 and checks their expected risk/evidence.
+
+References:
+  apps/fraud/composition.py:8-68 — in-memory customer/fraud graph IDs/edges
+  apps/fraud/data/sqlite/demo.sql — synthetic business records
+  apps/fraud/investigation.py:81-110 — signals and categorical scoring
+  apps/fraud/investigation.py:136-199 — authorized evidence collection
+  apps/fraud/demo.py:27-83 — synthetic composition
+  tests/unit/test_demo_fixtures.py:90-118 — SQLite fixture integrity
+  tests/unit/test_fraud_investigation.py:76-91 — constructed high-risk case
+  tests/unit/test_fraud_workflow.py:90-98, :163-240 — workflow cases
+  tests/live/test_fraud_databases.py:107-134 — live C1001/C1002 case
+
+9. Tests and validation status
+------------------------------
 CONFIRMED: tests that exist
 - API serialization/redaction/validation tests:
   tests/unit/test_api.py and tests/integration/test_api_operational_readiness.py.
@@ -362,14 +466,20 @@ HISTORICAL
   laptop, Python 3.12, or the dependency candidate set.
 
 ACTUALLY RUN
-- No application code, tests, evaluation commands, Python compatibility
-  checks, package checks that execute Python, or services were run during
-  these audits. The reported Python version, executable path, and pip
-  availability checks verify the virtual environment only; they do not
-  test project compatibility. Those setup checks were reported as verified
-  by the user and were not rerun during this report refresh.
+- USER-REPORTED actual application run: direct synthetic `Investigate C1001`
+  returned `success=True`, risk HIGH, the reported alert/shared-device/
+  investigation findings, resources customer_graph/business_db/fraud_graph,
+  and fake provider. User reports Neo4j and MySQL were not required.
+- No application code or tests were executed by this report update. No
+  additional customer investigations or tests were run. The user's C1001
+  result was not independently rerun.
+- Python version, executable path, and pip availability were reported
+  verified during setup; these facts alone do not verify general project
+  compatibility. The C1001 success verifies one direct workflow only.
+- Current installed dependency versions/source and cache side effects from
+  the later run were not supplied. No tests have been reported as run.
 
-9. Blockers, unresolved items, and recommended next step
+10. Blockers, unresolved items, and recommended next step
 --------------------------------------------------------
 BLOCKERS BEFORE AN HTTP FRAUD DEMO
 1. POST /api/v1/agent/run constructs the generic agent, not the fraud demo.
@@ -399,15 +509,18 @@ UNRESOLVED
 - Laptop capacity, network, caches, permissions, service and port restrictions.
 - Whether the HTTP demo should use synthetic resources or real Neo4j/MySQL.
 - Whether another branch/repository contains intended API integration.
-- Whether dependency installation and the synthetic demo work on this laptop;
-  neither has been attempted.
+- Whether C1002 and C2001 produce the statically expected results; neither
+  case has been run.
+- Current installed dependency versions/provenance and any runtime cache or
+  observability-database side effects from the C1001 run.
 
-10. Next-step checklist — dependencies and demo still deferred
+11. Next-step checklist — additional cases and tests deferred
 --------------------------------------------------------------
 The Python runtime and isolated virtual environment have been created and
-verified as described above. The remaining package resolution/installation
-and project invocation are recommendations only and require explicit
-approval. No such package or project commands were run for this report.
+verified as described above. The user reports one successful direct C1001
+investigation. Package state after that run is unknown. Further fixture
+investigations and tests remain deferred pending explicit approval. No
+additional cases or tests were run for this report.
 
 A. Approved-runtime decision
 ----------------------------
@@ -480,10 +593,10 @@ brackets literally). Do not add a guessed `--index-url` or use a public
 package source unless the company explicitly approves it. Nothing above was
 installed or resolved in this audit.
 
-E. Deferred safeguards and direct synthetic demo invocation
-------------------------------------------------------------
-Before the future project invocation, use process-scoped overrides in the
-same PowerShell process that launches Python:
+E. Safeguards and additional synthetic cases (deferred)
+-------------------------------------------------------
+For any additional approved investigation, use process-scoped overrides in
+the same PowerShell process that launches Python:
 
   $env:MODEL_PROVIDER = 'fake'
   $env:NEO4J_URI = ''
@@ -495,27 +608,23 @@ condition in generic composition from constructing Neo4j; explicitly
 selecting fake prevents an inherited provider selection from choosing
 Ollama/Mistral/Qwen. Do not display the environment or inspect `.env`.
 Restore any previous shell values after the approved run, or close that
-PowerShell process. Their effective behavior has not been runtime-tested.
+PowerShell process.
+The settings' effectiveness is conditional on the actual configuration.
+The user's successful C1001 run used fake and did not require Neo4j/MySQL;
+the exact environment overrides used for that run were not supplied.
 
-Use only the operational synthetic investigation query; do not make a
-general RAG/policy retrieval request. The direct planned invocation is:
+No command below was executed during this report update. For an approved
+follow-up, investigate the remaining graph-backed customers one at a time:
 
-  $demoScript = @'
-  from apps.fraud.demo import create_demo_agent
+  agent.run("Investigate C1002", user_id="investigator")
+  agent.run("Investigate C2001", user_id="investigator")
 
-  with create_demo_agent() as agent:
-      result = agent.run("Investigate C1001", user_id="investigator")
-      print("success:", result.success)
-      print("response:", result.output)
-  '@
-  $demoScript | .\.venv\Scripts\python.exe -
-
-This is a future command only and was not executed. After approval, verify
-that the call reports success, the response corresponds to the registered
-fraud investigation workflow, and it contains the expected categorical
-assessment for the synthetic C1001 fixture. Do not use real/customer data.
-The direct path is not the FastAPI route; API-to-fraud wiring remains a
-separate blocker if an HTTP demo is required.
+Static expected results are documented in section 8: C1002 MEDIUM from its
+shared-device signal, and C2001 MEDIUM from graph-only shared-device
+evidence. Confirm success, category, findings/evidence, and resource list
+against the fixture; do not use real/customer data. Avoid general RAG/policy
+retrieval queries. The direct path is not the FastAPI route; API-to-fraud
+wiring remains a separate blocker if an HTTP demo is required.
 
 The factory still constructs the RAG pipeline, but static analysis indicates
 that construction alone does not initialize the embedder. Avoiding retrieval
@@ -543,29 +652,30 @@ Removing `.venv` does not remove pip caches, Hugging Face/model caches,
 observability SQLite files, logs, or other runtime side effects. Do not
 delete those automatically; inspect and obtain approval before cleanup.
 
-11. Safest path and final recommendation
+12. Safest path and final recommendation
 ----------------------------------------
 RECOMMENDATION
 - The approved Python 3.12.4 `.venv` is already created and interpreter
   verified. Python 3.11 remains the repository-aligned option, but changing
   runtimes is not necessary for the current next step.
-- Resolve only FAISS CPU, python-dotenv, and a compatible NumPy through the
-  company-approved package source. Do not install the broad ML/training
-  requirements.
-- After explicit approval, run the direct `create_demo_agent()` workflow
-  with fake provider, an empty process-scoped NEO4J_URI, and an operational
-  investigation query. Do not invoke RAG retrieval.
+- The user reports a successful synthetic C1001 investigation. Additional
+  customer cases and tests remain deferred pending explicit approval.
+- If dependencies need to be installed or verified, use only the
+  company-approved package source and resolve the minimal direct-call
+  imports; do not install the broad ML/training requirements by default.
+- Do not invoke RAG retrieval for the synthetic operational demo.
 - Do not rely on POST /api/v1/agent/run to reach the fraud workflow until its
   composition/wiring is changed and an integration test is added.
-- The runtime setup milestone is complete. Wait for explicit user approval
-  before resolving/installing dependencies or running the synthetic demo.
+- Wait for explicit user approval before running additional cases or tests,
+  or changing the environment.
 
 Verification note
 -----------------
 The existing report was read and updated in place. The company-laptop
-milestone is recorded as user-reported verified; this refresh independently
-checked branch `prod`, commit 57321badc098f42d3d756603c95a8b2da46ab6b5, and
-the clean pre-edit worktree. Only VEXUX_AUDIT_REPORT.txt was modified. No
-dependencies were installed; no application code or tests were run; no
-services or model downloads were started. Nothing was staged, committed, or
-pushed.
+milestones and C1001 result are recorded as user-reported verified; this
+refresh independently checked branch `prod`, commit
+20bdb35f41985cc1fcde159b733634a157214626, and the clean pre-edit worktree.
+Fixture analysis was static. Only VEXUX_AUDIT_REPORT.txt was modified. No
+dependencies were installed, additional investigations or tests run,
+services started, or models downloaded during this update. Nothing was
+staged, committed, or pushed.
