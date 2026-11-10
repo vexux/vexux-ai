@@ -1,827 +1,457 @@
-VEXUX AI — COMPANY-LAPTOP SYNTHETIC DEMO AUDIT
-Consolidated current report and deferred setup checklist
+VEXUX AI — CONSOLIDATED COMPANY-LAPTOP AUDIT
+Current status and Qwen3 local-provider integration plan
 
 Scope and evidence labels
 ------------------------
-This report consolidates previous repository, architecture, dependency,
-security, API, and Python-version audits; the company-laptop virtual
-environment milestone; the user-reported successful synthetic C1001
-investigation; static fixture/test analysis for other demo customers; and a
-read-only provider/RAG compatibility review for a hypothetical
-enterprise-approved model service. Python 3.12.4 and pip availability were
-verified inside the approved repository `.venv`. The C1001 application run
-was reported by the user; no further application run or tests were performed
-for this report. No `.env` contents, secrets, network calls, or real/customer
-data were accessed.
+This report consolidates the earlier repository, architecture, synthetic
+fraud, dependency, security, Python readiness, provider compatibility, and
+Qwen3 integration reviews. It incorporates the latest company-laptop
+information as USER-SUPPLIED terminal evidence where indicated.
 
-CONFIRMED       Observed in repository source/docs/manifests/Git output.
-USER-SUPPLIED   Runtime result supplied by the user; not rerun here.
-VERIFIED SETUP  Company-laptop setup milestone reported as completed and
-                verified by the user; no project execution implied.
-INFERENCE       Reasoned from source, not a runtime test.
-UNKNOWN         Not established or tested.
-HISTORICAL      Reported by older checked-in verification material.
-RECOMMENDATION  Proposed action only; not executed.
-DEFERRED        Command or step is for later explicit approval.
+CONFIRMED SOURCE   Static finding verified from repository source/docs/tests.
+COPILOT REVIEW     Finding from an earlier read-only Copilot inspection.
+USER-SUPPLIED      Terminal result or runtime outcome supplied by the user;
+                   not independently rerun.
+INFERENCE          Reasoned from source/data, not a runtime test.
+HISTORICAL         Result documented in older verification material only.
+UNKNOWN            Not established by supplied evidence or this inspection.
+RECOMMENDATION     Proposed future work only.
 
-Change summary from the previous report
-----------------------------------------
-- Added the company-approved Python 3.12.4 setup milestone: `.venv` was
-  created with the Python launcher, and its interpreter path/version and pip
-  availability were verified.
-- Corrected the previous report's prospective/no-venv checklist: `.venv`
-  now exists, while `venv` was absent before creation. A direct C1001
-  application run has since been reported; later dependency-install details
-  remain unknown, and tests remain unreported.
-- Updated the Git branch and commit from the current Git inspection.
-- Recorded the user-reported successful synthetic C1001 investigation.
-- Added static inventory of demo customer IDs, expected fixture evidence and
-  risk outcomes, and the degree of coverage in existing tests.
-- Added provider-contract and RAG-embedding integration findings for a
-  hypothetical company-approved internal service; no vendor or service is
-  assumed approved or available.
-- Preserved prior architecture, provider, API, RAG, security, dependency,
-  setup, and test-history findings.
+The Qwen3 review was read-only. No application source, configuration,
+dependency manifest, test, or model file was changed by that review. The
+current report refresh changes only this report. No packages were installed,
+models downloaded, network calls made, tests run, or database services
+connected for the Qwen3 review.
+
+Change summary
+--------------
+- Consolidated the previous report and removed stale setup commands and
+  status wording superseded by later user-supplied milestones.
+- Added the requested Qwen3 local-provider integration review, company-laptop
+  model-cache/package evidence, compatibility risks, and phased plan.
+- Recorded the current Git branch and commit from the pre-edit inspection.
 
 1. Repository and Git status
 ----------------------------
 CONFIRMED at report refresh
-- Repository branch: prod.
-- Current commit: 580ae96d1e076acefbf650b25904082e155d729a.
-- Before this report was refreshed, `git status --short --branch` showed
-  `## prod...origin/prod` with no tracked or untracked changes.
-- This is a Python Vexux AI project with agent orchestration, fraud workflow,
-  RAG, providers, database adapters, FastAPI, and training modules.
-
-VERIFIED SETUP MILESTONE (user-reported as verified)
-- Python 3.12.4 was selected with company permission.
-- `.venv` was created using `py -3.12 -m venv .venv`.
-- `.venv\Scripts\python.exe` reported Python 3.12.4; `sys.executable` was
-  verified to point inside this repository's `.venv`.
-- pip 24.0 is available inside the environment.
-- `.venv` and `venv` did not exist before the new `.venv` was created.
-- At the time of this setup milestone, no project dependencies had been
-  installed; the current dependency installation state after the later demo
-  run was not provided.
-- No tests were reported as run. The later C1001 direct application run is
-  recorded separately below.
-- The setup milestone reported no model or external asset downloads. Whether
-  any asset/cache side effect occurred during the later run is unknown.
-- These setup results were supplied as verified results; they were not
-  independently rerun during this report refresh.
-
-Earlier terminal result, now superseded:
-- The Python launcher had listed Python 3.12 and 3.13; Python 3.12.4 is now
-  selected in the project virtual environment. No claim is made about
-  Python 3.13 compatibility.
+- Branch: prod.
+- Commit: 9322e55536c238a6c43151647534dc6ec3b5a91d.
+- Before editing this report, `git status --short --branch` showed
+  `## prod...origin/prod` with no changes.
+- This is a Python Vexux AI repository containing agent orchestration,
+  fraud workflows, RAG, model providers, database adapters, FastAPI, and
+  training code.
 
 UNKNOWN
-- Whether this checkout is the exact intended final demo implementation or
-  another branch/commit/repository was intended.
-- Laptop hardware, available disk/RAM, network/proxy, package approvals,
-  administrative rights, service installation rights, and port restrictions.
-- Effective .env and process settings; .env was not inspected.
+- Whether this checkout is the only intended demo implementation or whether
+  a separate loan project/repository contains the Qwen3 reference source.
+  The loan project's implementation was not found in the Vexux repository
+  inspected here.
+- Laptop hardware/RAM, corporate network/proxy policies, approved package
+  source, and runtime access controls beyond the user-supplied facts below.
+- No `.env` values or other secrets were inspected.
 
-2. Python version and approved installation availability
---------------------------------------------------------
-CONFIRMED: repository version guidance
-- `.github/workflows/ci.yml` uses Python 3.11 for deterministic CI and the
-  optional live-provider job.
-- `docs/SETUP.md` identifies Python 3.11 as its setup target; README.md says
-  the project is developed with Python 3.11.
-- `docs/DEVELOPMENT.md` recommends Python 3.10 or 3.11.
-- No `requires-python`, `python_requires`, packaging metadata, or Python
-  3.12 support matrix was found in the repository inspected previously.
+2. Company-laptop setup and asset evidence
+------------------------------------------
+VERIFIED SETUP MILESTONE — USER-SUPPLIED
+- Python 3.12.4, 64-bit, is in the existing Vexux `.venv`.
+- `.venv` was created with `py -3.12 -m venv .venv`; `.venv` and `venv`
+  were absent before creation.
+- `.venv\Scripts\python.exe` was verified to report Python 3.12.4;
+  `sys.executable` pointed inside the repository `.venv`.
+- pip 24.0 was verified in that environment.
+- Earlier at environment creation, no project dependencies had been
+  installed. The current package inspection below supersedes that snapshot.
 
-WHY PYTHON 3.11 IS PREFERRED
-- Confirmed: 3.11 is the CI interpreter and primary setup/documentation
-  target.
-- Inference: using 3.11 minimizes differences from the repository's tested
-  configuration. This is a conservative alignment recommendation, not proof
-  that 3.12 is incompatible.
-
-APPROVED RUNTIME
-- Confirmed: repository setup instructions describe creating a virtual
-  environment and installing Python packages, but do not document a
-  company-approved method for installing Python itself.
-- Verified setup milestone: Python 3.12.4 was selected with company
-  permission and used to create the repository `.venv`.
-- Unknown: whether the company offers Software Center, managed package
-  deployment, an internal Python distribution, an approved package manager,
-  or another way to request Python 3.11. No such mechanism for 3.11 is
-  established by the information supplied.
-
-RECOMMENDATION IF PYTHON 3.11 IS DESIRED
-- Ask company IT/software support for an approved, managed Python 3.11
-  installation (or approved portable/runtime distribution) suitable for this
-  project. Explain that repository CI and primary setup target Python 3.11;
-  ask for approved package-source and PATH/launcher guidance.
-- Do not download/install Python independently, use an unapproved package
-  manager, bypass endpoint controls, or change system policy.
-
-PYTHON 3.12.4 ALTERNATIVE
-- Source syntax inspected previously uses Python 3.10+ features, including
-  PEP 604 unions and built-in generic annotations; these are valid in 3.12.
-- No definite Python 3.12 source incompatibility was found in that static
-  inspection. Python 3.12.4 is now the company-permitted selected runtime.
-- The interpreter version, executable location, and pip availability were
-  verified. A single direct synthetic C1001 path has since been reported
-  successful, but dependency resolution, installed package versions, and
-  broader application compatibility remain unverified. Full ML dependencies
-  may have different constraints.
-- Do not treat Python 3.13 being listed by the launcher as evidence that the
-  repo supports it; repository evidence targets 3.11 and mentions 3.10.
+MODEL CACHE AND PACKAGE INSPECTION — USER-SUPPLIED TERMINAL EVIDENCE
+- FAISS CPU 1.15.0 is installed in the Vexux virtual environment.
+- The Hugging Face cache contained a Qwen2.5-0.5B-Instruct snapshot with
+  tokenizer/config files, but no model weights were listed.
+- The ModelScope cache contained Qwen3-0.6B at:
+  `%USERPROFILE%\.cache\modelscope\models\Qwen--Qwen3-0.6B\snapshots\master`
+- `model.safetensors` was reported as approximately 1433.66 MB.
+- Tokenizer, config, and generation-configuration files were listed.
+- The Qwen3 config was reported with `model_type: qwen3`, `torch_dtype:
+  bfloat16`, 28 layers, hidden size 1024, and 40960 maximum position
+  embeddings.
+- GGUF Llama 3.2 3B was not found in the previously searched directories.
+  This does not establish that it is unavailable in other locations.
+- `python -m pip config list` displayed no explicit pip index configuration.
+  This does not establish that public PyPI or any other package source is
+  approved.
+- `torch`, `transformers`, `sentence-transformers`, `llama-cpp-python`,
+  Neo4j, and MySQL connector were reported missing from the Vexux virtual
+  environment during package inspection.
+- The recorded Transformers version associated with the cached Qwen3 model
+  was 4.51.0. This is not a confirmation that this version is installed in
+  the Vexux environment.
 
 UNKNOWN
-- Whether IT can provide 3.11 or whether the approved package source
-  supports needed Windows wheels.
-- Apart from the user-reported successful direct C1001 path, project
-  dependency compatibility and other runtime behavior under Python 3.12.4
-  remain unverified.
-- No runtime compatibility has been tested on 3.11 or 3.13.
+- Company-approved package source and permission to use the cached Qwen3
+  model.
+- Whether all required snapshot files are complete/usable by the intended
+  Transformers loader, and whether the cache is readable by the current
+  account.
+- Whether cache inspection covered every possible asset location.
 
-References:
-  .github/workflows/ci.yml — Python 3.11 CI jobs
-  docs/SETUP.md — Python 3.11 setup target
-  README.md — Python 3.11 development target
-  docs/DEVELOPMENT.md — Python 3.10/3.11 recommendation
-  requirements.txt — dependency pins without Python-version markers
+3. Python version and dependencies
+----------------------------------
+CONFIRMED repository guidance
+- `.github/workflows/ci.yml` and primary setup documentation target Python
+  3.11; `docs/DEVELOPMENT.md` mentions Python 3.10/3.11.
+- No project metadata or support matrix was found that establishes Python
+  3.12 support.
+- Static source review found no specific syntax feature that precludes
+  Python 3.12. This is not full dependency/runtime compatibility evidence.
 
-3. Architecture, providers, and fraud logic
---------------------------------------------
-CONFIRMED
-- The documented architecture separates Agent orchestration, Planner,
-  ExecutionManager, observation, decisions, context, ModelGateway, tools, and
-  capabilities (README.md; docs/ARCHITECTURE.md).
-- Supported model providers in `core.config.SUPPORTED_MODEL_PROVIDERS` are
-  fake, ollama, mistral, and qwen. Configuration requires MODEL_PROVIDER.
-- Code's Ollama fallback model is `llama3.2`; docs describe development
-  configuration using `phi3:latest`; `.env.example` selects fake. Effective
-  local settings are unknown and were not inspected.
-- Mistral is remote; Ollama is local; Qwen loads Transformers/PEFT assets;
-  fake is deterministic.
-- Fraud risk assessment is categorical (low/medium/high) and deterministic.
-  `FraudInvestigationService.build_result` derives it from explicit alert,
-  transaction, relationship, and investigation signals; the LLM is not the
-  risk scorer.
+USER-SUPPLIED current environment facts
+- Python 3.12.4 64-bit is selected in `.venv`.
+- FAISS CPU 1.15.0 is present.
+- `torch`, `transformers`, `sentence-transformers`, `llama-cpp-python`,
+  Neo4j, and MySQL connector were reported missing at the time of package
+  inspection. Do not infer their current state has changed since that
+  inspection.
 
-References:
-  core/config.py — SUPPORTED_MODEL_PROVIDERS, Config, load_config_from_env
-  core/composition.py — create_agent
-  models/providers/fake.py, ollama.py, mistral.py, qwen.py
-  apps/fraud/investigation.py — FraudInvestigationService.build_result
-  apps/fraud/domain.py — InvestigationResult
-
-4. API route and fraud-specific call path
------------------------------------------
-CONFIRMED: API
-- `api.main.get_agent()` returns `core.composition.create_agent()`.
-- `POST /api/v1/agent/run` injects this generic agent through `run_agent()`,
-  which calls `agent.run(query, session_id, user_id)`.
-- AgentRunRequest accepts optional workflow, agent, and delegations values,
-  but `run_agent()` does not forward these fields.
-- Generic composition registers KnowledgeGroundedAnswerWorkflow, not
-  FraudInvestigationWorkflow. The route does not select the synthetic or
-  real fraud composition.
-- FastAPI's default interactive documentation route is `/docs`.
-- The endpoint emits audit events and redacts some serialized output, but it
-  does not authenticate the requestor.
-
-CONFIRMED: synthetic fraud path
-- `apps.fraud.demo.create_demo_agent()` calls generic composition, then
-  creates a temporary SQLite database seeded from
-  `apps/fraud/data/sqlite/demo.sql`, creates in-memory graphs, configures
-  FraudPolicy, and registers FraudInvestigationWorkflow.
-- Direct call shape: enter the `create_demo_agent()` context, then invoke
-  `agent.run("Investigate C1001", user_id="investigator")`.
-- `FraudInvestigationWorkflow.plan_query()` maps recognized fraud queries to
-  workflow tasks. Planner and ExecutionManager dispatch these to workflow
-  execution; the fraud service computes the categorical assessment.
-- `Agent.run_workflow()` also invokes a registered workflow, but is not
-  wired to the HTTP route.
-- `apps.fraud.real.create_real_agent()` is a separate Neo4j/MySQL composition
-  and intentionally has no synthetic fallback.
-
-USER-REPORTED ACTUAL SYNTHETIC RUN (not rerun during this report update)
-- Query: `Investigate C1001`.
-- Result: `success=True`, categorical risk HIGH.
-- Reported findings: an open high-severity alert, a shared-device
-  connection, and an associated investigation record.
-- Reported resources consulted: `customer_graph`, `business_db`, and
-  `fraud_graph`; provider: fake. User reports Neo4j and MySQL were not
-  required.
-- This confirms one direct synthetic case on the company laptop. It does not
-  verify the HTTP API route, other customer cases, test-suite status, or
-  current dependency versions/provenance.
-
-References:
-  api/main.py — AgentRunRequest, get_agent, FastAPI app, run_agent
-  core/composition.py — create_agent
-  agent/agent.py — Agent.run and Agent.run_workflow
-  agent/planner.py — plan_registered_workflow
-  agent/execution_manager.py — _execute_workflow
-  apps/fraud/demo.py — create_demo_agent
-  apps/fraud/workflow.py — plan_query, execute, run
-  apps/fraud/real.py — create_real_agent
-
-5. Minimal synthetic-demo dependencies and RAG
-----------------------------------------------
-CONFIRMED: direct import/call path (static source analysis)
-1. Importing `apps.fraud.demo` loads `core.composition` plus fraud workflow,
-   investigation, policy, graph and SQL components.
-2. `core.composition` imports `rag.pipeline`; this imports
-   `rag.vectorstore`, which imports FAISS and NumPy at module import time.
-3. Calling `create_demo_agent()` selects fake only if MODEL_PROVIDER is absent
-   from the process environment; otherwise it preserves that setting. It
-   then calls `core.composition.create_agent()`.
-4. `create_agent()` calls `core.config.get_config()`. `core.config` imports
-   python-dotenv; its loader may read the repository .env at runtime. The
-   file was not inspected.
-5. Fake selects FakeProvider. Ollama/Mistral/Qwen packages are provider
-   paths, not imports needed by the fake branch.
-6. Generic composition constructs and registers RAGPipeline but does not
-   retrieve documents or call the embedding model at construction time.
-7. Demo composition seeds temporary SQLite, installs synthetic graphs and
-   registers the deterministic fraud workflow.
-8. Operational investigation uses synthetic graph and SQLite adapters.
-   sqlite3/tempfile and other supporting modules are Python standard library.
-
-CONFIRMED: smallest defensible direct third-party dependency candidate
-- `faiss-cpu==1.15.0`: pinned in requirements.txt; imported unconditionally
-  through rag.vectorstore on this import path.
-- `numpy`: directly imported by rag.vectorstore, not independently pinned
-  in requirements.txt; exact compatible version is unknown.
-- `python-dotenv==1.1.1`: pinned in requirements.txt; imported by core.config.
-- This remains static dependency analysis, not a tested or locked
-  installation recipe. The C1001 result demonstrates that its import path
-  succeeded once, but current package versions/provenance, dependency
-  resolution, transitive dependencies, and Windows wheel availability are
-  unverified.
-- The later user-reported successful C1001 run demonstrates that the direct
-  import/investigation path did execute on the laptop, but does not establish
-  which package versions or installation source supplied these imports.
-
-OPTIONAL OR UNNECESSARY FOR A DIRECT OPERATIONAL DEMO
-(provided fake is selected and Neo4j construction is prevented)
-- Ollama package/service/model if fake is selected.
-- Mistral package/API credentials if Mistral is not selected.
-- Transformers, PEFT, PyTorch, bitsandbytes and related model/training stack.
-- Sentence Transformers for an operational workflow that does not retrieve
-  RAG documents.
-- MySQL connector/service; synthetic demo uses SQLite.
-- FastAPI, Uvicorn, Pydantic, HTTPX, pytest, black, flake8, ipykernel for
-  direct invocation (they are needed for corresponding API/test/dev paths).
-
-CONFIRMED: manifests
-- requirements.txt combines provider, database, API, RAG, ML and training
-  packages. Pins include torch 2.7.1, Transformers 4.55.2, datasets 4.0.0,
-  TRL 0.21.0, PEFT 0.17.1, Accelerate 1.10.1, bitsandbytes 0.47.0,
+CONFIRMED manifest facts from prior static audit
+- `requirements.txt` is a broad manifest combining ML/training, model
+  providers, RAG, databases, and API packages. Pins previously inspected
+  include torch 2.7.1, Transformers 4.55.2, PEFT 0.17.1,
   sentence-transformers 5.6.1, faiss-cpu 1.15.0, FastAPI 0.116.1,
   Mistral 2.9.3, Neo4j 5.28.1, mysql-connector-python 9.4.0,
   python-dotenv 1.1.1, and Ollama 0.6.0.
-- requirements-dev.txt includes black, flake8, pytest, ipykernel and httpx.
-- No minimal-runtime manifest or supported runtime-only install method was
-  found. No pyproject.toml, setup.py/setup.cfg, Pipfile, Poetry/uv lockfile,
-  or environment.yml was found.
-- Uvicorn is not declared in either requirements file, though the documented
-  API command uses `python -m uvicorn api.main:app ...`.
-- NumPy is directly imported but not explicitly pinned.
+- `requirements-dev.txt` contains development/test packages.
+- Uvicorn is not declared in the inspected requirements files although the
+  documentation describes an Uvicorn API command. NumPy is imported
+  directly through the RAG vector store but was not separately pinned in
+  the inspected manifest.
+- No minimal runtime manifest or complete lockfile was found in the earlier
+  static audit.
 
-CONFIRMED: RAG behavior and asset risks
-- First RAG retrieval calls `RAGPipeline._ensure_initialized()`, reads local
-  documents, embeds using default `BAAI/bge-small-en-v1.5`, and builds an
-  in-memory FAISS index. If uncached, first use may need network access to
-  download the embedding model.
-- ENABLE_LOCAL_RAG_INFERENCE controls local generation in
-  RAGPipeline.ask(); it does not prevent embedding initialization in retrieve.
-- Operational fraud requests use the deterministic workflow and do not need
-  RAG retrieval; general policy/RAG requests may trigger BGE loading.
-- Demo creates a temporary business SQLite file. Audit events may initialize
-  a local observability SQLite file at
-  `data/observability/vexux_observability.db`; this side effect was not run.
+QWEN3 COMPATIBILITY RISKS — INFERENCE / UNKNOWN
+- Python 3.12.4 plus Windows CPU wheels must be checked against the
+  company-approved package source before installation. No compatibility
+  matrix was established in this audit.
+- Transformers 4.51.0 is the user-reported version associated with the
+  cached asset; the Vexux manifest pins 4.55.2. Do not assume either version
+  loads this exact local snapshot without a controlled compatibility check.
+- PyTorch must be selected for Python 3.12, Windows, CPU, and the approved
+  package source. No installed torch was reported.
+- The checkpoint is bfloat16. CPU bfloat16 operator support/performance and
+  loading behavior on the target Windows/PyTorch build are unverified.
+  A float32 CPU load may increase memory use substantially; capacity is
+  unknown. Do not choose dtype or conversion behavior without testing.
+- Safetensors support and compatible Windows wheels need verification.
+  The `safetensors` package version/installation state was not supplied.
+- These are compatibility risks, not proof of incompatibility.
 
-References:
-  apps/fraud/demo.py:7-18, :27-84
-  core/composition.py:1-35, :40, :75, :98-101, :190-205
-  rag/pipeline.py:46, :65, :99, :128
-  rag/vectorstore.py:1-2
-  rag/embedder.py:1, :6-17
-  core/config.py:12, :19-25, :234
-  core/knowledge/neo4j_graph.py:20, :38
-  core/knowledge/mysql_backend.py:29-33
-  requirements.txt; requirements-dev.txt
-
-6. Fake demo and conditional external dependencies
---------------------------------------------------
-CONFIRMED
-- `create_demo_agent()` selects fake only when MODEL_PROVIDER is absent;
-  explicitly configured provider values are preserved.
-- `core.composition.create_agent()` conditionally constructs a Neo4j graph
-  when config.neo4j_uri is nonempty. This occurs before demo composition
-  replaces the graph registry with synthetic graphs.
-- Thus, synthetic data is used for the workflow, but the factory cannot
-  categorically avoid the Neo4j package/client if NEO4J_URI triggers adapter
-  construction. Effective environment configuration is unknown.
-- The demo path does not construct MySQLBackend.
-- With fake selected and no Neo4j construction, the operational workflow
-  does not use Ollama, MySQL, Transformers, PEFT, PyTorch, Sentence
-  Transformers, or embedding model assets. FAISS/NumPy are still imported.
-
-RECOMMENDATION
-- For a direct offline synthetic demo, explicitly select fake, ensure the
-  effective configuration does not trigger Neo4j construction, and use only
-  operational fraud workflow queries to avoid RAG embedding downloads.
-- `.env` must not be printed or inspected to accomplish this. Use
-  process-scoped environment overrides in the future approved demo process;
-  see the deferred checklist below. This does not prevent python-dotenv from
-  loading configuration internally, but it avoids exposing its values.
-
-7. Security, evidence and laptop risks
---------------------------------------
-CONFIRMED
-- Fraud workflows authorize protected named resources before I/O, validate
-  actors against application-level policy, and collect bounded evidence.
-- The default fraud actor is support_user, who is denied fraud_graph access;
-  investigator is the intended authorized demo actor.
-- API user_id is caller input; there is no HTTP authentication. It is not
-  verified identity.
-- Generic DefaultPolicy is permissive for execution unless stricter
-  application policy is wired.
-- API/audit/evidence paths redact some sensitive-looking content. Audit
-  persistence is best-effort local SQLite, not demonstrated tamper-proof
-  enterprise audit.
-- docs/SETUP.md describes database schema/seed steps and warns seeded records
-  are preserved; running them against existing data may change it.
-- Documentation includes loopback and 0.0.0.0 API examples. Default/local
-  ports include API 8000, Ollama 11434, Neo4j 7687, MySQL 3306; availability
-  and firewall policy are unknown.
-- Full ML package/model setup may require substantial disk and network.
-  Exact laptop capacity and requirements are unknown.
-
-References:
-  apps/fraud/identity.py; apps/fraud/policy.py
-  apps/fraud/investigation.py:20-27, :115-127
-  core/policy/default.py; core/contracts/evidence.py
-  api/main.py:23-26, :90-131
-  core/audit_logger.py; core/observability_store.py:17-54
-  docs/SETUP.md:70-106, :170-190, :219-226
-
-RECOMMENDATION
-- Use only synthetic fixtures, keep any future service loopback-only, avoid
-  existing databases, do not send customer/production data, and do not
-  present caller-supplied user_id as authentication.
-- Follow company-approved software and package installation procedures.
-
-8. Synthetic customer fixture inventory and expected outcomes
-------------------------------------------------------------
-The following inventory is from the demo's SQLite seed and in-memory graph
-factory, not real/customer data. "Expected" outcomes are static deductions
-from the fixture rows and `FraudInvestigationService.build_result`; they
-were not run during this review.
-
-All customer IDs in the combined demo fixture:
-- C1001 — appears in `apps/fraud/composition.py` and
-  `apps/fraud/data/sqlite/demo.sql`.
-- C1002 — appears in the graph fixture and SQLite seed.
-- C2001 — appears in both in-memory graph fixtures only; it has no account,
-  transaction, fraud-alert, or investigation rows in the SQLite seed.
-
-Case analysis:
-- C1001 — expected HIGH. The SQLite seed provides one open high-severity
-  alert (AL1001), one transaction (T1001, 120.0), and one open investigation
-  (I1001/F900). The graph connects C1001 to D500, which is also connected to
-  C2001. Scoring signals: `open_high_severity_alerts`,
-  `shared_device_relationship`, and `active_investigation`. The elevated
-  transaction signal does not apply: there is only one transaction and its
-  amount is below the aggregate threshold. This matches the user-reported
-  actual C1001 result in section 4.
-- C1002 — expected MEDIUM. It has two transactions (70.0 and 25.0), one
-  low-severity closed alert, and no investigation row. Its D501 device is
-  also connected to C2001. Only `shared_device_relationship` should score:
-  the two-transaction sum is below 2000, and the alert is neither high nor
-  open. One signal gives MEDIUM under the deterministic rule.
-- C2001 — expected MEDIUM, with graph-only evidence. It shares D500 with
-  C1001 and D501 with C1002. It has no matching SQLite business rows, so no
-  transaction, alert, or investigation signals should be added. The
-  `LINKED_TO` relationships satisfy the service's shared-device signal
-  predicate, leaving one signal and therefore MEDIUM. This assumes the
-  complete demo graph registry and demo SQLite fixture are composed as in
-  `create_demo_agent()`; this particular case was not executed.
-
-Risk-category coverage in the bundled demo data:
-- HIGH and MEDIUM are represented by these three customers.
-- No customer in the bundled demo fixture appears to produce LOW: each has
-  at least one shared-device relationship, and C1001 also has an open high
-  alert and an investigation.
-- The scoring implementation can produce LOW for no-signal input, but that
-  is not an expected category for any of the three demo fixture customers.
-
-Relevant existing tests (present, not run in this review):
-- `tests/unit/test_demo_fixtures.py::test_demo_business_fixture_is_application_owned_and_referentially_valid`
-  verifies row counts and selected referential integrity; it does not assert
-  each customer's investigation risk.
-- `tests/unit/test_fraud_investigation.py::test_investigation_correlates_seeded_suspicious_signals_and_evidence`
-  verifies a constructed C1001 HIGH case with four signals and evidence, but
-  its custom graph/source data is not the complete application demo fixture.
-- `tests/unit/test_fraud_workflow.py::test_workflow_branches_replans_and_preserves_structured_evidence`
-  verifies a constructed C1001 HIGH workflow case, not the complete app demo
-  fixture. `test_find_customer_details_is_planned_as_one_authoritative_workflow`
-  uses a separate C1002 graph with empty business results and expects LOW;
-  that is not the demo C1002 fixture described above.
-- `tests/unit/test_fraud_workflow.py::test_other_obvious_fraud_queries_execute_without_model`
-  includes a C1001/C2001 comparison query; it does not assert a standalone
-  C2001 investigation risk.
-- `tests/live/test_fraud_databases.py::test_live_investigation_keeps_c1002_medium_and_c1001_high`
-  covers C1001/C1002 against configured live database fixtures, not the
-  synthetic SQLite demo, and was not run here.
-- No inspected test invokes the full `create_demo_agent()` investigation for
-  each of C1001, C1002, and C2001 and checks their expected risk/evidence.
-
-References:
-  apps/fraud/composition.py:8-68 — in-memory customer/fraud graph IDs/edges
-  apps/fraud/data/sqlite/demo.sql — synthetic business records
-  apps/fraud/investigation.py:81-110 — signals and categorical scoring
-  apps/fraud/investigation.py:136-199 — authorized evidence collection
-  apps/fraud/demo.py:27-83 — synthetic composition
-  tests/unit/test_demo_fixtures.py:90-118 — SQLite fixture integrity
-  tests/unit/test_fraud_investigation.py:76-91 — constructed high-risk case
-  tests/unit/test_fraud_workflow.py:90-98, :163-240 — workflow cases
-  tests/live/test_fraud_databases.py:107-134 — live C1001/C1002 case
-
-9. Tests and validation status
-------------------------------
-CONFIRMED: tests that exist
-- API serialization/redaction/validation tests:
-  tests/unit/test_api.py and tests/integration/test_api_operational_readiness.py.
-- Fraud/demo/workflow/security/evidence/RAG tests:
-  tests/unit/test_fraud_workflow.py, test_demo_fixtures.py, test_fraud_rag.py,
-  and test_fraud_presentation_and_failure.py.
-- Separate live database/provider tests exist under tests/live/.
-- CI uses Python 3.11 and runs `python -m pytest` and `python -m evaluation`
-  with MODEL_PROVIDER=fake.
-- API tests use stub agents; fraud tests independently exercise demo/workflow.
-  No inspected test integrates the API route with create_demo_agent() and
-  proves POST /api/v1/agent/run reaches FraudInvestigationWorkflow.
-
-HISTORICAL
-- docs/history/FINAL_VERIFICATION_REPORT.md reports 7/7 task-ID regression
-  tests, 8/8 multi-task failure tests, 4/4 live smoke tests, 19/19 custom
-  tests, and evaluation 43/44 (97.73%) with one pre-existing
-  session-isolation failure. These claims do not validate the current commit,
-  laptop, Python 3.12, or the dependency candidate set.
-
-ACTUALLY RUN
-- USER-REPORTED actual application run: direct synthetic `Investigate C1001`
-  returned `success=True`, risk HIGH, the reported alert/shared-device/
-  investigation findings, resources customer_graph/business_db/fraud_graph,
-  and fake provider. User reports Neo4j and MySQL were not required.
-- No application code or tests were executed by this report update. No
-  additional customer investigations or tests were run. The user's C1001
-  result was not independently rerun.
-- Python version, executable path, and pip availability were reported
-  verified during setup; these facts alone do not verify general project
-  compatibility. The C1001 success verifies one direct workflow only.
-- Current installed dependency versions/source and cache side effects from
-  the later run were not supplied. No tests have been reported as run.
-
-10. Blockers, unresolved items, and recommended next step
---------------------------------------------------------
-BLOCKERS BEFORE AN HTTP FRAUD DEMO
-1. POST /api/v1/agent/run constructs the generic agent, not the fraud demo.
-2. The route does not forward workflow/agent/delegations inputs.
-3. No API-to-fraud integration test.
-4. Uvicorn is absent from dependency manifests for the documented server
-   command; NumPy is directly imported but not explicitly pinned.
-5. A nonempty NEO4J_URI can cause Neo4j construction during synthetic demo
-   setup.
-6. API identity is unauthenticated and caller-controlled.
-7. RAG retrieval may download BGE; fake alone does not prevent that.
-
-PYTHON / COMPANY INSTALLATION RECOMMENDATION
-- Python 3.12.4 has now been selected with company permission and verified
-  inside this repository's `.venv`.
-- Python 3.11 remains the repository-aligned alternative because CI and
-  primary setup target it, but no approved 3.11 installation method is known.
-- Do not bypass controls or install a different runtime from an unapproved
-  source.
-- Do not choose Python 3.13 based only on it appearing in the launcher.
-
-UNRESOLVED
-- Whether IT can provide Python 3.11 and whether the approved package source
-  supports the needed Windows wheels.
-- Whether needed dependency wheels/packages are available from the company
-  source and compatible with the laptop's Windows/Python version.
-- Laptop capacity, network, caches, permissions, service and port restrictions.
-- Whether the HTTP demo should use synthetic resources or real Neo4j/MySQL.
-- Whether another branch/repository contains intended API integration.
-- Whether C1002 and C2001 produce the statically expected results; neither
-  case has been run.
-- Current installed dependency versions/provenance and any runtime cache or
-  observability-database side effects from the C1001 run.
-
-11. Next-step checklist — additional cases and tests deferred
---------------------------------------------------------------
-The Python runtime and isolated virtual environment have been created and
-verified as described above. The user reports one successful direct C1001
-investigation. Package state after that run is unknown. Further fixture
-investigations and tests remain deferred pending explicit approval. No
-additional cases or tests were run for this report.
-
-A. Approved-runtime decision
-----------------------------
-1. The selected runtime is company-permitted Python 3.12.4 in `.venv`.
-2. Python 3.11 remains the CI/documentation-aligned choice if a future
-   runtime change is desired and can be made through an approved process.
-3. Do not select Python 3.13 based on launcher availability alone.
-
-B. Read-only inspection commands
----------------------------------
-These commands inspect local state and manifest pins; they do not create an
-environment, install packages, run project code, or read .env:
-
-  git branch --show-current
-  git status --short --branch
-  py -0p
-  python --version
-  Test-Path -LiteralPath '.\.venv'
-  Test-Path -LiteralPath '.\venv'
-  Select-String -Path .\requirements.txt,.\requirements-dev.txt `
-    -Pattern '^(faiss-cpu|numpy|python-dotenv|uvicorn)(==|[<>=~!])'
-
-Use the approved package portal/documentation or ask IT to determine the
-approved Python package source and Windows wheel support. Do not print or
-copy pip configuration if it could contain credentials or internal URLs.
-The source and permissions are UNKNOWN. Never use `Get-Content .env`,
-`type .env`, environment dumps, or commands that print secret-bearing values.
-
-C. Verified virtual-environment milestone
------------------------------------------
-CONFIRMED AS USER-REPORTED VERIFIED SETUP:
-- Before creation, neither `.venv` nor `venv` existed.
-- The environment was created with:
-
-    py -3.12 -m venv .venv
-
-- `.venv\Scripts\python.exe` was verified as Python 3.12.4.
-- `sys.executable` was verified to point inside this repository's `.venv`.
-- pip 24.0 was verified available inside the environment.
-- No dependencies were installed as part of this milestone. These checks do
-  not verify project imports or runtime compatibility.
-
-D. Deferred minimal dependency resolution/installation
-------------------------------------------------------
-Static source analysis identifies this candidate set for the direct
-operational synthetic path:
-- `faiss-cpu==1.15.0` — existing requirements pin and unconditional import.
-- `python-dotenv==1.1.1` — existing requirements pin and config import.
-- NumPy — directly imported, but not pinned; an exact compatible version
-  must be selected by the approved package resolver/IT guidance.
-
-Before any installation, inspect only the non-secret manifest files with the
-read-only Select-String command above, and confirm the Python/Windows wheel
-and NumPy compatibility using the company-approved package source. No exact
-NumPy pin or package-source URL has been verified. Do not install the broad
-requirements.txt / requirements-dev.txt sets for this minimal direct demo:
-they include optional API, database, provider, ML/training, and development
-dependencies.
-
-After explicit package-install approval, and only if the approved package
-source is already configured or IT supplies its approved invocation, the
-candidate command shape is:
-
-  .\.venv\Scripts\python.exe -m pip install faiss-cpu==1.15.0 python-dotenv==1.1.1 numpy
-
-This command intentionally leaves NumPy to the approved resolver. If company
-policy requires a reviewed exact NumPy pin, obtain that version first and
-replace `numpy` with `numpy==<approved-version>` (do not type the angle
-brackets literally). Do not add a guessed `--index-url` or use a public
-package source unless the company explicitly approves it. Nothing above was
-installed or resolved in this audit.
-
-E. Safeguards and additional synthetic cases (deferred)
--------------------------------------------------------
-For any additional approved investigation, use process-scoped overrides in
-the same PowerShell process that launches Python:
-
-  $env:MODEL_PROVIDER = 'fake'
-  $env:NEO4J_URI = ''
-  $env:ENABLE_KNOWLEDGE_GRAPH = '0'
-
-These settings are process environment overrides, not edits to `.env` or
-repository configuration. The empty NEO4J_URI prevents the nonempty-URI
-condition in generic composition from constructing Neo4j; explicitly
-selecting fake prevents an inherited provider selection from choosing
-Ollama/Mistral/Qwen. Do not display the environment or inspect `.env`.
-Restore any previous shell values after the approved run, or close that
-PowerShell process.
-The settings' effectiveness is conditional on the actual configuration.
-The user's successful C1001 run used fake and did not require Neo4j/MySQL;
-the exact environment overrides used for that run were not supplied.
-
-No command below was executed during this report update. For an approved
-follow-up, investigate the remaining graph-backed customers one at a time:
-
-  agent.run("Investigate C1002", user_id="investigator")
-  agent.run("Investigate C2001", user_id="investigator")
-
-Static expected results are documented in section 8: C1002 MEDIUM from its
-shared-device signal, and C2001 MEDIUM from graph-only shared-device
-evidence. Confirm success, category, findings/evidence, and resource list
-against the fixture; do not use real/customer data. Avoid general RAG/policy
-retrieval queries. The direct path is not the FastAPI route; API-to-fraud
-wiring remains a separate blocker if an HTTP demo is required.
-
-The factory still constructs the RAG pipeline, but static analysis indicates
-that construction alone does not initialize the embedder. Avoiding retrieval
-is necessary to avoid first-use BGE model loading/download. Audit
-observability may create a local SQLite database. The temporary business
-SQLite fixture is managed by the demo context. These side effects have not
-been observed on this laptop.
-
-F. Deferred rollback and remaining side effects
------------------------------------------------
-If rollback is later explicitly authorized, first verify that the repository
-`.venv` is the environment created in this reported milestone; never remove
-a pre-existing or different environment. First inspect:
-
-  Test-Path -LiteralPath '.\.venv'
-
-If and only if the target is confirmed to be this newly created `.venv`, the
-targeted PowerShell removal command is:
-
-  Remove-Item -LiteralPath '.\.venv' -Recurse -Confirm
-
-This command was not run. It removes only the named `.venv` path, subject to
-confirmation; do not substitute a wildcard or a broader directory.
-Removing `.venv` does not remove pip caches, Hugging Face/model caches,
-observability SQLite files, logs, or other runtime side effects. Do not
-delete those automatically; inspect and obtain approval before cleanup.
-
-12. Safest path and final recommendation
-----------------------------------------
-RECOMMENDATION
-- The approved Python 3.12.4 `.venv` is already created and interpreter
-  verified. Python 3.11 remains the repository-aligned option, but changing
-  runtimes is not necessary for the current next step.
-- The user reports a successful synthetic C1001 investigation. Additional
-  customer cases and tests remain deferred pending explicit approval.
-- If dependencies need to be installed or verified, use only the
-  company-approved package source and resolve the minimal direct-call
-  imports; do not install the broad ML/training requirements by default.
-- Do not invoke RAG retrieval for the synthetic operational demo.
-- Do not rely on POST /api/v1/agent/run to reach the fraud workflow until its
-  composition/wiring is changed and an integration test is added.
-- Wait for explicit user approval before running additional cases or tests,
-  or changing the environment.
-
-13. Enterprise-approved model service compatibility
-----------------------------------------------------
-CONFIRMED: current provider seam
+4. Architecture, providers, and Qwen3 review
+--------------------------------------------
+CONFIRMED Vexux interfaces
 - `core.contracts.capabilities.ModelProviderContract` is a structural
   Protocol requiring a `name` property and
   `generate(prompt, response_format=None, **kwargs) -> str`.
-- `ModelGateway` accepts that provider, forwards prompt and generation
-  kwargs, returns the provider's string, logs success/failure metrics and
-  re-raises failures. `provider_metadata()` allowlists provider, model,
-  runtime_mode, host, and adapter_path fields; implementations should not
-  put credentials, tokens, or sensitive endpoint details in metadata.
-- `core.composition.create_agent()` explicitly maps a fixed set of provider
-  names to implementations. `core.config.SUPPORTED_MODEL_PROVIDERS` also
-  explicitly limits values to fake, ollama, mistral, and qwen. There is no
-  provider-plugin discovery mechanism or generic HTTP provider configuration.
-- Ollama is lazy-client based; Mistral wraps a chat-completions client;
-  Qwen loads its local ML stack at provider construction. All adapt their
-  request/response format to the same synchronous string-returning contract.
+- `core.model_gateway.gateway.ModelGateway` accepts a provider conforming to
+  that Protocol, forwards prompt and generation kwargs synchronously,
+  returns a string, logs success/failure metrics, and re-raises failures.
+  Its provider metadata allowlist includes provider, model, runtime_mode,
+  host, and adapter_path.
+- Preserve `ModelProviderContract` and `ModelGateway`.
+- `core.config.SUPPORTED_MODEL_PROVIDERS` and
+  `core.composition.create_agent()` explicitly enumerate and construct
+  supported providers. There is no generic provider plugin discovery.
+- Existing providers are fake, Ollama, Mistral, and Qwen. The existing
+  `models/providers/qwen.py::QwenProvider` uses Transformers plus PEFT,
+  defaults to a Qwen2.5 model identifier, and optionally loads a LoRA
+  adapter. It is not a Qwen3-specific provider.
+- Copilot completed a read-only Qwen3 integration review. The loan project's
+  Qwen3 Transformers implementation is a reference, not code already
+  integrated into Vexux. The loan project source was not present in the
+  inspected Vexux tree, so its exact `ModelResponse`, request schema,
+  async behavior, and error semantics remain unverified here.
 
-FEASIBILITY — INFERENCE FROM THE SEAM
-- An internally approved HTTP model gateway could be implemented as another
-  `ModelProviderContract` implementation and passed to the existing
-  `ModelGateway`. The fraud investigation/scoring code need not change just
-  to swap text-generation providers: `FraudInvestigationService.build_result`
-  computes categorical risk from retrieved deterministic signals, rather
-  than asking the provider to score risk.
-- To select it through normal app composition, implementation would still
-  need a new supported provider identifier, configuration fields, and a
-  construction branch in `core.composition.create_agent()` (or another
-  explicitly injected provider in the composition root). The existing
-  contract alone does not make an unregistered provider selectable.
-- The provider must map prompts, response-format requests (including JSON
-  where requested), and generation kwargs to the approved gateway's actual
-  protocol; validate response shape and text; apply bounded timeouts and
-  clear error handling; and avoid logging prompt bodies, credentials, or
-  confidential payloads. Compatibility with any actual internal API is
-  unknown until its approved contract is supplied and reviewed.
+QWEN3 LOCAL PROVIDER INTEGRATION REVIEW
+--------------------------------------
+COPILOT REVIEW / SOURCE FINDINGS
+- Vexux's current provider seam is synchronous and string-returning. Any
+  loan-project request/response behavior (including a structured
+  `ModelResponse`) must be adapted to this contract at the provider boundary:
+  accept Vexux's prompt/kwargs and return response text as `str`.
+- If the reference implementation is asynchronous, the adapter must
+  deliberately bridge that behavior to the synchronous contract; do not
+  call `asyncio.run()` blindly in an already-running event loop. Exact
+  bridging choice depends on the unavailable reference implementation.
+- Map Vexux generation options such as response format, token limits,
+  temperature, and sampling settings to Transformers' tokenizer/model APIs.
+  Reject or explicitly handle unsupported kwargs rather than silently
+  misapplying them.
+- Keep provider-specific errors explicit and preserve their causes; avoid
+  returning success-shaped fallbacks. Do not include prompt contents,
+  credentials, or confidential material in logs or metadata.
+- A new provider requires explicit registration in
+  `SUPPORTED_MODEL_PROVIDERS`, config parsing/cache snapshot/diagnostics,
+  and a `create_agent()` composition branch. Do not change the default
+  provider.
+- Fraud risk scoring and investigation logic need not change: the
+  deterministic scoring implementation consumes evidence/signals and does
+  not use the LLM as the risk scorer.
 
-INTERNAL HTTP GATEWAY REQUIREMENTS — RECOMMENDATION, NOT VERIFIED
-- Obtain the company's approved endpoint, protocol/schema, model identifier,
-  authentication mechanism, TLS/certificate/proxy requirements, timeout and
-  rate-limit policy, and data-handling classification through approved
-  internal documentation. None is known from this repository review.
-- Store any required credentials only through the approved secret mechanism;
-  never put them in source, report text, logs, provider metadata, or command
-  output. Do not send customer or production information unless explicitly
-  authorized by company policy.
-- Add focused provider tests using a mocked HTTP client: request mapping,
-  string/JSON response handling, malformed/non-text response errors,
-  timeout/network failures, redaction-safe diagnostics, and metadata
-  allowlisting. Add composition/config tests proving explicit provider
-  selection and rejection of unknown names. Do not silently fall back on
-  remote failures.
-- Existing model-provider tests cover fake, Ollama, Mistral, and provider
-  diagnostics, but no internal HTTP provider exists or is tested.
+OFFLINE MODEL LOADING PLAN — RECOMMENDATION
+- Configure an explicit local model path resolved from the user's
+  `%USERPROFILE%` cache location; do not rely on an online model identifier.
+- Load tokenizer and model from the local snapshot only, with
+  `local_files_only=True` and network-offline controls appropriate to the
+  approved Transformers/ModelScope setup. Fail clearly if required files
+  are missing; do not fall back to downloading.
+- Keep `trust_remote_code=False` unless the company review specifically
+  approves required custom code and it is present in the cache.
+- Use CPU explicitly rather than `device_map="auto"` for this target.
+  Decide bfloat16 versus float32 only after compatibility and memory testing.
+- Bound both prompt/input tokens and generated tokens. The config's
+  40960-position limit is an upper model limit, not a safe demo target.
+  Validate requested limits and reserve space for output within the context
+  budget.
+- The supplied cache listing does not prove that inference has succeeded.
 
-FAKE PROVIDER AS DETERMINISTIC OPTION
-- `FakeProvider` remains usable independently of local or remote model
-  availability and satisfies the same minimal provider shape. It provides
-  deterministic intent/planning/delegation examples and a generic
-  `FAKE_RESPONSE` for ordinary prompts; it is not semantically equivalent
-  to a production LLM.
-- The fake provider is selected explicitly via `MODEL_PROVIDER=fake`.
-  `create_demo_agent()` supplies fake only when MODEL_PROVIDER is absent and
-  preserves an explicit setting. There is no automatic failover from an
-  unavailable enterprise provider to fake. This is appropriate: automatic
-  fake fallback could make a real generation failure look successful or
-  silently change demo semantics.
-- Fake can remain the offline deterministic test/demo mode; if a fallback is
-  desired, make the mode visible and explicit, preserve the original
-  provider failure in the trace/log, and obtain approval for that behavior.
+REFERENCE IMPLEMENTATION DIFFERENCES / UNKNOWNS
+- No loan-project source was included in the repository inspected for this
+  report. The exact ModelResponse fields, request arguments, synchronous or
+  asynchronous call contract, cancellation semantics, and exception
+  behavior must be confirmed from that reference before implementing an
+  adapter.
+- The user-specified requirement is to map its request/ModelResponse
+  behavior into Vexux's synchronous string-returning contract; no exact
+  reference field mapping is asserted here.
 
-RAG EMBEDDING COMPATIBILITY
-- Current `rag.Embedder` lazily imports `SentenceTransformer` and defaults to
-  `BAAI/bge-small-en-v1.5`. `RAGPipeline` accepts an optional embedder object
-  with `encode(texts)` and validates that document embeddings are a 2-D
-  matrix with one row per chunk. `Retriever` uses the same embedder to encode
-  queries. A custom approved remote/local adapter could satisfy this
-  duck-typed behavior without changing fraud scoring.
-- The standard `core.composition.create_agent()` currently constructs
-  `RAGPipeline` without passing an embedder, so the default Sentence
-  Transformers path is used if retrieval initializes. No setting for an
-  approved embedding endpoint or local asset directory exists in inspected
-  configuration.
-- A company-approved embedding service would require a separately approved
-  endpoint/protocol and explicit injection/wiring into RAG composition. It
-  would need to embed both corpus chunks and queries in the same vector
-  space, preserve dimensions and normalization/metric expectations, and
-  receive only documents/query data authorized for that service.
-- A pre-approved local model may be usable by supplying a local model path
-  to SentenceTransformer-compatible loading, but this code does not enforce
-  local-only loading or demonstrate a bundled/cache-ready asset. Verify
-  approved asset provenance and prevent unapproved downloads before use.
-- Even with remote embeddings, current retrieval still uses in-process FAISS
-  and NumPy (`rag.vectorstore`); replacing those with a hosted vector service
-  is a separate adapter/design change. `FakeProvider` generates text and
-  cannot substitute for embedding vectors.
-- RAG tests demonstrate embedder injection, including deterministic lexical
-  embeddings, but no approved enterprise embedding provider or local-asset
-  policy is implemented or verified.
+MOCK-BASED TEST PLAN — RECOMMENDATION
+- Add `tests/unit/test_qwen3_provider.py` using mocked tokenizer/model
+  objects; tests must not load weights or access network.
+- Verify local path and offline loader arguments, CPU placement, prompt
+  tokenization/chat-template behavior, output-token bounds, decoding and
+  string return, response-format handling, and generation-kwargs mapping.
+- Verify malformed outputs, missing cache files, unsupported kwargs, and
+  model/tokenizer errors surface as explicit provider errors with causes.
+- Add configuration/composition coverage for explicit provider selection,
+  diagnostics without sensitive fields, and unchanged default provider.
+- Include a contract-focused test showing the adapter can be wrapped by
+  `ModelGateway` and returns `str`. These tests have not been implemented
+  or run.
 
-UNKNOWN / NOT ASSUMED
-- Whether any enterprise-approved HTTP model or embedding service exists,
-  which protocols or models it supports, whether this laptop can reach it,
-  and what authorization/data policy applies.
-- Whether external Azure/OpenAI/Mistral services or any other vendor is
-  approved. This report does not recommend or assume any vendor.
-- Whether approved model/embedding assets are already present locally or can
-  be provisioned by company IT without network download.
-- No HTTP calls, credentials, provider code, or tests were used to validate
-  this possibility.
+5. MiniLM embeddings and existing RAG behavior
+----------------------------------------------
+CONFIRMED SOURCE
+- `rag.Embedder` lazily imports Sentence Transformers and currently defaults
+  to `BAAI/bge-small-en-v1.5`.
+- `RAGPipeline` accepts an injected embedder object with `encode(texts)`;
+  it validates that encoded chunks produce a two-dimensional array with
+  one vector per chunk. `Retriever` also uses that embedder for query
+  encoding.
+- `core.composition.create_agent()` currently constructs the pipeline
+  without injecting a custom embedder. First retrieval initializes it and
+  may download/load the default BGE model if absent.
+- Retrieval uses in-process FAISS/NumPy. Fake text generation cannot
+  substitute for embedding vectors.
+- Tests in `tests/unit/test_fraud_rag.py` use an injected deterministic
+  lexical embedder.
 
-References:
-  core/contracts/capabilities.py — ModelProviderContract
-  core/model_gateway/gateway.py — ModelGateway.generate, provider_metadata
-  core/config.py — SUPPORTED_MODEL_PROVIDERS, Config, load_config_from_env
-  core/composition.py — create_agent provider selection and gateway wiring
-  models/providers/fake.py — deterministic FakeProvider
-  models/providers/ollama.py; models/providers/mistral.py; models/providers/qwen.py
-  apps/fraud/investigation.py — FraudInvestigationService.build_result
-  rag/embedder.py — Embedder._ensure_model, encode
-  rag/pipeline.py — RAGPipeline.__init__, _ensure_initialized, initialize
-  rag/retriever.py — Retriever.retrieve
-  rag/vectorstore.py — FAISS/NumPy vector storage
-  tests/unit/test_fake_provider.py
-  tests/unit/test_ollama_provider.py
-  tests/unit/test_mistral_provider.py
-  tests/unit/test_provider_diagnostics.py
-  tests/unit/test_model_gateway_portability.py
-  tests/unit/test_fraud_rag.py — injected deterministic lexical embedder
+FUTURE ALL-MINILM-L6-V2 TASK — SEPARATE
+- Locate and validate all-MiniLM-L6-v2 as an approved cached/local asset.
+  No such asset was established in the supplied findings.
+- Build a separate embedding adapter satisfying the RAG `encode(texts)`
+  behavior, with consistent dimensions and query/document vector space,
+  normalization, and FAISS metric expectations.
+- Inject it into `RAGPipeline` through composition/configuration in a
+  separate change. Do not conflate an embedding provider with the Qwen3
+  text-generation provider or change fraud scoring.
+- Sentence Transformers was reported missing from the Vexux `.venv`;
+  dependency source, compatible versions, Windows wheels, and asset
+  provenance require approval and validation.
 
-RECOMMENDED NEXT STEP — NO IMPLEMENTATION
-- Ask the appropriate internal platform/security team for the approved
-  inference and embedding service contracts, if such services are available.
-  Then design a contract-conforming provider plus explicit config/composition
-  wiring and focused mock-based tests. Keep fake selectable as an explicit
-  deterministic mode; do not silently fail over. Treat RAG embedding
-  integration and model-generation integration as separate changes.
-- Wait for approval before implementation or any network/service validation.
+6. Synthetic fraud workflow, evidence, and security
+---------------------------------------------------
+CONFIRMED SOURCE
+- `apps.fraud.demo.create_demo_agent()` composes the fraud workflow with
+  temporary SQLite fixture data and in-memory customer/fraud graphs; it
+  does not construct the real MySQL backend.
+- It selects fake only when MODEL_PROVIDER is absent and preserves an
+  explicitly configured provider. Generic composition can instantiate
+  Neo4j if a nonempty `NEO4J_URI` is configured before the demo replaces
+  the graph registry.
+- The synthetic direct call is `agent.run("Investigate <customer ID>",
+  user_id="investigator")` inside the demo-agent context.
+- The deterministic score in
+  `apps.fraud.investigation.FraudInvestigationService.build_result` is
+  categorical: HIGH if there are at least two signals or an open
+  high-severity alert; MEDIUM for one or more other signals; LOW for no
+  signals.
+- Protected resources are authorized before access. `support_user` is the
+  least-privileged default and is denied fraud-graph investigation access;
+  `investigator` is the intended synthetic demo actor. This application
+  actor identifier is not HTTP authentication.
 
-Verification note
------------------
-The existing report was read and updated in place. The company-laptop
-milestones and C1001 result are recorded as user-reported verified; this
-refresh independently checked branch `prod`, commit
-580ae96d1e076acefbf650b25904082e155d729a, and the clean pre-edit worktree.
-Fixture and provider compatibility analysis was static. Only
-VEXUX_AUDIT_REPORT.txt was modified. No dependencies were installed,
-additional investigations or tests run, network calls made, services
-started, or models downloaded during this update. Nothing was staged,
-committed, or pushed.
+USER-REPORTED ACTUAL SYNTHETIC RUN
+- Query `Investigate C1001` reportedly returned `success=True`, HIGH risk,
+  with an open high-severity alert, shared-device connection, and an
+  associated investigation record.
+- Resources reported: customer_graph, business_db, fraud_graph. Provider:
+  fake. User reports Neo4j and MySQL were not required.
+- This is user-supplied runtime evidence, not rerun in the audits. It does
+  not establish Qwen3 inference, API integration, or test-suite results.
+
+STATIC FIXTURE INVENTORY — EXPECTED, NOT EXECUTED HERE
+- C1001: expected HIGH from open high-severity alert, shared-device
+  relationship, and investigation record. Its single $120 fixture
+  transaction does not meet the elevated-transaction rule.
+- C1002: expected MEDIUM from shared-device relationship only; fixture has
+  two low-value transactions (70 and 25), a low-severity closed alert, and
+  no investigation record.
+- C2001: expected MEDIUM from graph-only shared-device relationships with
+  C1001 and C1002; no matching business SQLite rows.
+- The bundled cases represent HIGH and MEDIUM; none appears to produce LOW.
+  The outcomes for C1002 and C2001 were not run.
+
+SECURITY / AUDIT LIMITATIONS
+- API `user_id` is caller-supplied; the API has no request authentication.
+- Generic `DefaultPolicy` may be permissive unless application policy is
+  explicitly wired. Application fraud authorization is distinct from
+  authentication.
+- Audit logging is best-effort local SQLite, not demonstrated tamper-proof
+  enterprise audit. Redaction exists but does not establish permission to
+  transmit data to an external model.
+- Use synthetic data only unless company policy separately authorizes other
+  data. Do not expose secrets or inspect `.env` values.
+
+7. API and external database findings
+-------------------------------------
+CONFIRMED SOURCE
+- `api.main.get_agent()` calls generic `core.composition.create_agent()`.
+  `POST /api/v1/agent/run` calls `agent.run(query, session_id, user_id)`.
+- The route does not forward optional workflow/agent/delegation fields and
+  does not construct `apps.fraud.demo.create_demo_agent()`. Generic
+  composition registers the general knowledge-grounded workflow, not the
+  fraud workflow. `/docs` is FastAPI's documented interactive API page.
+- There is no inspected API-to-fraud integration test. API tests use stub
+  agents; fraud workflow tests independently exercise workflow behavior.
+- `apps.fraud.real.create_real_agent()` is a separate Neo4j/MySQL
+  composition; it has no synthetic fallback.
+- Uvicorn was absent from the previously inspected dependency manifests
+  despite the documented API command.
+
+BLOCKERS IF AN HTTP FRAUD DEMO IS REQUIRED
+- Fraud workflow must be deliberately wired into the intended API route,
+  with a defined authorization/authentication boundary and API integration
+  test.
+- Uvicorn must be included in an approved runtime dependency set.
+- The caller-provided `user_id` must not be presented as verified identity.
+- Existing external database destinations, authorization, and company
+  approvals must be established before connecting Neo4j/MySQL.
+
+8. Test and validation history
+------------------------------
+TESTS PRESENT (not evidence of a current pass)
+- Fraud tests include `tests/unit/test_fraud_workflow.py`,
+  `test_fraud_investigation.py`, `test_demo_fixtures.py`, and
+  `test_fraud_rag.py`; API tests include `tests/unit/test_api.py` and
+  `tests/integration/test_api_operational_readiness.py`.
+- Existing tests cover constructed high-risk investigations, authorization,
+  fake-provider behavior, provider diagnostics, and injected test
+  embedders. They do not cover every synthetic demo customer against the
+  full app fixture. The live C1001/C1002 test uses configured live DB
+  fixtures, not the synthetic SQLite demo.
+- No existing test integrates POST `/api/v1/agent/run` with the fraud demo.
+- No Qwen3 provider tests or weights-free Qwen3 adapter tests exist.
+
+HISTORICAL
+- `docs/history/FINAL_VERIFICATION_REPORT.md` reported 7/7 task-ID
+  regressions, 8/8 multi-task failure tests, 4/4 live smoke tests, 19/19
+  custom tests, and evaluation 43/44 (97.73%) with one pre-existing
+  session-isolation failure. These are historical claims and do not verify
+  the current laptop environment or current code.
+
+ACTUAL EXECUTION STATUS
+- The direct C1001 investigation is reported by the user as successful.
+- No additional C1002/C2001 investigations or tests were run for the
+  read-only audits.
+- No Qwen3 model inference has succeeded or been attempted according to the
+  supplied evidence.
+- No tests are claimed to have passed in the current review.
+- Package inspection reported missing torch/transformers and related
+  packages; the approved package source and permission to use the cached
+  model remain unknown.
+
+9. Qwen3 implementation plan
+----------------------------
+RECOMMENDATION — no implementation has been performed
+
+Phase 1 — Resolve company-approved package source and compatible Windows/
+Python 3.12 CPU dependencies.
+- Confirm internal package-source approval and availability of compatible
+  Python 3.12 Windows CPU builds for PyTorch, Transformers, safetensors, and
+  any strictly required transitive packages. Reconcile the recorded
+  Transformers 4.51.0 with Vexux's 4.55.2 pin using approved compatibility
+  evidence. Confirm CPU bfloat16 support or select a tested safe dtype.
+- Do not install dependencies until this source/version review is approved.
+
+Phase 2 — Load cached Qwen3 offline and run a standalone inference test.
+- Use the exact local ModelScope snapshot directory, offline-only loading,
+  explicit CPU placement, bounded input/context and output tokens, and no
+  network fallback. First verify local files without exposing secrets or
+  transmitting customer data. No inference success is claimed.
+
+Phase 3 — Implement a Qwen3 adapter against the existing Vexux provider
+contract, with mock tests.
+- Preserve `ModelProviderContract` and `ModelGateway`; adapt request options
+  and any reference `ModelResponse` into a synchronous string result.
+- Add provider selection/configuration without changing the default provider.
+- Add mocked model/tokenizer tests that load no weights, plus explicit
+  error, offline path, CPU, token-bound, and metadata tests.
+
+Phase 4 — Locate and validate all-MiniLM-L6-v2; integrate embeddings
+separately into Vexux RAG.
+- Treat embedding setup as a distinct provider/adapter and dependency path.
+- Confirm approved local asset provenance, vector dimensionality and
+  normalization; inject via the RAG embedder seam. Do not use Qwen3 as an
+  embedding model by implication.
+
+Phase 5 — Connect persistent Neo4j and MySQL using approved database
+destinations and existing Vexux adapters.
+- Confirm approved destinations, credentials handling, permissions, and
+  synthetic/test data boundaries before connection. No connection is
+  established by this report.
+
+Phase 6 — Validate synthetic fraud cases C1001, C1002 and C2001, API
+integration, evidence, authorization, and regression tests.
+- Run only after dependencies and execution are explicitly approved.
+- Keep the API-to-fraud integration issue distinct from the direct demo.
+  Do not claim test success until commands are actually run and results are
+  recorded.
+
+10. Next action and unresolved items
+------------------------------------
+EXACT NEXT ACTION
+- Establish the company-approved Python package source, then resolve the
+  minimal CPU inference dependencies against Windows/Python 3.12 and the
+  cached Qwen3 asset. Do not install until approval and compatibility are
+  confirmed.
+
+UNKNOWN
+- Approved package repository and permission to use the cached Qwen3 model.
+- Compatibility and performance of PyTorch/Transformers/safetensors on this
+  Windows CPU/Python 3.12.4 environment, especially bfloat16 handling.
+- Exact loan-project source/API, ModelResponse fields, generation defaults,
+  and async/error behavior.
+- Whether all-MiniLM-L6-v2 is cached/approved and whether company policy
+  allows embedding documents or queries to an internal service.
+- Whether Neo4j/MySQL destinations and use are approved.
+- Whether API routing, authentication, and integration-test requirements
+  will be part of the demo.
+
+FINAL STATUS
+- No model inference success is claimed.
+- FAISS CPU 1.15.0 is the only relevant installed package explicitly
+  reported. PyTorch, Transformers, Sentence Transformers, llama-cpp-python,
+  Neo4j, and MySQL connector were reported missing. No Qwen3 inference
+  dependencies are confirmed installed.
+- No Neo4j/MySQL connection and no Qwen3 test execution are claimed.
+- The report is the only file modified for this refresh. No source code or
+  environment was changed by the read-only review; nothing was staged,
+  committed, or pushed.
