@@ -1,5 +1,6 @@
 VEXUX AI - COMPANY-LAPTOP SYNTHETIC DEMO STATUS
 Current consolidated audit and demo validation
+Latest review update: 2026-11-10
 
 Evidence labels
 ---------------
@@ -30,14 +31,24 @@ ACTUALLY VERIFIED BEFORE CHANGES
 - Repository branch: prod.
 - HEAD: 18efd8547e47ac5e35663087b671c69eb289b77b.
 - The working tree was clean before this task. The branch and HEAD were not
-  changed during the task.
+  changed during the previous demo-validation task.
+- Current pre-report-update checkout: clean `prod` branch at
+  48e8cbae9ad7319c5f22b2702d031cdcfc6c84ed. This hash supersedes the
+  earlier recorded 18efd8547e47ac5e35663087b671c69eb289b77b.
 
-FILES CHANGED IN THIS TASK
+FILES ADDED/UPDATED IN THE PREVIOUS DEMO-VALIDATION TASK
 - Added apps/fraud/demo_cli.py.
 - Added tests/unit/test_fraud_demo_cli.py.
 - Replaced VEXUX_AUDIT_REPORT.txt.
 - No other file was intentionally changed. No files were staged, committed,
   or pushed.
+
+LATEST QWEN3 / EXISTING-TERMINAL REVIEW
+---------------------------------------
+This latest review changed only VEXUX_AUDIT_REPORT.txt. The existing
+interactive terminal, provider source, configuration, tests, and dependency
+files were not changed. No packages were installed, models downloaded,
+tests run, or services contacted.
 
 2. Demo CLI and actual synthetic case validation
 ------------------------------------------------
@@ -341,3 +352,89 @@ FINAL STATUS
   connectivity are not verified.
 - No dependencies were installed, no secrets or `.env` values were displayed,
   no services were started, and nothing was staged, committed, or pushed.
+
+11. Latest Qwen3 and existing interactive-terminal review
+--------------------------------------------------------
+ACTUALLY VERIFIED DEPENDENCY INSPECTION
+- Inspected the existing `.venv` before any proposed provider or terminal
+  changes.
+- Not installed: torch, transformers, safetensors, sentence-transformers,
+  pytest, FastAPI, and Uvicorn.
+- Installed versions observed: faiss-cpu 1.15.0, NumPy 2.5.4, and
+  python-dotenv 1.1.1.
+- requirements.txt pins PyTorch 2.7.1 and Transformers 4.55.2. The recorded
+  Transformers 4.51.0 remains user-supplied cache-related information, not an
+  installed version in this environment.
+
+ACTUALLY VERIFIED LOCAL MODEL ASSET
+- The supplied ModelScope directory exists:
+  `%USERPROFILE%\.cache\modelscope\models\Qwen--Qwen3-0.6B\snapshots\master`.
+- Directory listing confirmed config, tokenizer, generation-config, and
+  `model.safetensors` files. The weights file was 1,503,300,328 bytes.
+- This confirms files are present at that path, not that the snapshot loads,
+  is company-approved, or can run on this CPU environment.
+
+EXACT BLOCKER / ORDERED TEST STATUS
+- Standalone offline Qwen3 inference could not be attempted because the
+  required Python runtime packages `torch`, `transformers`, and
+  `safetensors` are absent from `.venv`. The company-approved package source
+  and permission to install those dependencies remain UNKNOWN.
+- No packages were installed and no model download or network fallback was
+  attempted.
+- Because the required first standalone inference gate is blocked, no
+  ModelGateway/Qwen3 runtime integration test or Qwen3-backed interactive
+  terminal test was run. No inference success is claimed.
+- pytest is also absent, so no focused or regression test suite could run.
+  No terminal interaction, actor-switch, exit, or provider-error scenario
+  was newly tested in this review.
+- There is no Qwen3 provider implementation or `qwen3` provider registration
+  in the inspected source. `models/providers/qwen.py` implements the
+  existing Qwen2.5/PEFT path and is not suitable as a Qwen3 substitute.
+  `core.contracts.capabilities.ModelProviderContract` and
+  `core.model_gateway.gateway.ModelGateway` remain the intended interfaces.
+
+EXISTING INTERACTIVE TERMINAL — SOURCE-CONFIRMED
+- The existing terminal is `scripts/manual/run_agent.py`. It imports
+  `apps.fraud.real.create_real_agent` at line 8 and `main()` constructs that
+  real Neo4j/MySQL agent at line 336.
+- Its current implementation includes the input loop, `/actor` selection,
+  progress renderer, provider/runtime banner, observability commands
+  (`/trace`, `/audit`, `/metrics`), and calls `agent.run()`; these were
+  reviewed but not executed in this latest review.
+- It currently has no configurable composition/factory selection. Its
+  banner uses `provider_diagnostic(get_config())`; configuration and
+  diagnostics have no Qwen3 provider/model registration.
+- `apps/fraud.demo.create_demo_agent()` is the existing synthetic
+  composition, and `apps/fraud.demo_cli` is a separate non-interactive
+  one-shot CLI from the previous demo task. No new interactive terminal was
+  created, and that one-shot CLI does not replace the requested existing
+  terminal experience.
+- A future implementation should add a clean, explicit composition choice
+  to the existing terminal, preserve real composition as the default, reuse
+  `create_demo_agent()`, and inject the selected provider through the
+  existing ModelGateway path rather than duplicate agent composition.
+  Synthetic selection must force fake or explicitly selected Qwen3 and keep
+  Neo4j, MySQL, general RAG retrieval, persistent memory, and autonomous
+  delegation disabled.
+- `FraudInvestigationService.build_result()` remains the deterministic
+  authority for risk. Qwen3 may assist with planning or explanations only;
+  it must not determine categorical risk.
+
+LATEST REQUEST OUTCOME
+- The requested code-level Qwen3 provider and interactive-terminal
+  adaptations were not implemented because the ordered first test gate is
+  blocked by missing inference dependencies and package approval. Proceeding
+  to claim or integrate an unvalidated model would not meet the requested
+  offline-inference-first validation sequence.
+- This latest review modified only VEXUX_AUDIT_REPORT.txt. The source files,
+  tests, configurations, and dependency manifests remain unchanged by this
+  review. The previous synthetic CLI files remain as part of the existing
+  repository state; no second interactive terminal was created.
+
+EXACT NEXT ACTION
+- Obtain company approval for the package source and required Windows/Python
+  3.12 CPU packages; then install only through that approved source after
+  explicit approval. First run a standalone Qwen3 inference test with
+  local-only loading from the verified cache. Only after it succeeds should
+  ModelGateway integration and the existing terminal's synthetic composition
+  be implemented and tested. Do not silently fall back to another provider.
