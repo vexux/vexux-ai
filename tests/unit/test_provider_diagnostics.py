@@ -86,3 +86,55 @@ def test_qwen3_generation_limits_are_validated(monkeypatch, tmp_path):
 
     with pytest.raises(ValueError, match="below minimum"):
         load_config_from_env()
+
+
+def test_llama_cpp_configuration_and_diagnostics_hide_model_directory(
+    monkeypatch, tmp_path
+):
+    import core.config as config_module
+
+    model_path = tmp_path / "private-model-dir" / "Llama-3.2-3B-Instruct-Q4_K_M.gguf"
+    monkeypatch.setattr(config_module, "_ENV_FILE", tmp_path / ".env")
+    monkeypatch.setenv("MODEL_PROVIDER", "llama_cpp")
+    monkeypatch.setenv("LLAMA_CPP_MODEL_PATH", str(model_path))
+    monkeypatch.setenv("LLAMA_CPP_N_CTX", "1024")
+    monkeypatch.setenv("LLAMA_CPP_N_THREADS", "3")
+    monkeypatch.setenv("LLAMA_CPP_MAX_NEW_TOKENS", "128")
+
+    config = load_config_from_env()
+
+    assert config.llama_cpp_model_path == str(model_path)
+    assert config.llama_cpp_n_ctx == 1024
+    assert config.llama_cpp_n_threads == 3
+    assert config.llama_cpp_max_new_tokens == 128
+    assert provider_diagnostic(config) == {
+        "provider": "llama_cpp",
+        "runtime_mode": "local",
+        "model": model_path.name,
+    }
+    assert str(tmp_path) not in str(provider_diagnostic(config))
+    assert str(tmp_path) not in repr(config)
+
+
+@pytest.mark.parametrize(
+    ("name", "value"),
+    [
+        ("LLAMA_CPP_N_CTX", "0"),
+        ("LLAMA_CPP_N_THREADS", "-1"),
+        ("LLAMA_CPP_MAX_NEW_TOKENS", "0"),
+        ("LLAMA_CPP_N_CTX", "9000"),
+        ("LLAMA_CPP_N_THREADS", "17"),
+        ("LLAMA_CPP_MAX_NEW_TOKENS", "1025"),
+    ],
+)
+def test_llama_cpp_configuration_rejects_out_of_range_limits(
+    monkeypatch, tmp_path, name, value
+):
+    import core.config as config_module
+
+    monkeypatch.setattr(config_module, "_ENV_FILE", tmp_path / ".env")
+    monkeypatch.setenv("MODEL_PROVIDER", "llama_cpp")
+    monkeypatch.setenv(name, value)
+
+    with pytest.raises(ValueError):
+        load_config_from_env()

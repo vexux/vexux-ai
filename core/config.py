@@ -14,7 +14,7 @@ from dotenv import dotenv_values
 
 _ENV_FILE = Path(__file__).resolve().parents[1] / ".env"
 SUPPORTED_MODEL_PROVIDERS = frozenset(
-    {"fake", "ollama", "mistral", "qwen", "qwen3"}
+    {"fake", "ollama", "mistral", "qwen", "qwen3", "llama_cpp"}
 )
 _DEFAULT_QWEN3_MODEL_PATH = (
     Path.home()
@@ -24,6 +24,12 @@ _DEFAULT_QWEN3_MODEL_PATH = (
     / "Qwen--Qwen3-0.6B"
     / "snapshots"
     / "master"
+)
+_DEFAULT_LLAMA_CPP_MODEL_PATH = (
+    Path(__file__).resolve().parents[1]
+    / "models"
+    / "weights"
+    / "Llama-3.2-3B-Instruct-Q4_K_M.gguf"
 )
 
 
@@ -76,6 +82,10 @@ class Config:
     qwen3_model_path: str = str(_DEFAULT_QWEN3_MODEL_PATH)
     qwen3_max_input_tokens: int = 2048
     qwen3_max_new_tokens: int = 256
+    llama_cpp_model_path: str = str(_DEFAULT_LLAMA_CPP_MODEL_PATH)
+    llama_cpp_n_ctx: int = 2048
+    llama_cpp_n_threads: int = 4
+    llama_cpp_max_new_tokens: int = 256
     autonomous_delegation_enabled: bool = False
     max_autonomous_delegations: int = 4
     max_parallel_tasks: int = 1
@@ -155,6 +165,21 @@ def load_config_from_env(prefix: str = "") -> Config:
     qwen3_max_new_tokens = _parse_int(
         e("QWEN3_MAX_NEW_TOKENS"), default=256, min_value=1, max_value=4096
     )
+    llama_cpp_model_path = (
+        e("LLAMA_CPP_MODEL_PATH") or str(_DEFAULT_LLAMA_CPP_MODEL_PATH)
+    )
+    llama_cpp_n_ctx = _parse_int(
+        e("LLAMA_CPP_N_CTX"), default=2048, min_value=1, max_value=8192
+    )
+    llama_cpp_n_threads = _parse_int(
+        e("LLAMA_CPP_N_THREADS"), default=4, min_value=1, max_value=16
+    )
+    llama_cpp_max_new_tokens = _parse_int(
+        e("LLAMA_CPP_MAX_NEW_TOKENS"),
+        default=256,
+        min_value=1,
+        max_value=1024,
+    )
 
     autonomous_delegation_enabled = _parse_bool(e("ENABLE_AUTONOMOUS_DELEGATION"))
 
@@ -191,6 +216,10 @@ def load_config_from_env(prefix: str = "") -> Config:
         qwen3_model_path=qwen3_model_path,
         qwen3_max_input_tokens=qwen3_max_input_tokens,
         qwen3_max_new_tokens=qwen3_max_new_tokens,
+        llama_cpp_model_path=llama_cpp_model_path,
+        llama_cpp_n_ctx=llama_cpp_n_ctx,
+        llama_cpp_n_threads=llama_cpp_n_threads,
+        llama_cpp_max_new_tokens=llama_cpp_max_new_tokens,
         autonomous_delegation_enabled=autonomous_delegation_enabled,
         max_autonomous_delegations=max_autonomous_delegations,
         max_parallel_tasks=max_parallel_tasks,
@@ -230,6 +259,10 @@ def _env_snapshot(prefix: str = "") -> tuple:
         "QWEN3_MODEL_PATH",
         "QWEN3_MAX_INPUT_TOKENS",
         "QWEN3_MAX_NEW_TOKENS",
+        "LLAMA_CPP_MODEL_PATH",
+        "LLAMA_CPP_N_CTX",
+        "LLAMA_CPP_N_THREADS",
+        "LLAMA_CPP_MAX_NEW_TOKENS",
         "ENABLE_AUTONOMOUS_DELEGATION",
         "MAX_AUTONOMOUS_DELEGATIONS",
         "AGENT_MAX_PARALLEL_TASKS",
@@ -279,7 +312,7 @@ def provider_diagnostic(config: Config | None = None) -> dict[str, str]:
             "deterministic"
             if active.model_provider == "fake"
             else "local"
-            if active.model_provider in {"ollama", "qwen", "qwen3"}
+            if active.model_provider in {"ollama", "qwen", "qwen3", "llama_cpp"}
             else "remote"
         ),
     }
@@ -295,4 +328,6 @@ def provider_diagnostic(config: Config | None = None) -> dict[str, str]:
         diagnostic["adapter_path"] = getattr(active, "qwen_adapter_path", "models/checkpoints")
     elif active.model_provider == "qwen3":
         diagnostic["model"] = "Qwen3-0.6B"
+    elif active.model_provider == "llama_cpp":
+        diagnostic["model"] = Path(active.llama_cpp_model_path).name
     return diagnostic

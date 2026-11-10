@@ -73,6 +73,16 @@ def create_agent(rag_documents_path=None, *, enable_rag=True):
             max_new_tokens=config.qwen3_max_new_tokens,
         )
 
+    elif provider_name == "llama_cpp":
+        from models.providers.llama_cpp import LlamaCppProvider
+
+        provider = LlamaCppProvider(
+            model_path=config.llama_cpp_model_path,
+            n_ctx=config.llama_cpp_n_ctx,
+            n_threads=config.llama_cpp_n_threads,
+            max_new_tokens=config.llama_cpp_max_new_tokens,
+        )
+
     elif provider_name == "ollama":
         from models.providers.ollama import OllamaProvider
 

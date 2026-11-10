@@ -1,348 +1,235 @@
-VEXUX AI - COMPANY-LAPTOP SYNTHETIC DEMO STATUS
-Consolidated audit and Qwen3 interactive-terminal integration
+VEXUX AI - LOCAL FRAUD DEMO AND PROVIDER STATUS
+Consolidated audit report
 Updated: 2026-11-10
 
 Evidence labels
 ---------------
-SOURCE-CONFIRMED  Verified from current repository code, manifests, tests, or
-                  documentation.
-ACTUALLY-RUN      Executed during the current task.
-USER-SUPPLIED     Previously provided terminal/environment information not
-                  independently rechecked unless explicitly stated.
-HISTORICAL        Older verification report result; not a current pass.
-INFERENCE         Reasoned from source or results but not itself executed.
+SOURCE-CONFIRMED  Verified in the checked-out source, tests, manifests, or docs.
+ACTUALLY-RUN      Executed during this Llama-provider task.
+PRIOR-EXECUTION   Recorded as executed in the previous consolidated report;
+                  not rerun during this task.
+USER-SUPPLIED     Previously provided terminal/environment evidence.
+INFERENCE         Reasoned from source or observed outputs.
 UNKNOWN           Not established by available evidence.
 RECOMMENDATION    Future action, not completed.
 
-Change summary
---------------
-- Added a standalone local-only Qwen3 provider; retained the existing
-  Qwen2.5/PEFT provider without modification.
-- Registered the qwen3 provider and its bounded input/output configuration.
-- Extended the existing `scripts/manual/run_agent.py` terminal with explicit
-  real/synthetic composition options. Real composition remains the default.
-- Synthetic mode reuses `apps.fraud.demo.create_demo_agent()`, forces the
-  selected fake/Qwen3 provider, disables generic RAG and persistent/external
-  resources, and restores environment overrides when the terminal exits.
-- Added provider, configuration/composition, and terminal tests. They were
-  not run because pytest is unavailable in the current `.venv`.
-- Confirmed local offline CPU inference and a successful ModelGateway call.
-- No dependencies were installed and no model was downloaded.
+Current scope
+-------------
+This task adds an optional local CPU Llama GGUF provider while retaining the
+existing Qwen3 provider, ModelProviderContract, ModelGateway, real-agent
+composition, and interactive terminal. Fraud scoring and synthetic fixtures
+were not changed. No dependencies or model weights were installed/downloaded.
+No database, model service, or external network was contacted.
 
-1. Repository and Git status
-----------------------------
-ACTUALLY VERIFIED BEFORE THIS TASK
-- Branch: prod.
-- HEAD: 73e7eadf07a71aac5e2fca6ded62bfbb0184721b.
-- The working tree was clean before this task.
+1. Repository and Git state
+---------------------------
+ACTUALLY VERIFIED AT TASK START
+- Repository: Vexux-AI, root `C:\Users\varpundl\Documents\NatWest Training\vexux-ai`.
+- Branch: `prod`.
+- HEAD: `79acf18a6c75a95c15d4529f3fe7c2ac9923d712`.
+- HEAD subject: `cli integration with local qwen3`.
+- The worktree was clean before this task. It now contains only the nine
+  intended changed/new files listed below. Nothing was staged, committed, or
+  pushed.
 
 FILES CHANGED IN THIS TASK
-- `models/providers/qwen3.py` (new).
+- `models/providers/llama_cpp.py` (new).
 - `core/config.py`.
 - `core/composition.py`.
-- `apps/fraud/demo.py`.
 - `scripts/manual/run_agent.py`.
-- `docs/SETUP.md`.
-- `tests/unit/test_qwen3_provider.py` (new).
-- `tests/unit/test_qwen3_composition.py` (new).
-- `tests/unit/test_synthetic_terminal.py` (new).
+- `tests/unit/test_llama_cpp_provider.py` (new).
 - `tests/unit/test_provider_diagnostics.py`.
+- `tests/unit/test_synthetic_terminal.py`.
+- `docs/SETUP.md`.
 - `VEXUX_AUDIT_REPORT.txt`.
 
-No source scoring rules, `.env` files, model assets, or dependency manifests
-were changed. Nothing was staged, committed, or pushed. The working tree is
-expected to contain only the files listed above as changes from this task.
+No `.env`, dependency manifest, fraud scoring code, investigation workflow,
+fixture, model file, or separate terminal launcher was changed.
 
-2. Qwen3 provider and ModelGateway
-----------------------------------
-SOURCE-CONFIRMED IMPLEMENTATION
-- `models/providers/qwen3.py` defines `Qwen3Provider` with the existing
-  synchronous `generate(prompt, response_format=None, **kwargs) -> str`
-  behavior.
-- Model and tokenizer initialization are lazy and cached once per provider
-  instance. PyTorch/Transformers are imported only during that initialization.
-- The default path is the current user's ModelScope snapshot:
-  `~/.cache/modelscope/models/Qwen--Qwen3-0.6B/snapshots/master`.
-  A custom path is supported by `QWEN3_MODEL_PATH` or the terminal flag
-  `--qwen3-model-path`; `~` and environment-variable paths are expanded.
-- Both tokenizer and model use `local_files_only=True`; there is no download
-  fallback. The provider explicitly loads and runs on CPU using bfloat16.
-- The Qwen3 chat template is used with `enable_thinking=False`. If an older
-  tokenizer rejects that specific keyword, the provider retries the template
-  without it. It tokenizes with left truncation and a configured input bound.
-- Generation uses `torch.inference_mode()`, defaults to deterministic
-  decoding, clamps caller output length to the configured maximum, and
-  decodes only tokens beyond the input token length.
-- `response_format="json"` adds an explicit JSON-only instruction. This is
-  prompt guidance; it does not guarantee syntactically valid JSON.
-- Loading and generation failures produce explicit `RuntimeError`s with the
-  original cause chained. Invalid input, limits, and unsupported response
-  formats are rejected; provider errors are not silently replaced by fake.
-- The existing `models/providers/qwen.py` Qwen2.5/PEFT implementation was not
-  changed or used for Qwen3.
-
-CONFIGURATION AND REGISTRATION
-- `core/config.py` now recognizes `qwen3` independently from `qwen`.
-- Settings: `QWEN3_MODEL_PATH`, `QWEN3_MAX_INPUT_TOKENS` (default 2048,
-  allowed 1..32768), `QWEN3_MAX_NEW_TOKENS` (default 256, allowed
-  1..4096).
-- Existing provider defaults and configuration remain unchanged. The global
-  default provider was not changed.
-- `core/composition.py:create_agent()` constructs `Qwen3Provider` when
-  `MODEL_PROVIDER=qwen3`; `provider_diagnostic()` and ModelGateway metadata
-  identify it as `qwen3`, model `Qwen3-0.6B`, runtime `local`.
-- `core.model_gateway.gateway.ModelGateway` and
-  `core.contracts.capabilities.ModelProviderContract` were preserved.
-
-ACTUALLY-RUN OFFLINE MODEL AND GATEWAY CHECKS
-- Current `.venv` package metadata: PyTorch `2.15.0+cpu`, Transformers
-  `5.22.2`, Safetensors `0.8.0`. Runtime reported
-  `torch.cuda.is_available() == False`.
-- The local ModelScope cache directory was present with config/tokenizer/
-  generation files and `model.safetensors` (1,503,300,328 bytes).
-- A standalone inference ran with `HF_HUB_OFFLINE=1`,
-  `TRANSFORMERS_OFFLINE=1`, `local_files_only=True`, Qwen3 chat template,
-  thinking disabled, CPU, bfloat16, and 24 output tokens. It returned
-  non-empty newly generated text; CUDA was unavailable as expected.
-- A second offline call through `ModelGateway.generate()` also succeeded.
-  Gateway metadata was:
-  `provider=qwen3`, `model=Qwen3-0.6B`, `runtime_mode=local`.
-- A weights-free inline mocked Transformers/PyTorch check also succeeded:
-  tokenizer/model each loaded once with `local_files_only=True`, CPU and
-  bounded generation were asserted, chat-template thinking was disabled,
-  and only the generated token suffix was decoded through ModelGateway.
-- The output was short because that check intentionally used a 24-token
-  limit; it verifies inference/gateway wiring, not response quality.
-- No model asset was downloaded by these checks.
-
-3. Existing interactive terminal
--------------------------------
-SOURCE-CONFIRMED BEHAVIOR
-- The existing terminal remains `scripts/manual/run_agent.py`; no second
-  interactive terminal was created.
-- Existing input loop, `/actor investigator`, `/actor support_user`,
-  progress renderer, provider/runtime banner, `/trace`, `/audit`, `/metrics`,
-  and `exit`/`quit` behavior are retained.
-- CLI options:
-  - `--composition real|synthetic`, default `real`.
-  - `--provider fake|qwen3` applies to synthetic mode; absent provider
-    defaults to fake in synthetic mode.
-  - `--qwen3-model-path`, `--qwen3-max-input-tokens`,
-    `--qwen3-max-new-tokens` provide optional Qwen3 overrides.
-- Real mode still calls `apps.fraud.real.create_real_agent()` and remains the
-  default. Passing synthetic provider/model flags without selecting
-  synthetic composition is rejected.
-- The banner reads metadata from the actual agent ModelGateway when
-  available, rather than assuming it from a separate config value.
-- Synthetic input accepts only queries mentioning fixture IDs C1001, C1002,
-  or C2001. This keeps the terminal scoped to supplied synthetic cases.
-
-SYNTHETIC SAFETY
-- Synthetic mode reuses `apps.fraud.demo.create_demo_agent()` and its
-  existing workflow. It does not duplicate investigation composition.
-- The terminal temporarily overrides provider and environment settings,
-  then restores all prior values on exit, including on exceptions.
-- It selects only `fake` or `qwen3`, disables Neo4j/in-memory generic graph
-  construction before base composition, disables local RAG inference,
-  persistent memory, autonomous delegation, and configured generic SQL.
-- It calls `create_demo_agent(enable_rag=False)`. In that mode
-  `core.composition.create_agent()` does not construct a RAGPipeline or
-  register the generic RAG knowledge source; the execution manager's
-  retrieval component is `None`. No embedding initialization/download can
-  occur on this path.
-- `apps.fraud.demo.create_demo_agent()` provides temporary SQLite fixture
-  data and in-memory customer/fraud graphs. It does not invoke
-  `create_real_agent()`, Neo4j, or MySQL.
-- Provider setup does not alter fraud scoring. A deterministic fraud query
-  may not call the language model at all; this is intentional, not a
-  missing fallback. The Qwen3 provider is available through ModelGateway
-  where normal agent planning/generation uses it.
-
-ACTUALLY-RUN TERMINAL RESULTS
-- Fake synthetic terminal command was run with multiple case queries,
-  investigator/support-user switching, `/metrics`, and `exit`.
-  C1001/HIGH, C1002/MEDIUM, and C2001/MEDIUM succeeded; support_user was
-  denied fraud-graph access; the loop continued and exited normally.
-- Qwen3 synthetic terminal command was run with the same three cases,
-  actor switching, a support-user denied case, and `exit`. Banner showed
-  `Provider: qwen3`, `Model: Qwen3-0.6B`, `Runtime: local`.
-  With `/actor investigator`, all three supported investigations succeeded
-  with expected deterministic risk and evidence. The support actor was
-  denied, and the terminal then exited normally.
-- A separate Qwen3 synthetic-terminal run used the default 256-token limit,
-  generated a greeting through the existing agent/ModelGateway path in about
-  32.5 seconds of planning, then successfully investigated C1001 with HIGH
-  risk and exited normally. This verifies language generation in the
-  interactive synthetic terminal without changing the fraud workflow.
-- The fraud workflow path is deterministic and does not ask Qwen3 to set
-  risk. Standalone/Gateway checks above independently verified Qwen3 text
-  generation. A generic model-planning query was also tried in the Qwen3
-  terminal with a deliberately short 64-token cap; that generated structured
-  plan was invalid JSON, the terminal displayed the planning error and
-  continued to later commands. The later default-limit greeting succeeded.
-  This demonstrates that short output caps can truncate structured plans;
-  no fake-provider fallback occurred.
-- Environment overrides for synthetic runs included a task-specific
-  temporary observability DB path, removed after each process. No real
-  database connection was attempted.
-
-START COMMANDS
-Run from the repository root in PowerShell:
-
-  .\.venv\Scripts\python.exe -m scripts.manual.run_agent --composition synthetic --provider qwen3
-  .\.venv\Scripts\python.exe -m scripts.manual.run_agent --composition synthetic --provider fake
-
-For Qwen3, begin with:
-
-  /actor investigator
-  Investigate C1001
-  Investigate C1002
-  Investigate C2001
-  /metrics
-  exit
-
-The existing real mode remains:
-
-  .\.venv\Scripts\python.exe -m scripts.manual.run_agent
-
-The one-shot `apps.fraud.demo_cli` remains a separate existing non-interactive
-command from the prior task; this task did not add another terminal launcher.
-
-4. Fraud workflow, evidence, and security
------------------------------------------
+2. Llama GGUF provider
+----------------------
 SOURCE-CONFIRMED
-- `apps.fraud.investigation.FraudInvestigationService.build_result()` is
-  the deterministic authority for HIGH/MEDIUM/LOW. It assesses HIGH for an
-  open high-severity alert or at least two signals, MEDIUM for one or more
-  other signals, and LOW when there are no signals.
-- `apps.fraud.workflow.FraudInvestigationWorkflow` routes supported
-  operational fraud queries through the registered deterministic workflow.
-- Fixture source is `apps/fraud/data/sqlite/demo.sql`. C1001 has an open
-  high-severity alert, shared-device link, and investigation record.
-  C1002 has a shared-device link and closed low-severity alert. C2001 is
-  graph-only for the synthetic application.
-- Actual results in this task matched earlier expected outcomes:
-  C1001 HIGH, C1002 MEDIUM, C2001 MEDIUM. No risk logic was changed.
-- Application actor authorization is enforced in the fraud policy. The
-  `user_id`/actor argument is not HTTP authentication.
-- API `POST /api/v1/agent/run` still uses generic `api.main:get_agent()` and
-  `core.composition.create_agent()`, not the fraud demo composition. No
-  API-to-fraud integration was added; caller-provided `user_id` is not
-  verified identity.
-- Local SQLite audit/observability is best-effort, not demonstrated
-  tamper-proof enterprise audit.
+- `models/providers/llama_cpp.py` adds `LlamaCppProvider`, implementing the
+  existing synchronous `generate(prompt, response_format=None, **kwargs)`
+  behavior without changing `ModelProviderContract` or `ModelGateway`.
+- Import of `llama-cpp-python` and model initialization are lazy. Each
+  provider instance initializes its model once, guarded by a lock; model
+  generations are serialized through a second lock.
+- The default expected path is
+  `models/weights/Llama-3.2-3B-Instruct-Q4_K_M.gguf`; `LLAMA_CPP_MODEL_PATH`
+  and a terminal path option can select a different local file. Missing files
+  raise a clear `FileNotFoundError`. Missing `llama-cpp-python` raises a clear
+  `RuntimeError`. Neither case falls back to Qwen3 or fake and no download is
+  attempted.
+- CPU execution is explicit (`n_gpu_layers=0`). Defaults are context 2048,
+  four CPU threads, and 256 output tokens, with validated upper bounds of
+  8192, 16, and 1024. Caller output limits are capped by the configured
+  provider maximum. Default completion settings are deterministic
+  (`temperature=0.0`, `top_p=1.0`).
+- Chat completion uses a user message and returns the completion text.
+  `response_format="json"` adds prompt guidance only; valid JSON is not
+  guaranteed. Unsupported formats and invalid inputs/limits are rejected.
+- Metadata reports provider `llama_cpp`, local runtime, and only the GGUF
+  basename. Configuration diagnostics also return only the basename; the
+  custom `Config.__repr__` does not include model paths or secrets.
+- `core/composition.py:create_agent()` constructs this provider only when
+  `MODEL_PROVIDER=llama_cpp`. Existing providers/default behavior are
+  preserved.
 
-5. Persistent databases and API readiness
------------------------------------------
-- `apps.fraud.real.create_real_agent()` requires configured Neo4j and MySQL
-  destinations and credentials. It has no synthetic fallback. Neo4j and
-  MySQL adapters require their respective optional driver packages.
-- No personal or production database was contacted. No persistent database
-  connection or setup was validated.
-- API FastAPI/Uvicorn requirements remain separate: Uvicorn is not declared
-  in the inspected dependency manifests and FastAPI/Uvicorn were absent from
-  the inspected `.venv`. The existing `/api/v1/agent/run` is not a fraud API.
-- Persistent Neo4j/MySQL demo and API fraud routing remain out of scope and
-  are not ready/validated by this work.
+ACTUALLY-RUN
+- Pylance diagnostics for `models/providers/llama_cpp.py` returned no items.
+- Llama inference was not run. The `.venv` inspection recorded during this
+  task found `llama-cpp-python` missing, and no GGUF file was supplied or
+  downloaded. Model loading, actual generation, quality, latency, memory use,
+  and Windows wheel compatibility remain unverified.
 
-6. Environment, dependencies, and setup history
-------------------------------------------------
-ACTUALLY OBSERVED IN CURRENT `.venv`
-- Python: 3.12.4 (configured Vexux virtual environment).
-- PyTorch: 2.15.0+cpu; CUDA unavailable.
-- Transformers: 5.22.2.
-- Safetensors: 0.8.0.
-- FAISS CPU: 1.15.0; NumPy: 2.5.4; python-dotenv: 1.1.1.
-- pytest, FastAPI, Uvicorn, Sentence Transformers, Neo4j driver, and MySQL
-  connector were not found by package inspection.
-- No packages were installed during this task.
+3. Configuration and existing interactive terminal
+---------------------------------------------------
+SOURCE-CONFIRMED
+- `core/config.py` registers `llama_cpp` and parses:
+  `LLAMA_CPP_MODEL_PATH`, `LLAMA_CPP_N_CTX`, `LLAMA_CPP_N_THREADS`, and
+  `LLAMA_CPP_MAX_NEW_TOKENS`. Positive values and conservative maximums are
+  enforced.
+- `scripts/manual/run_agent.py` remains the only interactive terminal.
+  `--composition real|synthetic` remains, with `real` as the default. The
+  synthetic `--provider` choices are now `fake`, `qwen3`, and `llama_cpp`;
+  fake remains its default.
+- Synthetic mode still uses `apps.fraud.demo.create_demo_agent(enable_rag=False)`.
+  Llama options can be provided with `--llama-cpp-model-path`,
+  `--llama-cpp-n-ctx`, `--llama-cpp-n-threads`, and
+  `--llama-cpp-max-new-tokens`. Existing actor commands, progress, observability
+  commands, input loop, and exit behavior were retained.
+- Synthetic environment overrides are restored after the composition context
+  exits. The existing synthetic isolation (temporary SQLite and in-memory
+  graph fixtures; no Neo4j/MySQL composition, persistent memory, delegation,
+  or general RAG retrieval) was not redesigned.
+- Provider/runtime banner reads the selected agent's ModelGateway metadata.
+  Real-agent construction remains unchanged and is the default.
 
-USER-SUPPLIED / PRIOR SETUP HISTORY
-- Python 3.12.4 was approved and `.venv` was created with
-  `py -3.12 -m venv .venv`; interpreter path and pip 24.0 were previously
-  reported verified. The current task used that environment.
-- Earlier report records that the repository CI and primary setup target
-  Python 3.11. CI `.github/workflows/ci.yml` still targets Python 3.11.
-- Earlier user-supplied cache inspection reported Qwen3 config
-  `model_type=qwen3`, bfloat16 weights, 28 layers, hidden size 1024, and
-  maximum position embeddings 40960. Current offline inference independently
-  verified the snapshot is loadable on this CPU/Python environment.
-- Prior pip inspection displayed no explicit index configuration. This does
-  not establish which package sources are company-approved or how the
-  installed packages were obtained.
+ACTUALLY-RUN
+- The focused pytest availability check failed before any test collection:
+  `.\\.venv\\Scripts\\python.exe -m pytest --version` reported
+  `No module named pytest`. No tests were run or claimed as passing.
+- Pylance reported no diagnostics for the new Llama provider. It reported
+  `pytest` unresolved in test files because pytest is missing. Other findings
+  in inspected files include pre-existing unused-import/unaccessed-symbol
+  warnings and an undefined `DelegationPlanner` diagnostic in
+  `core/composition.py`; these were not introduced or changed by this task.
 
-SOURCE-CONFIRMED MANIFESTS
-- `requirements.txt` is a broad ML/provider/RAG/API/database manifest;
-  inspected pins include PyTorch 2.7.1, Transformers 4.55.2, PEFT 0.17.1,
-  Sentence Transformers 5.6.1, FAISS CPU 1.15.0, FastAPI 0.116.1,
-  Neo4j 5.28.1, mysql-connector-python 9.4.0, python-dotenv 1.1.1,
-  Ollama 0.6.0, and Mistral 2.9.3.
-- These pins differ from the current Qwen3 inference environment versions.
-  No dependency manifest was changed. Uvicorn is still not declared.
-- Full ML training, Hugging Face model access, RAG embeddings, and database
-  drivers are not required for the synthetic fake-provider path; Qwen3
-  requires the already installed PyTorch/Transformers/Safetensors stack and
-  local cache.
+4. Fraud workflow and synthetic demo safety
+-------------------------------------------
+SOURCE-CONFIRMED
+- `apps/fraud.investigation.FraudInvestigationService.build_result()` remains
+  the deterministic authority for HIGH/MEDIUM/LOW. The Llama provider does
+  not calculate risk. No scoring rules, fraud workflow, or synthetic fixture
+  changed.
+- Synthetic supported cases remain C1001, C1002, and C2001. Synthetic mode
+  does not invoke `create_real_agent()`, Neo4j, MySQL, or generic RAG/embedding
+  retrieval.
+- The actual terminal mode is an application demo, not an authenticated
+  production fraud API. Existing API `POST /api/v1/agent/run` is not wired to
+  this fraud demo; caller-supplied actor identity is not authentication.
 
-7. Tests and validation
------------------------
-TESTS ADDED, NOT EXECUTED
-- `tests/unit/test_qwen3_provider.py`: lazy mocked Transformers loading,
-  local-only arguments, CPU placement, chat template/thinking flag,
-  input/output bounds, generated-token-only decoding, errors, and gateway
-  metadata.
-- `tests/unit/test_qwen3_composition.py`: qwen3 composition registration,
-  configuration forwarding, and no RAG initialization.
-- `tests/unit/test_synthetic_terminal.py`: fake/Qwen3 synthetic selection,
-  environment restoration, disabled RAG/Neo4j, multiple query/actor flow,
-  metrics, exit, provider error handling, and real-mode default.
-- `tests/unit/test_provider_diagnostics.py` now tests qwen3 config,
-  diagnostics, and invalid generation limits.
+PRIOR-EXECUTION (from the immediately preceding consolidated report; not
+rerun for this task)
+- Synthetic fake and Qwen3 terminal runs completed investigations for C1001
+  HIGH, C1002 MEDIUM, and C2001 MEDIUM. Actor switching, authorization denial
+  for support_user, observability command, and exit behavior were observed.
+- A prior standalone and ModelGateway Qwen3 CPU inference run succeeded using
+  the local ModelScope snapshot with offline loading. The recorded versions
+  were PyTorch 2.15.0+cpu, Transformers 5.22.2, and Safetensors 0.8.0;
+  CUDA was unavailable. A short Qwen3 structured-planning output was invalid
+  under a tight token cap, so structured generation is not guaranteed.
+- These prior Qwen3/fraud results do not validate Llama and were not repeated
+  in this task.
 
-ACTUALLY-RUN VALIDATION
-- Offline standalone Qwen3 inference: succeeded.
-- Offline Qwen3 through ModelGateway: succeeded and returned expected
-  non-secret provider metadata.
-- Existing interactive terminal, synthetic Qwen3: all three deterministic
-  customer investigations succeeded for investigator; support-user
-  authorization denial and exit behavior were observed.
-- Existing interactive terminal, synthetic fake: all three cases succeeded;
-  actor switching, metrics, and exit were observed.
-- Pylance Problems reported no errors in changed Python files. Syntax checks
-  passed for the new provider, terminal, and new test files.
-- The focused pytest command was attempted:
-  `python -m pytest tests/unit/test_qwen3_provider.py tests/unit/test_qwen3_composition.py tests/unit/test_synthetic_terminal.py tests/unit/test_provider_diagnostics.py tests/unit/test_demo_fixtures.py tests/unit/test_fraud_workflow.py -q`
-  It could not start: `No module named pytest`. No tests are claimed as
-  passing.
-- No model download, package install, API startup, external database
-  connection, or source-code scoring change occurred.
+5. Tests
+--------
+SOURCE-CONFIRMED TESTS ADDED, NOT EXECUTED
+- `tests/unit/test_llama_cpp_provider.py` mocks `llama_cpp.Llama` and covers
+  lazy initialization, CPU-only arguments, local-path and missing-dependency
+  failures, output bounds, deterministic defaults, JSON prompt guidance,
+  invalid inputs/configuration, thread-safe initialization, and
+  ModelGateway metadata.
+- `tests/unit/test_provider_diagnostics.py` covers Llama configuration,
+  supported-provider diagnostics, basename-only path reporting, repr
+  redaction, and out-of-range settings.
+- `tests/unit/test_synthetic_terminal.py` includes Llama synthetic provider
+  selection, CLI/environment forwarding, and environment restoration alongside
+  fake/Qwen3 scenarios.
 
-HISTORICAL ONLY
-- An older `docs/history/FINAL_VERIFICATION_REPORT.md` reported 7/7
-  task-ID regressions, 8/8 multi-task failure tests, 4/4 live smoke tests,
-  19/19 custom tests, and evaluation 43/44 (97.73%) with one pre-existing
-  session-isolation failure. These were not rerun and do not certify the
-  current environment.
+ACTUALLY-RUN
+- Pytest is unavailable, so no unit, integration, or regression tests were
+  executed. Mock test outcomes are unknown.
+- No standalone Llama inference, ModelGateway Llama inference, terminal
+  interaction, fraud case execution, or build/test suite was performed during
+  this task.
 
-8. Remaining limitations and next steps
----------------------------------------
-- The Qwen3 model loads and generates on the current CPU, but a generic
-  planning prompt produced invalid structured JSON under a 64-token cap.
-  The terminal surfaces planning errors and continues; generation does not
-  guarantee structured JSON. Avoid claiming all free-form Qwen3 planning
-  works. Deterministic fraud investigations were successful and do not use
-  model output to decide risk.
-- Pytest is missing, so newly added mock tests and existing fraud regressions
-  need to be run once pytest is available through the approved environment.
-- No API fraud integration/authentication, persistent Neo4j/MySQL setup, or
-  enterprise audit guarantee was implemented or validated.
-- The source pins differ from installed Qwen3 stack. Confirm whether the
-  environment's PyTorch 2.15.0+cpu / Transformers 5.22.2 combination is
-  intentionally approved before standardizing it in a manifest.
-- No source/dependency changes were made to support alternate Python
-  versions or to pin a Qwen3 runtime.
+6. Dependencies and setup
+-------------------------
+SOURCE-CONFIRMED
+- `requirements.txt` contains the repository's broad existing ML, RAG, API,
+  and database dependencies; no dependency file was changed for this optional
+  provider.
+- `llama-cpp-python` is an additional optional native runtime and is not
+  installed by this task. A compatible wheel/build for the approved Windows
+  and Python version is needed. No Llama GGUF was supplied or identified in
+  this task.
+- Setup instructions in `docs/SETUP.md` require package-source approval and
+  separately obtaining the GGUF file through an approved source. Do not treat
+  a successful package command as approval to use a public package source.
 
-Recommended next action: run the newly added focused tests using pytest from
-an approved environment/package source. Keep the fake terminal as a
-deterministic option only when explicitly selected; never silently switch
-providers. Preserve real terminal mode as the default.
+ACTUALLY OBSERVED / PRIOR ENVIRONMENT EVIDENCE
+- Python 3.12.4, 64-bit, in the existing Vexux `.venv`; FAISS CPU 1.15.0.
+- The prior package inspection reported PyTorch 2.15.0+cpu, Transformers
+  5.22.2, Safetensors 0.8.0, and no `llama-cpp-python` or pytest.
+- Existing model caches described in prior reports concern Qwen3 and do not
+  establish availability of a Llama GGUF file.
+- Company-approved package source, approved Llama model source, permission to
+  use the model, compatible Windows wheel availability, and hardware
+  suitability are UNKNOWN.
+
+7. Commands
+-----------
+Install only after company approval and confirmation of an approved package
+source/wheel:
+
+  .\\.venv\\Scripts\\python.exe -m pip install llama-cpp-python
+
+After obtaining an approved GGUF locally, launch synthetic Llama mode:
+
+  $env:LLAMA_CPP_MODEL_PATH = "C:\\approved\\models\\Llama-3.2-3B-Instruct-Q4_K_M.gguf"
+  .\\.venv\\Scripts\\python.exe -m scripts.manual.run_agent --composition synthetic --provider llama_cpp
+
+Use the existing synthetic fake provider:
+
+  .\\.venv\\Scripts\\python.exe -m scripts.manual.run_agent --composition synthetic --provider fake
+
+Use the existing synthetic Qwen3 provider:
+
+  .\\.venv\\Scripts\\python.exe -m scripts.manual.run_agent --composition synthetic --provider qwen3
+
+`--llama-cpp-model-path`, `--llama-cpp-n-ctx`,
+`--llama-cpp-n-threads`, and `--llama-cpp-max-new-tokens` provide equivalent
+per-run overrides.
+
+8. Risks, limitations, and next action
+--------------------------------------
+- No real Llama model file, inference, or performance was validated.
+- Windows/Python 3.12 native wheel compatibility for `llama-cpp-python` is
+  unresolved. Do not install/build from an unapproved source.
+- Q4_K_M GGUF size, runtime memory needs, CPU throughput, license/usage
+  approval, and company endpoint/security policy are unknown.
+- Pytest is missing, so newly added tests and relevant regression coverage
+  must be run once available through the approved environment.
+- Persistent Neo4j/MySQL setup, an API fraud endpoint, production
+  authentication, and tamper-proof enterprise auditing remain outside this
+  change and unvalidated.
+
+RECOMMENDATION — NEXT EXACT ACTION
+Confirm the company-approved `llama-cpp-python` package source and a compatible
+Windows/Python 3.12 CPU wheel, plus authorization and approved provenance for
+the local Q4_K_M GGUF. Only then install into the existing `.venv`, run the
+focused mock tests, and separately validate offline inference against the
+approved local model. No package install, model download, source change beyond
+the nine files listed above, or Git-history change was performed here.

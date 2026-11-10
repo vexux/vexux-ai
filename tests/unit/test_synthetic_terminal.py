@@ -56,7 +56,7 @@ def isolated_terminal(monkeypatch, tmp_path):
     )
 
 
-@pytest.mark.parametrize("provider", ["fake", "qwen3"])
+@pytest.mark.parametrize("provider", ["fake", "qwen3", "llama_cpp"])
 def test_synthetic_selection_reuses_demo_factory_and_restores_environment(
     monkeypatch, provider
 ):
@@ -75,6 +75,10 @@ def test_synthetic_selection_reuses_demo_factory_and_restores_environment(
                 os.environ["PERSISTENT_MEMORY_DB"],
                 os.environ["ENABLE_AUTONOMOUS_DELEGATION"],
                 os.environ["SQL_DATABASE_PATH"],
+                os.environ.get("LLAMA_CPP_MODEL_PATH"),
+                os.environ.get("LLAMA_CPP_N_CTX"),
+                os.environ.get("LLAMA_CPP_N_THREADS"),
+                os.environ.get("LLAMA_CPP_MAX_NEW_TOKENS"),
             )
         )
         yield agent
@@ -82,22 +86,47 @@ def test_synthetic_selection_reuses_demo_factory_and_restores_environment(
     monkeypatch.setattr(run_agent, "create_demo_agent", demo_factory)
     monkeypatch.setenv("NEO4J_URI", "restore-this-value")
     monkeypatch.setenv("MODEL_PROVIDER", "ollama")
+    monkeypatch.setenv("LLAMA_CPP_MODEL_PATH", "restore-model.gguf")
+    monkeypatch.setenv("LLAMA_CPP_N_CTX", "3072")
+    monkeypatch.setenv("LLAMA_CPP_N_THREADS", "6")
+    monkeypatch.setenv("LLAMA_CPP_MAX_NEW_TOKENS", "192")
     args = SimpleNamespace(
         composition="synthetic",
         provider=provider,
         qwen3_model_path="C:/local/qwen3" if provider == "qwen3" else None,
         qwen3_max_input_tokens=512 if provider == "qwen3" else None,
         qwen3_max_new_tokens=64 if provider == "qwen3" else None,
+        llama_cpp_model_path="C:/local/llama.gguf" if provider == "llama_cpp" else None,
+        llama_cpp_n_ctx=1024 if provider == "llama_cpp" else None,
+        llama_cpp_n_threads=3 if provider == "llama_cpp" else None,
+        llama_cpp_max_new_tokens=128 if provider == "llama_cpp" else None,
     )
 
     with run_agent._selected_agent(args) as selected:
         assert selected is agent
 
     assert observed == [
-        (False, provider, "", "0", "0", "", "0", "")
+        (
+            False,
+            provider,
+            "",
+            "0",
+            "0",
+            "",
+            "0",
+            "",
+            "C:/local/llama.gguf" if provider == "llama_cpp" else "restore-model.gguf",
+            "1024" if provider == "llama_cpp" else "3072",
+            "3" if provider == "llama_cpp" else "6",
+            "128" if provider == "llama_cpp" else "192",
+        )
     ]
     assert os.environ["MODEL_PROVIDER"] == "ollama"
     assert os.environ["NEO4J_URI"] == "restore-this-value"
+    assert os.environ["LLAMA_CPP_MODEL_PATH"] == "restore-model.gguf"
+    assert os.environ["LLAMA_CPP_N_CTX"] == "3072"
+    assert os.environ["LLAMA_CPP_N_THREADS"] == "6"
+    assert os.environ["LLAMA_CPP_MAX_NEW_TOKENS"] == "192"
 
 
 def test_synthetic_terminal_preserves_queries_actor_switching_metrics_and_exit(
@@ -159,6 +188,10 @@ def test_real_composition_remains_the_default_and_unchanged(monkeypatch):
         qwen3_model_path=None,
         qwen3_max_input_tokens=None,
         qwen3_max_new_tokens=None,
+        llama_cpp_model_path=None,
+        llama_cpp_n_ctx=None,
+        llama_cpp_n_threads=None,
+        llama_cpp_max_new_tokens=None,
     )
 
     with run_agent._selected_agent(args) as selected:
@@ -168,7 +201,7 @@ def test_real_composition_remains_the_default_and_unchanged(monkeypatch):
 
 @pytest.mark.parametrize(
     ("provider", "expected_name"),
-    [("fake", "fake"), ("qwen3", "qwen3")],
+    [("fake", "fake"), ("qwen3", "qwen3"), ("llama_cpp", "llama_cpp")],
 )
 def test_actual_synthetic_composition_disables_rag_and_remote_databases(
     monkeypatch, provider, expected_name

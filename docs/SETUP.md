@@ -43,11 +43,12 @@ is initialized. Set `OBSERVABILITY_DB_PATH` to use another local path. The
 fraud demo SQLite fixture at `apps/fraud/data/sqlite/demo.sql` is separate and
 is not covered by the runtime database ignore rule.
 
-`MODEL_PROVIDER` is required and must be one of `fake`, `ollama`, `mistral`, or
-`qwen`. Missing or invalid values produce a configuration error; Vexux never
-falls back to an unexpected remote provider. `FAKE_MODEL`, `MISTRAL_MODEL`,
-`OLLAMA_MODEL`, `QWEN_MODEL`, and `QWEN_ADAPTER_PATH` are also resolved by the
-same centralized loader.
+`MODEL_PROVIDER` is required and must be one of `fake`, `ollama`, `mistral`,
+`qwen`, `qwen3`, or `llama_cpp`. Missing or invalid values produce a
+configuration error; Vexux never falls back to another provider.
+`FAKE_MODEL`, `MISTRAL_MODEL`, `OLLAMA_MODEL`, `QWEN_MODEL`,
+`QWEN_ADAPTER_PATH`, `QWEN3_MODEL_PATH`, and the `LLAMA_CPP_*` settings are
+also resolved by the same centralized loader.
 
 `fake` is the deterministic, credential-free provider. The repository's local
 development `.env` selects `ollama` with `OLLAMA_MODEL=phi3:latest`; this
@@ -255,3 +256,52 @@ The Qwen3 provider loads only a local ModelScope snapshot. Configure
 and output limits. The model must already be present locally; loading does
 not download model files. Synthetic fraud risk remains deterministic and
 does not depend on Qwen3 generation.
+
+### Optional local Llama GGUF provider
+
+The optional `llama_cpp` provider runs an already-quantized GGUF model through
+`llama-cpp-python`. It defaults to CPU-only execution and does not download,
+quantize, or fall back to another model. The default expected file is
+`models/weights/Llama-3.2-3B-Instruct-Q4_K_M.gguf`; use a local path to an
+approved Llama 3.2 3B Instruct Q4_K_M file if it is stored elsewhere.
+
+Have the company-approved package source provide a wheel compatible with the
+existing Windows/Python environment. Run the command only when pip is
+configured to use that approved source (or follow the company's approved
+internal-wheel installation instructions); otherwise pip may use an
+unapproved public source:
+
+```powershell
+.\.venv\Scripts\python.exe -m pip install llama-cpp-python
+```
+
+Do not add an unapproved package index or build/download a wheel as a
+workaround. Obtain the GGUF file separately through an approved source, then
+set the local path and start the existing synthetic terminal:
+
+```powershell
+$env:LLAMA_CPP_MODEL_PATH = "C:\approved\models\Llama-3.2-3B-Instruct-Q4_K_M.gguf"
+.\.venv\Scripts\python.exe -m scripts.manual.run_agent `
+  --composition synthetic --provider llama_cpp
+```
+
+The terminal also accepts `--llama-cpp-model-path`,
+`--llama-cpp-n-ctx`, `--llama-cpp-n-threads`, and
+`--llama-cpp-max-new-tokens`. Defaults are context 2048, four CPU threads,
+and 256 output tokens; configured upper bounds are 8192, 16, and 1024.
+Synthetic mode uses the existing SQLite/in-memory fixtures, disables RAG,
+and keeps fraud-risk assessment deterministic.
+
+To switch without changing the model configuration, select the provider
+explicitly when starting a new terminal:
+
+```powershell
+.\.venv\Scripts\python.exe -m scripts.manual.run_agent `
+  --composition synthetic --provider qwen3
+.\.venv\Scripts\python.exe -m scripts.manual.run_agent `
+  --composition synthetic --provider fake
+```
+
+`llama-cpp-python` and the GGUF model are optional and are not installed or
+provided by this repository. A successful mocked unit test does not validate
+actual model loading, inference quality, memory use, or performance.

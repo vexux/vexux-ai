@@ -24,8 +24,6 @@ _SYNTHETIC_ENVIRONMENT = {
     "ENABLE_AUTONOMOUS_DELEGATION": "0",
     "SQL_DATABASE_PATH": "",
 }
-
-
 class TerminalProgressRenderer:
     """Render only lifecycle phases and deduplicated resource milestones."""
 
@@ -359,8 +357,20 @@ def _temporary_environment(overrides):
 @contextmanager
 def _selected_agent(args):
     if args.composition == "real":
-        if args.provider is not None or args.qwen3_model_path is not None:
-            raise ValueError("Provider and model-path options require synthetic composition.")
+        if any(
+            getattr(args, name, None) is not None
+            for name in (
+                "provider",
+                "qwen3_model_path",
+                "qwen3_max_input_tokens",
+                "qwen3_max_new_tokens",
+                "llama_cpp_model_path",
+                "llama_cpp_n_ctx",
+                "llama_cpp_n_threads",
+                "llama_cpp_max_new_tokens",
+            )
+        ):
+            raise ValueError("Provider options require synthetic composition.")
         yield create_real_agent()
         return
 
@@ -369,12 +379,19 @@ def _selected_agent(args):
         **_SYNTHETIC_ENVIRONMENT,
         "MODEL_PROVIDER": provider,
     }
-    if args.qwen3_model_path is not None:
-        overrides["QWEN3_MODEL_PATH"] = args.qwen3_model_path
-    if args.qwen3_max_input_tokens is not None:
-        overrides["QWEN3_MAX_INPUT_TOKENS"] = str(args.qwen3_max_input_tokens)
-    if args.qwen3_max_new_tokens is not None:
-        overrides["QWEN3_MAX_NEW_TOKENS"] = str(args.qwen3_max_new_tokens)
+    optional_environment = {
+        "qwen3_model_path": "QWEN3_MODEL_PATH",
+        "qwen3_max_input_tokens": "QWEN3_MAX_INPUT_TOKENS",
+        "qwen3_max_new_tokens": "QWEN3_MAX_NEW_TOKENS",
+        "llama_cpp_model_path": "LLAMA_CPP_MODEL_PATH",
+        "llama_cpp_n_ctx": "LLAMA_CPP_N_CTX",
+        "llama_cpp_n_threads": "LLAMA_CPP_N_THREADS",
+        "llama_cpp_max_new_tokens": "LLAMA_CPP_MAX_NEW_TOKENS",
+    }
+    for argument, environment in optional_environment.items():
+        value = getattr(args, argument, None)
+        if value is not None:
+            overrides[environment] = str(value)
 
     with _temporary_environment(overrides):
         with create_demo_agent(enable_rag=False) as agent:
@@ -393,7 +410,7 @@ def _terminal_arguments(argv=None):
     )
     parser.add_argument(
         "--provider",
-        choices=("fake", "qwen3"),
+        choices=("fake", "qwen3", "llama_cpp"),
         help="Synthetic-mode model provider (defaults to fake).",
     )
     parser.add_argument(
@@ -409,6 +426,25 @@ def _terminal_arguments(argv=None):
         "--qwen3-max-new-tokens",
         type=int,
         help="Override the bounded Qwen3 output-token limit.",
+    )
+    parser.add_argument(
+        "--llama-cpp-model-path",
+        help="Path to an already available local GGUF model.",
+    )
+    parser.add_argument(
+        "--llama-cpp-n-ctx",
+        type=int,
+        help="Override the Llama context length.",
+    )
+    parser.add_argument(
+        "--llama-cpp-n-threads",
+        type=int,
+        help="Override the Llama CPU thread count.",
+    )
+    parser.add_argument(
+        "--llama-cpp-max-new-tokens",
+        type=int,
+        help="Override the bounded Llama output-token limit.",
     )
     return parser.parse_args(argv)
 
@@ -512,8 +548,12 @@ def main(argv=None):
         or args.qwen3_model_path is not None
         or args.qwen3_max_input_tokens is not None
         or args.qwen3_max_new_tokens is not None
+        or args.llama_cpp_model_path is not None
+        or args.llama_cpp_n_ctx is not None
+        or args.llama_cpp_n_threads is not None
+        or args.llama_cpp_max_new_tokens is not None
     ):
-        raise SystemExit("Provider and Qwen3 options require --composition synthetic.")
+        raise SystemExit("Provider/model options require --composition synthetic.")
     with _selected_agent(args) as agent:
         _run_terminal(agent, args.composition)
 
