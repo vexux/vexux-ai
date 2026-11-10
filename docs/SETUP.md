@@ -239,3 +239,19 @@ python -m scripts.manual.run_agent
 
 The interactive runner uses the real Neo4j/MySQL composition and has no
 synthetic database fallback.
+
+The same terminal also supports the bundled synthetic SQLite/in-memory
+fixtures. Synthetic mode disables Neo4j, MySQL composition, persistent memory,
+autonomous delegation, and generic RAG retrieval:
+
+```powershell
+python -m scripts.manual.run_agent --composition synthetic --provider fake
+python -m scripts.manual.run_agent --composition synthetic --provider qwen3
+```
+
+The Qwen3 provider loads only a local ModelScope snapshot. Configure
+`QWEN3_MODEL_PATH` to override the default cache directory, and use
+`QWEN3_MAX_INPUT_TOKENS` / `QWEN3_MAX_NEW_TOKENS` to set the bounded context
+and output limits. The model must already be present locally; loading does
+not download model files. Synthetic fraud risk remains deterministic and
+does not depend on Qwen3 generation.

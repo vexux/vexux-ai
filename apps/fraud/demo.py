@@ -24,14 +24,17 @@ FRAUD_KNOWLEDGE_DIR = Path(__file__).parent / "knowledge"
 
 
 @contextmanager
-def create_demo_agent():
+def create_demo_agent(*, enable_rag: bool = True):
     """Compose the generic agent with removable synthetic demo resources."""
     provider_was_set = "MODEL_PROVIDER" in os.environ
     previous_provider = os.environ.get("MODEL_PROVIDER")
     if not provider_was_set:
         os.environ["MODEL_PROVIDER"] = "fake"
     try:
-        agent = composition.create_agent(rag_documents_path=FRAUD_KNOWLEDGE_DIR)
+        agent = composition.create_agent(
+            rag_documents_path=FRAUD_KNOWLEDGE_DIR,
+            enable_rag=enable_rag,
+        )
     finally:
         if provider_was_set:
             os.environ["MODEL_PROVIDER"] = previous_provider

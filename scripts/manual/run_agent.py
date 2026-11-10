@@ -1,10 +1,14 @@
-"""Interactive runner for the real local fraud application."""
+"""Interactive runner for real or synthetic fraud investigations."""
 
+import argparse
+from contextlib import contextmanager
 import logging
+import os
 import sys
 import threading
 import time
 
+from apps.fraud.demo import create_demo_agent
 from apps.fraud.real import create_real_agent
 from apps.fraud.identity import DEFAULT_ACTOR, validate_actor
 from core.config import get_config, provider_diagnostic
@@ -12,6 +16,14 @@ from core.observability_store import get_observability_store
 
 
 LOGGER = logging.getLogger(__name__)
+_SYNTHETIC_ENVIRONMENT = {
+    "ENABLE_KNOWLEDGE_GRAPH": "0",
+    "NEO4J_URI": "",
+    "ENABLE_LOCAL_RAG_INFERENCE": "0",
+    "PERSISTENT_MEMORY_DB": "",
+    "ENABLE_AUTONOMOUS_DELEGATION": "0",
+    "SQL_DATABASE_PATH": "",
+}
 
 
 class TerminalProgressRenderer:
@@ -330,10 +342,80 @@ def _provider_error_message(error: RuntimeError) -> str:
     )
 
 
-def main():
+@contextmanager
+def _temporary_environment(overrides):
+    previous = {key: os.environ.get(key) for key in overrides}
+    os.environ.update(overrides)
+    try:
+        yield
+    finally:
+        for key, value in previous.items():
+            if value is None:
+                os.environ.pop(key, None)
+            else:
+                os.environ[key] = value
+
+
+@contextmanager
+def _selected_agent(args):
+    if args.composition == "real":
+        if args.provider is not None or args.qwen3_model_path is not None:
+            raise ValueError("Provider and model-path options require synthetic composition.")
+        yield create_real_agent()
+        return
+
+    provider = args.provider or "fake"
+    overrides = {
+        **_SYNTHETIC_ENVIRONMENT,
+        "MODEL_PROVIDER": provider,
+    }
+    if args.qwen3_model_path is not None:
+        overrides["QWEN3_MODEL_PATH"] = args.qwen3_model_path
+    if args.qwen3_max_input_tokens is not None:
+        overrides["QWEN3_MAX_INPUT_TOKENS"] = str(args.qwen3_max_input_tokens)
+    if args.qwen3_max_new_tokens is not None:
+        overrides["QWEN3_MAX_NEW_TOKENS"] = str(args.qwen3_max_new_tokens)
+
+    with _temporary_environment(overrides):
+        with create_demo_agent(enable_rag=False) as agent:
+            yield agent
+
+
+def _terminal_arguments(argv=None):
+    parser = argparse.ArgumentParser(
+        description="Run the Vexux interactive fraud-investigation terminal."
+    )
+    parser.add_argument(
+        "--composition",
+        choices=("real", "synthetic"),
+        default="real",
+        help="Select real Neo4j/MySQL resources or the bundled synthetic fixtures.",
+    )
+    parser.add_argument(
+        "--provider",
+        choices=("fake", "qwen3"),
+        help="Synthetic-mode model provider (defaults to fake).",
+    )
+    parser.add_argument(
+        "--qwen3-model-path",
+        help="Override the local Qwen3 snapshot path for synthetic mode.",
+    )
+    parser.add_argument(
+        "--qwen3-max-input-tokens",
+        type=int,
+        help="Override the bounded Qwen3 input-token limit.",
+    )
+    parser.add_argument(
+        "--qwen3-max-new-tokens",
+        type=int,
+        help="Override the bounded Qwen3 output-token limit.",
+    )
+    return parser.parse_args(argv)
+
+
+def _run_terminal(agent, composition_name):
     if sys.stdout.isatty() and hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")
-    agent = create_real_agent()
     if hasattr(agent, "progress_reporter"):
         agent.progress_reporter.callback = TerminalProgressRenderer().render
     actor = DEFAULT_ACTOR
@@ -345,8 +427,17 @@ def main():
     print("=" * 60)
     print("Vexux AI Interactive Terminal")
     print("Type 'exit' or 'quit' to stop. Use '/actor investigator' or '/actor support_user'.")
-    print("Resource-aware fraud queries use the real Neo4j and MySQL resources.")
-    runtime = provider_diagnostic(get_config())
+    if composition_name == "synthetic":
+        print("Synthetic mode: C1001, C1002, and C2001 use temporary SQLite and in-memory graphs; RAG is disabled.")
+    else:
+        print("Resource-aware fraud queries use the real Neo4j and MySQL resources.")
+    gateway = getattr(getattr(agent, "execution_manager", None), "model_gateway", None)
+    runtime = (
+        gateway.provider_metadata()
+        if gateway is not None
+        else provider_diagnostic(get_config())
+    )
+    print(f"Provider: {runtime['provider']}")
     print(f"Model: {runtime.get('model', runtime['provider'])}")
     print(f"Runtime: {runtime['runtime_mode']}")
     print("=" * 60)
@@ -372,6 +463,13 @@ def main():
             continue
 
         if not query:
+            continue
+
+        if composition_name == "synthetic" and not any(
+            customer_id in query.upper()
+            for customer_id in ("C1001", "C1002", "C2001")
+        ):
+            print("Synthetic mode supports only the bundled customers C1001, C1002, and C2001.")
             continue
 
         try:
@@ -405,6 +503,19 @@ def main():
                 f"{'Total':<16}"
                 f"{timings.get('total', 0) / 1000:.2f}s"
             )
+
+
+def main(argv=None):
+    args = _terminal_arguments(argv)
+    if args.composition == "real" and (
+        args.provider is not None
+        or args.qwen3_model_path is not None
+        or args.qwen3_max_input_tokens is not None
+        or args.qwen3_max_new_tokens is not None
+    ):
+        raise SystemExit("Provider and Qwen3 options require --composition synthetic.")
+    with _selected_agent(args) as agent:
+        _run_terminal(agent, args.composition)
 
 
 if __name__ == "__main__":

@@ -13,7 +13,18 @@ from dotenv import dotenv_values
 
 
 _ENV_FILE = Path(__file__).resolve().parents[1] / ".env"
-SUPPORTED_MODEL_PROVIDERS = frozenset({"fake", "ollama", "mistral", "qwen"})
+SUPPORTED_MODEL_PROVIDERS = frozenset(
+    {"fake", "ollama", "mistral", "qwen", "qwen3"}
+)
+_DEFAULT_QWEN3_MODEL_PATH = (
+    Path.home()
+    / ".cache"
+    / "modelscope"
+    / "models"
+    / "Qwen--Qwen3-0.6B"
+    / "snapshots"
+    / "master"
+)
 
 
 def _local_env_values() -> dict[str, str]:
@@ -62,6 +73,9 @@ class Config:
     ollama_model: str = "llama3.2"
     qwen_model: str = "Qwen/Qwen2.5-0.5B-Instruct"
     qwen_adapter_path: str = "models/checkpoints"
+    qwen3_model_path: str = str(_DEFAULT_QWEN3_MODEL_PATH)
+    qwen3_max_input_tokens: int = 2048
+    qwen3_max_new_tokens: int = 256
     autonomous_delegation_enabled: bool = False
     max_autonomous_delegations: int = 4
     max_parallel_tasks: int = 1
@@ -134,6 +148,13 @@ def load_config_from_env(prefix: str = "") -> Config:
     ollama_model = e("OLLAMA_MODEL") or "llama3.2"
     qwen_model = e("QWEN_MODEL") or "Qwen/Qwen2.5-0.5B-Instruct"
     qwen_adapter_path = e("QWEN_ADAPTER_PATH") or "models/checkpoints"
+    qwen3_model_path = e("QWEN3_MODEL_PATH") or str(_DEFAULT_QWEN3_MODEL_PATH)
+    qwen3_max_input_tokens = _parse_int(
+        e("QWEN3_MAX_INPUT_TOKENS"), default=2048, min_value=1, max_value=32768
+    )
+    qwen3_max_new_tokens = _parse_int(
+        e("QWEN3_MAX_NEW_TOKENS"), default=256, min_value=1, max_value=4096
+    )
 
     autonomous_delegation_enabled = _parse_bool(e("ENABLE_AUTONOMOUS_DELEGATION"))
 
@@ -167,6 +188,9 @@ def load_config_from_env(prefix: str = "") -> Config:
         ollama_model=ollama_model,
         qwen_model=qwen_model,
         qwen_adapter_path=qwen_adapter_path,
+        qwen3_model_path=qwen3_model_path,
+        qwen3_max_input_tokens=qwen3_max_input_tokens,
+        qwen3_max_new_tokens=qwen3_max_new_tokens,
         autonomous_delegation_enabled=autonomous_delegation_enabled,
         max_autonomous_delegations=max_autonomous_delegations,
         max_parallel_tasks=max_parallel_tasks,
@@ -203,6 +227,9 @@ def _env_snapshot(prefix: str = "") -> tuple:
         "OLLAMA_MODEL",
         "QWEN_MODEL",
         "QWEN_ADAPTER_PATH",
+        "QWEN3_MODEL_PATH",
+        "QWEN3_MAX_INPUT_TOKENS",
+        "QWEN3_MAX_NEW_TOKENS",
         "ENABLE_AUTONOMOUS_DELEGATION",
         "MAX_AUTONOMOUS_DELEGATIONS",
         "AGENT_MAX_PARALLEL_TASKS",
@@ -252,7 +279,7 @@ def provider_diagnostic(config: Config | None = None) -> dict[str, str]:
             "deterministic"
             if active.model_provider == "fake"
             else "local"
-            if active.model_provider in {"ollama", "qwen"}
+            if active.model_provider in {"ollama", "qwen", "qwen3"}
             else "remote"
         ),
     }
@@ -266,4 +293,6 @@ def provider_diagnostic(config: Config | None = None) -> dict[str, str]:
     elif active.model_provider == "qwen":
         diagnostic["model"] = getattr(active, "qwen_model", "Qwen/Qwen2.5-0.5B-Instruct")
         diagnostic["adapter_path"] = getattr(active, "qwen_adapter_path", "models/checkpoints")
+    elif active.model_provider == "qwen3":
+        diagnostic["model"] = "Qwen3-0.6B"
     return diagnostic
