@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import uuid
 from dataclasses import dataclass, field
 from enum import Enum
@@ -473,7 +474,7 @@ class FraudInvestigationWorkflow:
                 step.output = result.output or {"results": []}
                 step.evidence.add(Evidence(
                     step.resource or "workflow",
-                    str(step.output),
+                    json.dumps(step.output, sort_keys=True, default=str),
                     "workflow_observation",
                     {"step_id": step.id, "attempt": step.attempts},
                 ))

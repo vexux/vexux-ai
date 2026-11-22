@@ -3,7 +3,7 @@ import logging
 
 from fastapi.testclient import TestClient
 
-from api.main import app, get_agent
+from api.main import app, get_agent, get_real_agent
 from core.contracts.observation import Observation
 from core.contracts.response import AgentResponse
 
@@ -243,3 +243,102 @@ def test_agent_logs_structured_task_observability(caplog):
     assert record.capability == "model"
     assert record.execution_success is True
     assert record.execution_duration_ms >= 0
+
+
+def test_fraud_investigation_endpoint_uses_registered_real_workflow(monkeypatch):
+    class StubWorkflow:
+        def execute(self, workflow_input, context):
+            from apps.fraud.domain import Customer, InvestigationResult
+            return InvestigationResult(
+                subject=Customer("C1001", "Alice Smith", "high"),
+                findings=["2 open high-severity fraud alerts are associated with the customer."],
+                risk_assessment="high",
+                contributing_signals=["open_high_severity_alerts"],
+                resources_consulted=["customer_graph", "fraud_graph", "business_db"],
+            )
+
+    class StubRegistry:
+        def get(self, name):
+            assert name == "fraud_investigation"
+            return StubWorkflow()
+
+    class StubRealAgent:
+        workflow_registry = StubRegistry()
+
+    import api.main as main_module
+    monkeypatch.setattr(main_module, "get_real_agent", lambda: StubRealAgent())
+    try:
+        response = TestClient(app).post(
+            "/api/v1/fraud/investigate",
+            json={"query": "Investigate C1001", "session_id": "session-fraud", "user_id": "investigator"},
+        )
+        assert response.status_code == 200
+        body = response.json()
+        assert body["success"] is True
+        assert body["session_id"] == "session-fraud"
+        assert body["investigation"]["summary"]["customer_id"] == "C1001"
+        assert body["investigation"]["summary"]["risk_assessment"] == "high"
+        assert body["metadata"]["workflow"] == "fraud_investigation"
+    finally:
+        app.dependency_overrides.clear()
+
+
+def test_get_real_agent_calls_real_composition(monkeypatch):
+    import api.main as main_module
+
+    sentinel = object()
+    main_module.get_real_agent.cache_clear()
+    monkeypatch.setattr(main_module, "create_real_agent", lambda: sentinel)
+    try:
+        assert main_module.get_real_agent() is sentinel
+    finally:
+        main_module.get_real_agent.cache_clear()
+
+
+def test_missing_customer_id_is_rejected_for_investigation(monkeypatch):
+    class StubRealAgent:
+        workflow_registry = object()
+
+    import api.main as main_module
+    monkeypatch.setattr(main_module, "get_real_agent", lambda: StubRealAgent())
+    response = TestClient(app).post(
+        "/api/v1/fraud/investigate",
+        json={"query": "Investigate this account for suspicious activity", "session_id": "missing-customer", "user_id": "investigator"},
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["success"] is False
+    assert "customer ID is required" in body["error"]
+
+
+def test_unknown_customer_is_returned_as_authoritative_not_found(monkeypatch):
+    from core.contracts.workflow import WorkflowExecutionError
+
+    class StubWorkflow:
+        def execute(self, workflow_input, context):
+            raise WorkflowExecutionError(
+                "The requested customer was not found in the authoritative customer graph.",
+                terminal=True,
+                retryable=False,
+                authoritative=True,
+                failure_category="not_found",
+            )
+
+    class StubRegistry:
+        def get(self, name):
+            return StubWorkflow()
+
+    class StubRealAgent:
+        workflow_registry = StubRegistry()
+
+    import api.main as main_module
+    monkeypatch.setattr(main_module, "get_real_agent", lambda: StubRealAgent())
+    response = TestClient(app).post(
+        "/api/v1/fraud/investigate",
+        json={"query": "Investigate C9999", "session_id": "unknown-customer", "user_id": "investigator"},
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["success"] is False
+    assert "not found" in body["error"]
+    assert body["metadata"]["failure_category"] == "not_found"

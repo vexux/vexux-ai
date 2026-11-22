@@ -231,6 +231,36 @@ Invoke-RestMethod http://127.0.0.1:8000/ready
 configuration; it does not prove that Mistral or Ollama is reachable and does
 not replace database verification.
 
+### AI Investigator web UI
+
+Start the FastAPI backend from the repository root:
+
+```powershell
+python -m uvicorn api.main:app --host 127.0.0.1 --port 8000
+```
+
+In a second terminal, install and start the React frontend:
+
+```powershell
+cd frontend
+npm install
+npm run dev
+```
+
+Open `http://localhost:5173`. The AI Investigator sends customer investigations to
+`POST /api/v1/fraud/investigate`, which executes the registered
+`fraud_investigation` workflow through the real Neo4j/MySQL composition.
+Set `VITE_API_URL` to another FastAPI origin if the backend is not served at
+`http://127.0.0.1:8000`.
+
+For a production frontend bundle:
+
+```powershell
+cd frontend
+npm run build
+npm run preview
+```
+
 For the real fraud application after both databases are bootstrapped, set the
 Neo4j/MySQL variables and run:
 
