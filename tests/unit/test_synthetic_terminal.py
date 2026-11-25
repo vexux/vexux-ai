@@ -162,7 +162,14 @@ def test_synthetic_terminal_handles_provider_error_and_continues(
     monkeypatch, capsys, isolated_terminal
 ):
     agent = StubAgent(fail_on="Explain C1001")
-    inputs = iter(["Explain C1001", "Investigate C1001", "quit"])
+    inputs = iter(
+        [
+            "Explain C1001",
+            "/actor investigator",
+            "Investigate C1001",
+            "quit",
+        ]
+    )
     monkeypatch.setattr("builtins.input", lambda _prompt: next(inputs))
 
     run_agent._run_terminal(agent, "synthetic")

@@ -183,6 +183,24 @@ def _structured_output_valid(response: AgentResponse) -> bool:
     )
 
 
+def _provider_identity(agent: Any, config: BenchmarkConfig) -> dict[str, str]:
+    gateway = getattr(
+        getattr(agent, "execution_manager", None),
+        "model_gateway",
+        None,
+    )
+    metadata = gateway.provider_metadata() if gateway is not None else {}
+    identity = {
+        "provider": config.provider,
+        "model": config.model,
+    }
+    for key in ("provider", "model", "model_selection"):
+        value = metadata.get(key)
+        if value is not None:
+            identity[key] = str(value)
+    return identity
+
+
 def _matches_expected(scenario: BenchmarkScenario, response: AgentResponse, authorization: str | None) -> bool:
     if scenario.expected_authorization == "rejected":
         return authorization == "rejected"
@@ -207,6 +225,10 @@ def run_benchmark(
     )
     scenario_list = list(scenarios or default_scenarios())
     metrics: list[BenchmarkMetric] = []
+    provider_identity = {
+        "provider": config.provider,
+        "model": config.model,
+    }
     for repetition in range(1, config.repetitions + 1):
         agent = agent_factory()
         for scenario in scenario_list:
@@ -214,6 +236,8 @@ def run_benchmark(
             selected = None
             authorization = None
             invalid_actor = False
+            runtime_identity = _provider_identity(agent, config)
+            provider_identity.update(runtime_identity)
             try:
                 if scenario.actor is not None:
                     try:
@@ -222,8 +246,8 @@ def run_benchmark(
                         invalid_actor = True
                         metrics.append(BenchmarkMetric(
                             scenario.scenario_id,
-                            config.provider,
-                            config.model,
+                            runtime_identity["provider"],
+                            runtime_identity["model"],
                             repetition,
                             scenario.expected_behavior,
                             "rejected before planning",
@@ -239,6 +263,8 @@ def run_benchmark(
                     actor = None
                 selected = _selected_resource(agent, scenario.query)
                 response = agent.run(scenario.query, user_id=actor)
+                runtime_identity = _provider_identity(agent, config)
+                provider_identity.update(runtime_identity)
                 authorization = _authorization_result(response)
                 if scenario.expected_authorization == "allowed" and authorization is None and response.success:
                     authorization = "allowed"
@@ -247,8 +273,8 @@ def run_benchmark(
                 metadata = _trace_metadata(response)
                 metrics.append(BenchmarkMetric(
                     scenario.scenario_id,
-                    config.provider,
-                    config.model,
+                    runtime_identity["provider"],
+                    runtime_identity["model"],
                     repetition,
                     scenario.expected_behavior,
                     "completed" if response.success else "failed",
@@ -264,10 +290,12 @@ def run_benchmark(
                     error=response.error,
                 ))
             except ValueError as exc:
+                runtime_identity = _provider_identity(agent, config)
+                provider_identity.update(runtime_identity)
                 metrics.append(BenchmarkMetric(
                     scenario.scenario_id,
-                    config.provider,
-                    config.model,
+                    runtime_identity["provider"],
+                    runtime_identity["model"],
                     repetition,
                     scenario.expected_behavior,
                     "configuration or routing failure",
@@ -283,10 +311,12 @@ def run_benchmark(
                     error=str(exc),
                 ))
             except Exception as exc:
+                runtime_identity = _provider_identity(agent, config)
+                provider_identity.update(runtime_identity)
                 metrics.append(BenchmarkMetric(
                     scenario.scenario_id,
-                    config.provider,
-                    config.model,
+                    runtime_identity["provider"],
+                    runtime_identity["model"],
                     repetition,
                     scenario.expected_behavior,
                     "harness or system failure",
@@ -308,7 +338,7 @@ def run_benchmark(
             for item in failed:
                 item.failure_repeatability = stability
     return BenchmarkReport(
-        provider={"provider": config.provider, "model": config.model},
+        provider=provider_identity,
         metrics=metrics,
     )
 

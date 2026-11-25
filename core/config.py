@@ -21,6 +21,15 @@ _DEFAULT_QWEN3_MODEL_PATH = (
     / ".cache"
     / "modelscope"
     / "models"
+    / "Qwen--Qwen3-4B"
+    / "snapshots"
+    / "master"
+)
+_DEFAULT_QWEN3_FALLBACK_MODEL_PATH = (
+    Path.home()
+    / ".cache"
+    / "modelscope"
+    / "models"
     / "Qwen--Qwen3-0.6B"
     / "snapshots"
     / "master"
@@ -80,8 +89,9 @@ class Config:
     qwen_model: str = "Qwen/Qwen2.5-0.5B-Instruct"
     qwen_adapter_path: str = "models/checkpoints"
     qwen3_model_path: str = str(_DEFAULT_QWEN3_MODEL_PATH)
-    qwen3_max_input_tokens: int = 2048
-    qwen3_max_new_tokens: int = 256
+    qwen3_fallback_model_path: str = str(_DEFAULT_QWEN3_FALLBACK_MODEL_PATH)
+    qwen3_max_input_tokens: int = 1024
+    qwen3_max_new_tokens: int = 128
     llama_cpp_model_path: str = str(_DEFAULT_LLAMA_CPP_MODEL_PATH)
     llama_cpp_n_ctx: int = 2048
     llama_cpp_n_threads: int = 4
@@ -159,11 +169,15 @@ def load_config_from_env(prefix: str = "") -> Config:
     qwen_model = e("QWEN_MODEL") or "Qwen/Qwen2.5-0.5B-Instruct"
     qwen_adapter_path = e("QWEN_ADAPTER_PATH") or "models/checkpoints"
     qwen3_model_path = e("QWEN3_MODEL_PATH") or str(_DEFAULT_QWEN3_MODEL_PATH)
+    qwen3_fallback_model_path = (
+        e("QWEN3_FALLBACK_MODEL_PATH")
+        or str(_DEFAULT_QWEN3_FALLBACK_MODEL_PATH)
+    )
     qwen3_max_input_tokens = _parse_int(
-        e("QWEN3_MAX_INPUT_TOKENS"), default=2048, min_value=1, max_value=32768
+        e("QWEN3_MAX_INPUT_TOKENS"), default=1024, min_value=1, max_value=32768
     )
     qwen3_max_new_tokens = _parse_int(
-        e("QWEN3_MAX_NEW_TOKENS"), default=256, min_value=1, max_value=4096
+        e("QWEN3_MAX_NEW_TOKENS"), default=128, min_value=1, max_value=4096
     )
     llama_cpp_model_path = (
         e("LLAMA_CPP_MODEL_PATH") or str(_DEFAULT_LLAMA_CPP_MODEL_PATH)
@@ -214,6 +228,7 @@ def load_config_from_env(prefix: str = "") -> Config:
         qwen_model=qwen_model,
         qwen_adapter_path=qwen_adapter_path,
         qwen3_model_path=qwen3_model_path,
+        qwen3_fallback_model_path=qwen3_fallback_model_path,
         qwen3_max_input_tokens=qwen3_max_input_tokens,
         qwen3_max_new_tokens=qwen3_max_new_tokens,
         llama_cpp_model_path=llama_cpp_model_path,
@@ -257,6 +272,7 @@ def _env_snapshot(prefix: str = "") -> tuple:
         "QWEN_MODEL",
         "QWEN_ADAPTER_PATH",
         "QWEN3_MODEL_PATH",
+        "QWEN3_FALLBACK_MODEL_PATH",
         "QWEN3_MAX_INPUT_TOKENS",
         "QWEN3_MAX_NEW_TOKENS",
         "LLAMA_CPP_MODEL_PATH",
@@ -303,7 +319,11 @@ def get_config() -> Config:
     return cfg
 
 
-def provider_diagnostic(config: Config | None = None) -> dict[str, str]:
+def provider_diagnostic(
+    config: Config | None = None,
+    *,
+    provider_metadata: dict[str, str] | None = None,
+) -> dict[str, str]:
     """Return safe runtime provider metadata; never include credentials."""
     active = config or get_config()
     diagnostic = {
@@ -327,7 +347,16 @@ def provider_diagnostic(config: Config | None = None) -> dict[str, str]:
         diagnostic["model"] = getattr(active, "qwen_model", "Qwen/Qwen2.5-0.5B-Instruct")
         diagnostic["adapter_path"] = getattr(active, "qwen_adapter_path", "models/checkpoints")
     elif active.model_provider == "qwen3":
-        diagnostic["model"] = "Qwen3-0.6B"
+        diagnostic["model"] = (
+            provider_metadata.get("model", "Qwen3-4B")
+            if provider_metadata
+            else "Qwen3-4B"
+        )
+        diagnostic["model_selection"] = (
+            provider_metadata.get("model_selection", "not_loaded")
+            if provider_metadata
+            else "not_loaded"
+        )
     elif active.model_provider == "llama_cpp":
         diagnostic["model"] = Path(active.llama_cpp_model_path).name
     return diagnostic

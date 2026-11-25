@@ -789,3 +789,104 @@ BLOCKED - DO NOT INSTALL, AUTHENTICATE, OR DOWNLOAD
 - Do not describe the model as integrated or working until it has generated
   through the existing ModelGateway. Deterministic fraud scoring must remain
   authoritative.
+
+
+Qwen3-4B default with Qwen3-0.6B fallback
+=========================================
+Date: 2026-11-25
+
+1. Implementation summary
+-------------------------
+SOURCE-CHANGED
+- `core/config.py` now defaults the existing `qwen3` provider to the local
+  Qwen3-4B ModelScope snapshot and Qwen3-0.6B fallback snapshot. It supports
+  `QWEN3_MODEL_PATH`, `QWEN3_FALLBACK_MODEL_PATH`,
+  `QWEN3_MAX_INPUT_TOKENS`, and `QWEN3_MAX_NEW_TOKENS`; default token limits
+  are 1024 input and 128 generated tokens.
+- `core/composition.py` passes both paths into the existing provider. No new
+  provider or ModelGateway was created; provider name `qwen3` and the existing
+  contracts remain unchanged.
+- `models/providers/qwen3.py` keeps loading lazy and CPU-only, validates
+  `config.json`, `tokenizer.json`, and local model weights/shards, and passes
+  `local_files_only=True` to tokenizer and model loading. It loads the
+  fallback only after a primary failure. Failed partial tokenizer/model
+  references are cleared and garbage collection runs before fallback starts.
+- The provider records `model_selection=primary|fallback` and the selected
+  model in metadata after load. Before first generation it reports
+  `model_selection=not_loaded`; it does not claim the primary loaded. Warnings
+  and aggregate load errors use sanitized failure categories and model labels,
+  not full paths or raw exception messages. If both attempts fail, the safe
+  error gives both failure categories. Failed loading is cached for that
+  provider instance so later requests do not repeatedly try large model loads.
+- `core/model_gateway/gateway.py` allows the non-secret `model_selection`
+  metadata field. `core/config.py` diagnostics can accept live provider
+  metadata. Terminal startup reports the selection state. Benchmark metrics
+  use live ModelGateway metadata so a fallback run is reported as Qwen3-0.6B,
+  not Qwen3-4B.
+- `docs/SETUP.md` documents both default paths, environment settings,
+  explicit 0.6B selection, actual selection status, CPU/memory constraints,
+  and retry behavior.
+- Tests cover default paths and limits, environment overrides, primary
+  success without fallback, missing-primary fallback, recoverable
+  initialization failure, partial model release before fallback, missing
+  required files/shards, both-failure errors, cached failure behavior,
+  metadata/diagnostics, ModelGateway behavior, local-only loading, and
+  benchmark model identity.
+- No dependencies, `.env`, downloaded model files, fraud scoring, database,
+  graph, RAG, or unrelated provider implementation were changed.
+
+2. Verification
+---------------
+ACTUALLY-RUN
+- Existing Vexux interpreter: CPython 3.12.4 x64; pytest 9.2.0.
+- Both requested local snapshot directories were present during read-only
+  inspection. Summed Qwen3-4B Safetensors shard size was 8,044,982,000 bytes;
+  Qwen3-0.6B Safetensors file size was 1,503,300,328 bytes.
+- Final focused command:
+  `.venv\Scripts\python.exe -m pytest -q tests\unit\test_config.py tests\unit\test_qwen3_provider.py tests\unit\test_qwen3_composition.py tests\unit\test_provider_diagnostics.py tests\unit\test_benchmark.py tests\unit\test_synthetic_terminal.py -k 'not test_dotenv_mistral_configuration_selects_mistral_provider'`
+  Result: 60 passed, 1 deselected, 98 deprecation warnings. The warnings are
+  existing `datetime.utcnow()` usage in audit timestamp code and were not
+  changed here.
+- The same command without the `-k` exclusion produced 60 passed and one
+  failure: the pre-existing Mistral composition test cannot import
+  `mistralai` (`ModuleNotFoundError`). No package was installed; Mistral is
+  outside this Qwen3 change.
+- Pylance diagnostics reported no errors in the changed Qwen3 provider,
+  benchmark implementation, or Qwen3 provider test. Signature compatibility
+  reported all 15 discovered Qwen3Provider call sites compatible.
+- The existing terminal error-continuation test now explicitly switches to
+  the investigator actor before asserting its investigator result; the
+  application's default support_user actor and authorization behavior were
+  not changed.
+
+3. Inference and remaining limitations
+--------------------------------------
+NOT ACTUALLY-RUN
+- No real 4B or 0.6B inference was attempted. The fallback path and cleanup
+  behavior were exercised with mocks only; this does not prove real fallback
+  loading or generation.
+- At the inspection snapshot, available physical RAM was about 3.04 GiB while
+  the 4B weight files total about 8.04 GB (about 7.49 GiB). Actual peak memory,
+  CPU latency, and model quality are unknown. This headroom was insufficient
+  to justify risking a real 4B load during this task. No pagefile or system
+  settings were changed.
+- A Python-level recoverable load exception triggers one fallback attempt.
+  Windows process termination or an unrecoverable out-of-memory condition
+  cannot be recovered by this mechanism.
+- Deterministic fraud risk scoring remains authoritative and was not modified.
+
+4. Files changed
+----------------
+- `models/providers/qwen3.py`
+- `core/config.py`
+- `core/composition.py`
+- `core/model_gateway/gateway.py`
+- `evaluation/benchmark.py`
+- `scripts/manual/run_agent.py`
+- `tests/unit/test_qwen3_provider.py`
+- `tests/unit/test_qwen3_composition.py`
+- `tests/unit/test_provider_diagnostics.py`
+- `tests/unit/test_benchmark.py`
+- `tests/unit/test_synthetic_terminal.py`
+- `docs/SETUP.md`
+- `VEXUX_AUDIT_REPORT.txt`

@@ -280,12 +280,50 @@ python -m scripts.manual.run_agent --composition synthetic --provider fake
 python -m scripts.manual.run_agent --composition synthetic --provider qwen3
 ```
 
-The Qwen3 provider loads only a local ModelScope snapshot. Configure
-`QWEN3_MODEL_PATH` to override the default cache directory, and use
-`QWEN3_MAX_INPUT_TOKENS` / `QWEN3_MAX_NEW_TOKENS` to set the bounded context
-and output limits. The model must already be present locally; loading does
-not download model files. Synthetic fraud risk remains deterministic and
-does not depend on Qwen3 generation.
+The Qwen3 provider loads only local ModelScope snapshots and never downloads
+model files. Its default primary is Qwen3-4B at
+`%USERPROFILE%\.cache\modelscope\models\Qwen--Qwen3-4B\snapshots\master`;
+if that snapshot is missing or fails to initialize, it attempts Qwen3-0.6B at
+`%USERPROFILE%\.cache\modelscope\models\Qwen--Qwen3-0.6B\snapshots\master`.
+Both snapshots must already be present and complete. Loading remains lazy, so
+only one model is loaded.
+
+The conservative defaults are 1024 input tokens and 128 generated tokens.
+Override paths and limits in the current PowerShell process with
+`QWEN3_MODEL_PATH`, `QWEN3_FALLBACK_MODEL_PATH`,
+`QWEN3_MAX_INPUT_TOKENS`, and `QWEN3_MAX_NEW_TOKENS`. For example:
+
+```powershell
+$env:MODEL_PROVIDER = "qwen3"
+$env:QWEN3_MODEL_PATH = Join-Path $env:USERPROFILE ".cache\modelscope\models\Qwen--Qwen3-4B\snapshots\master"
+$env:QWEN3_FALLBACK_MODEL_PATH = Join-Path $env:USERPROFILE ".cache\modelscope\models\Qwen--Qwen3-0.6B\snapshots\master"
+$env:QWEN3_MAX_INPUT_TOKENS = "1024"
+$env:QWEN3_MAX_NEW_TOKENS = "128"
+.\.venv\Scripts\python.exe -m scripts.manual.run_agent `
+  --composition synthetic --provider qwen3
+```
+
+To explicitly run the smaller model without trying the 4B model if it fails,
+point both model settings at the 0.6B snapshot:
+
+```powershell
+$small = Join-Path $env:USERPROFILE ".cache\modelscope\models\Qwen--Qwen3-0.6B\snapshots\master"
+$env:QWEN3_MODEL_PATH = $small
+$env:QWEN3_FALLBACK_MODEL_PATH = $small
+```
+
+The provider reports `model_selection=not_loaded` before the first generation,
+then `primary` or `fallback` with the actual model name after loading. If the
+4B initialization fails, a warning identifies the failure category and the
+fallback selection; if both fail, the error reports both failure categories.
+After both candidates fail, that provider instance caches the failure instead
+of repeatedly attempting large model loads; restart the agent after correcting
+the local model/runtime problem.
+Model loading is CPU-only. Qwen3-4B has substantially higher memory demand
+than Qwen3-0.6B; keep other memory-intensive applications in mind. A
+process-level out-of-memory termination cannot be recovered by Python fallback.
+Synthetic fraud risk remains deterministic and does not depend on Qwen3
+generation.
 
 ### Optional local Llama GGUF provider
 

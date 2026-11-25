@@ -1,5 +1,5 @@
 from contextlib import nullcontext
-from types import ModuleType, SimpleNamespace
+from types import ModuleType
 
 import pytest
 
@@ -67,21 +67,49 @@ class FakeModel:
         return FakeTensor([1, 2, 3, 8, 9])
 
 
-def install_transformers_mocks(monkeypatch, tokenizer=None, model=None):
+def create_local_snapshot(tmp_path, name):
+    model_path = tmp_path / name
+    model_path.mkdir()
+    (model_path / "config.json").write_text("{}", encoding="utf-8")
+    (model_path / "tokenizer.json").write_text("{}", encoding="utf-8")
+    (model_path / "model.safetensors").write_bytes(b"mock weights")
+    return model_path
+
+
+def install_transformers_mocks(
+    monkeypatch,
+    tokenizer=None,
+    model=None,
+    *,
+    tokenizer_failures=None,
+    model_failures=None,
+    model_factories=None,
+):
     tokenizer = tokenizer or FakeTokenizer()
     model = model or FakeModel()
     calls = {"tokenizer": [], "model": []}
+    tokenizer_failures = tokenizer_failures or {}
+    model_failures = model_failures or {}
+    model_factories = model_factories or {}
 
     class AutoTokenizer:
         @staticmethod
         def from_pretrained(path, **kwargs):
             calls["tokenizer"].append((path, kwargs))
+            assert kwargs["local_files_only"] is True
+            if path in tokenizer_failures:
+                raise tokenizer_failures[path]
             return tokenizer
 
     class AutoModelForCausalLM:
         @staticmethod
         def from_pretrained(path, **kwargs):
             calls["model"].append((path, kwargs))
+            assert kwargs["local_files_only"] is True
+            if path in model_failures:
+                raise model_failures[path]
+            if path in model_factories:
+                return model_factories[path]()
             return model
 
     transformers = ModuleType("transformers")
@@ -96,11 +124,14 @@ def install_transformers_mocks(monkeypatch, tokenizer=None, model=None):
 
 
 def test_qwen3_loads_lazily_once_with_local_cpu_settings_and_decodes_new_tokens(
-    monkeypatch,
+    monkeypatch, tmp_path
 ):
+    model_path = create_local_snapshot(tmp_path, "Qwen--Qwen3-4B")
+    fallback_path = create_local_snapshot(tmp_path, "Qwen--Qwen3-0.6B")
     tokenizer, model, calls = install_transformers_mocks(monkeypatch)
     provider = Qwen3Provider(
-        "C:/models/qwen3",
+        model_path,
+        fallback_model_path=fallback_path,
         max_input_tokens=32,
         max_new_tokens=8,
     )
@@ -111,7 +142,7 @@ def test_qwen3_loads_lazily_once_with_local_cpu_settings_and_decodes_new_tokens(
 
     assert len(calls["tokenizer"]) == 1
     assert calls["tokenizer"][0] == (
-        "C:\\models\\qwen3",
+        str(model_path),
         {"local_files_only": True},
     )
     assert calls["model"][0][1] == {
@@ -137,10 +168,149 @@ def test_qwen3_loads_lazily_once_with_local_cpu_settings_and_decodes_new_tokens(
         [8, 9],
         {"skip_special_tokens": True},
     )
+    assert calls["tokenizer"] == [(str(model_path), {"local_files_only": True})]
+    assert provider.metadata == {
+        "provider": "qwen3",
+        "model": "Qwen3-4B",
+        "model_selection": "primary",
+        "runtime_mode": "local",
+    }
+
+
+def test_qwen3_provider_defaults_are_4b_and_memory_conservative():
+    from pathlib import Path
+
+    provider = Qwen3Provider()
+
+    assert provider.model_path == (
+        Path.home()
+        / ".cache"
+        / "modelscope"
+        / "models"
+        / "Qwen--Qwen3-4B"
+        / "snapshots"
+        / "master"
+    )
+    assert provider.fallback_model_path == (
+        Path.home()
+        / ".cache"
+        / "modelscope"
+        / "models"
+        / "Qwen--Qwen3-0.6B"
+        / "snapshots"
+        / "master"
+    )
+    assert provider.max_input_tokens == 1024
+    assert provider.max_new_tokens == 128
+
+
+def test_qwen3_falls_back_when_primary_path_is_missing(monkeypatch, tmp_path, caplog):
+    fallback_path = create_local_snapshot(tmp_path, "Qwen--Qwen3-0.6B")
+    install_transformers_mocks(monkeypatch)
+    provider = Qwen3Provider(
+        tmp_path / "missing-primary",
+        fallback_model_path=fallback_path,
+    )
+
+    gateway = ModelGateway(provider)
+    assert gateway.generate("Hello") == "generated-only answer"
+    assert provider.metadata["model"] == "Qwen3-0.6B"
+    assert provider.metadata["model_selection"] == "fallback"
+    assert gateway.provider_metadata()["model"] == "Qwen3-0.6B"
+    assert gateway.provider_metadata()["model_selection"] == "fallback"
+    assert "Primary local Qwen3 model missing-primary failed" in caplog.text
+    assert "attempting configured fallback Qwen3-0.6B" in caplog.text
+
+
+def test_qwen3_falls_back_when_primary_initialization_raises(monkeypatch, tmp_path):
+    primary_path = create_local_snapshot(tmp_path, "Qwen--Qwen3-4B")
+    fallback_path = create_local_snapshot(tmp_path, "Qwen--Qwen3-0.6B")
+    install_transformers_mocks(
+        monkeypatch,
+        model_failures={str(primary_path): OSError("private path omitted")},
+    )
+    provider = Qwen3Provider(
+        primary_path,
+        fallback_model_path=fallback_path,
+    )
+
+    assert provider.generate("Hello") == "generated-only answer"
+    assert provider.metadata["model"] == "Qwen3-0.6B"
+    assert provider.metadata["model_selection"] == "fallback"
+
+
+def test_qwen3_releases_partial_primary_model_before_fallback(
+    monkeypatch, tmp_path
+):
+    import weakref
+
+    primary_path = create_local_snapshot(tmp_path, "Qwen--Qwen3-4B")
+    fallback_path = create_local_snapshot(tmp_path, "Qwen--Qwen3-0.6B")
+    partial_model_ref = []
+
+    class FailingMoveModel(FakeModel):
+        def to(self, device):
+            raise OSError("CPU placement failed")
+
+    def create_partial_model():
+        partial_model = FailingMoveModel()
+        partial_model_ref.append(weakref.ref(partial_model))
+        return partial_model
+
+    def create_fallback_model():
+        assert partial_model_ref[0]() is None
+        return FakeModel()
+
+    install_transformers_mocks(
+        monkeypatch,
+        model_factories={
+            str(primary_path): create_partial_model,
+            str(fallback_path): create_fallback_model,
+        },
+    )
+    provider = Qwen3Provider(
+        primary_path,
+        fallback_model_path=fallback_path,
+    )
+
+    assert provider.generate("Hello") == "generated-only answer"
+    assert provider.metadata["model_selection"] == "fallback"
+
+
+def test_qwen3_both_fail_with_both_safe_failure_reasons(monkeypatch, tmp_path):
+    primary_path = create_local_snapshot(tmp_path, "Qwen--Qwen3-4B")
+    fallback_path = create_local_snapshot(tmp_path, "Qwen--Qwen3-0.6B")
+    _, _, calls = install_transformers_mocks(
+        monkeypatch,
+        model_failures={
+            str(primary_path): ValueError("private path must not be reported"),
+            str(fallback_path): OSError("private path must not be reported"),
+        },
+    )
+    provider = Qwen3Provider(
+        primary_path,
+        fallback_model_path=fallback_path,
+    )
+
+    with pytest.raises(RuntimeError) as error:
+        provider.generate("Hello")
+
+    assert "Primary Qwen3-4B failed: model configuration or weights were rejected" in str(error.value)
+    assert "Fallback Qwen3-0.6B failed: local model or runtime I/O failed" in str(error.value)
+    assert "private path" not in str(error.value)
+    assert str(primary_path) not in str(error.value)
+    assert str(fallback_path) not in str(error.value)
+    calls_after_failure = {
+        key: list(value)
+        for key, value in calls.items()
+    }
+    with pytest.raises(RuntimeError, match="Could not load either local Qwen3 model"):
+        provider.generate("Try again")
+    assert calls == calls_after_failure
 
 
 def test_qwen3_formats_json_and_supports_chat_templates_without_thinking_option(
-    monkeypatch,
+    monkeypatch, tmp_path
 ):
     tokenizer = FakeTokenizer()
 
@@ -151,8 +321,9 @@ def test_qwen3_formats_json_and_supports_chat_templates_without_thinking_option(
         return "legacy-chat"
 
     tokenizer.apply_chat_template = legacy_template
+    model_path = create_local_snapshot(tmp_path, "qwen3")
     _, model, _ = install_transformers_mocks(monkeypatch, tokenizer=tokenizer)
-    provider = Qwen3Provider("local", max_new_tokens=12)
+    provider = Qwen3Provider(model_path, max_new_tokens=12)
 
     provider.generate("Return an object", response_format="json")
 
@@ -171,49 +342,90 @@ def test_qwen3_formats_json_and_supports_chat_templates_without_thinking_option(
     assert model.generate_kwargs["max_new_tokens"] == 12
 
 
-def test_qwen3_reports_loading_and_generation_errors(monkeypatch):
+def test_qwen3_06b_remains_available_as_explicit_primary(monkeypatch, tmp_path):
+    small_path = create_local_snapshot(tmp_path, "Qwen--Qwen3-0.6B")
     install_transformers_mocks(monkeypatch)
-    provider = Qwen3Provider("missing-local-snapshot")
-    import sys
+    provider = Qwen3Provider(small_path, fallback_model_path=tmp_path / "unused")
 
-    transformers = sys.modules["transformers"]
+    assert provider.generate("Hello") == "generated-only answer"
+    assert provider.metadata["model"] == "Qwen3-0.6B"
+    assert provider.metadata["model_selection"] == "primary"
 
-    class MissingTokenizer:
-        @staticmethod
-        def from_pretrained(path, **kwargs):
-            assert kwargs["local_files_only"] is True
-            raise FileNotFoundError("local files missing")
 
-    transformers.AutoTokenizer = MissingTokenizer
-    with pytest.raises(RuntimeError, match="Could not load local Qwen3") as loading:
-        provider.generate("Hello")
-    assert isinstance(loading.value.__cause__, FileNotFoundError)
-
-    generation_model = FakeModel(failure=ValueError("generation rejected"))
-    tokenizer, _, _ = install_transformers_mocks(
-        monkeypatch,
-        model=generation_model,
+def test_qwen3_reports_both_loading_errors_and_generation_errors(monkeypatch, tmp_path):
+    primary_path = tmp_path / "missing-primary"
+    fallback_path = tmp_path / "missing-fallback"
+    install_transformers_mocks(monkeypatch)
+    provider = Qwen3Provider(
+        primary_path,
+        fallback_model_path=fallback_path,
     )
-    provider = Qwen3Provider("local")
+    with pytest.raises(RuntimeError, match="Could not load either local Qwen3 model") as loading:
+        provider.generate("Hello")
+    assert "Primary missing-primary failed" in str(loading.value)
+    assert "Fallback missing-fallback failed" in str(loading.value)
+    assert loading.value.__cause__ is None
+
+    model_path = create_local_snapshot(tmp_path, "generation-fails")
+    generation_model = FakeModel(failure=ValueError("generation rejected"))
+    install_transformers_mocks(monkeypatch, model=generation_model)
+    provider = Qwen3Provider(model_path)
     with pytest.raises(RuntimeError, match="Qwen3 generation failed") as generation:
         provider.generate("Hello")
     assert isinstance(generation.value.__cause__, ValueError)
 
 
-def test_qwen3_gateway_metadata_and_input_validation(monkeypatch):
+def test_qwen3_gateway_metadata_and_input_validation(monkeypatch, tmp_path):
+    model_path = create_local_snapshot(tmp_path, "Qwen--Qwen3-4B")
     install_transformers_mocks(monkeypatch)
-    provider = Qwen3Provider("local")
+    provider = Qwen3Provider(model_path)
     gateway = ModelGateway(provider)
 
     assert gateway.provider_metadata() == {
         "provider": "qwen3",
-        "model": "Qwen3-0.6B",
+        "model": "Qwen3-4B",
+        "model_selection": "not_loaded",
         "runtime_mode": "local",
     }
     with pytest.raises(ValueError, match="non-empty"):
         gateway.generate(" ")
     with pytest.raises(ValueError, match="response format"):
         gateway.generate("Hello", response_format="xml")
+    gateway.generate("Hello")
+    assert gateway.provider_metadata()["model"] == "Qwen3-4B"
+    assert gateway.provider_metadata()["model_selection"] == "primary"
+
+
+def test_qwen3_validates_required_local_files_before_runtime_load(monkeypatch, tmp_path):
+    invalid_path = tmp_path / "incomplete"
+    invalid_path.mkdir()
+    fallback_path = create_local_snapshot(tmp_path, "fallback")
+    _, _, calls = install_transformers_mocks(monkeypatch)
+    provider = Qwen3Provider(invalid_path, fallback_model_path=fallback_path)
+
+    provider.generate("Hello")
+
+    assert calls["tokenizer"] == [(str(fallback_path), {"local_files_only": True})]
+
+
+def test_qwen3_validates_all_indexed_model_shards_before_runtime_load(
+    monkeypatch, tmp_path
+):
+    primary_path = tmp_path / "incomplete-shards"
+    primary_path.mkdir()
+    (primary_path / "config.json").write_text("{}", encoding="utf-8")
+    (primary_path / "tokenizer.json").write_text("{}", encoding="utf-8")
+    (primary_path / "model.safetensors.index.json").write_text(
+        '{"weight_map":{"layer.weight":"model-00001-of-00002.safetensors"}}',
+        encoding="utf-8",
+    )
+    fallback_path = create_local_snapshot(tmp_path, "fallback")
+    _, _, calls = install_transformers_mocks(monkeypatch)
+    provider = Qwen3Provider(primary_path, fallback_model_path=fallback_path)
+
+    provider.generate("Hello")
+
+    assert calls["tokenizer"] == [(str(fallback_path), {"local_files_only": True})]
 
 
 def test_qwen3_expands_environment_variables_in_model_path(monkeypatch):

@@ -44,7 +44,14 @@ class ModelGateway:
         """Return non-secret metadata for the active provider."""
         metadata = getattr(self.provider, "metadata", None)
         if isinstance(metadata, dict):
-            allowed = {"provider", "model", "runtime_mode", "host", "adapter_path"}
+            allowed = {
+                "provider",
+                "model",
+                "model_selection",
+                "runtime_mode",
+                "host",
+                "adapter_path",
+            }
             return {key: str(value) for key, value in metadata.items() if key in allowed}
         name = self.provider.name
         return {"provider": name() if callable(name) else name, "runtime_mode": "unknown"}

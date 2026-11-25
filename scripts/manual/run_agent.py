@@ -476,6 +476,8 @@ def _run_terminal(agent, composition_name):
     print(f"Provider: {runtime['provider']}")
     print(f"Model: {runtime.get('model', runtime['provider'])}")
     print(f"Runtime: {runtime['runtime_mode']}")
+    if "model_selection" in runtime:
+        print(f"Model selection: {runtime['model_selection']}")
     print("=" * 60)
 
     while True:

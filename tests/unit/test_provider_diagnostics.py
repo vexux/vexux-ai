@@ -62,19 +62,64 @@ def test_qwen3_configuration_and_diagnostics_are_distinct(monkeypatch, tmp_path)
     monkeypatch.setattr(config_module, "_ENV_FILE", tmp_path / ".env")
     monkeypatch.setenv("MODEL_PROVIDER", "qwen3")
     monkeypatch.setenv("QWEN3_MODEL_PATH", str(tmp_path / "snapshot"))
+    monkeypatch.setenv("QWEN3_FALLBACK_MODEL_PATH", str(tmp_path / "fallback"))
     monkeypatch.setenv("QWEN3_MAX_INPUT_TOKENS", "512")
     monkeypatch.setenv("QWEN3_MAX_NEW_TOKENS", "64")
 
     config = load_config_from_env()
 
     assert config.qwen3_model_path == str(tmp_path / "snapshot")
+    assert config.qwen3_fallback_model_path == str(tmp_path / "fallback")
     assert config.qwen3_max_input_tokens == 512
     assert config.qwen3_max_new_tokens == 64
     assert provider_diagnostic(config) == {
         "provider": "qwen3",
         "runtime_mode": "local",
-        "model": "Qwen3-0.6B",
+        "model": "Qwen3-4B",
+        "model_selection": "not_loaded",
     }
+    assert provider_diagnostic(
+        config,
+        provider_metadata={
+            "provider": "qwen3",
+            "model": "Qwen3-0.6B",
+            "model_selection": "fallback",
+            "runtime_mode": "local",
+        },
+    )["model"] == "Qwen3-0.6B"
+    assert provider_diagnostic(
+        config,
+        provider_metadata={
+            "provider": "qwen3",
+            "model": "Qwen3-0.6B",
+            "model_selection": "fallback",
+            "runtime_mode": "local",
+        },
+    )["model_selection"] == "fallback"
+
+
+def test_qwen3_defaults_to_4b_with_small_limits_and_06b_fallback(
+    monkeypatch, tmp_path
+):
+    import core.config as config_module
+
+    monkeypatch.setattr(config_module, "_ENV_FILE", tmp_path / ".env")
+    monkeypatch.setenv("MODEL_PROVIDER", "qwen3")
+    monkeypatch.delenv("QWEN3_MODEL_PATH", raising=False)
+    monkeypatch.delenv("QWEN3_FALLBACK_MODEL_PATH", raising=False)
+    monkeypatch.delenv("QWEN3_MAX_INPUT_TOKENS", raising=False)
+    monkeypatch.delenv("QWEN3_MAX_NEW_TOKENS", raising=False)
+
+    config = load_config_from_env()
+
+    assert config.qwen3_model_path.endswith(
+        "Qwen--Qwen3-4B\\snapshots\\master"
+    )
+    assert config.qwen3_fallback_model_path.endswith(
+        "Qwen--Qwen3-0.6B\\snapshots\\master"
+    )
+    assert config.qwen3_max_input_tokens == 1024
+    assert config.qwen3_max_new_tokens == 128
 
 
 def test_qwen3_generation_limits_are_validated(monkeypatch, tmp_path):

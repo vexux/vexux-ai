@@ -69,6 +69,7 @@ def create_agent(rag_documents_path=None, *, enable_rag=True):
 
         provider = Qwen3Provider(
             model_path=config.qwen3_model_path,
+            fallback_model_path=config.qwen3_fallback_model_path,
             max_input_tokens=config.qwen3_max_input_tokens,
             max_new_tokens=config.qwen3_max_new_tokens,
         )

@@ -10,12 +10,27 @@ def test_core_composition_registers_qwen3_without_loading_rag_or_model(
     constructed = []
 
     class RecordingQwen3Provider:
-        def __init__(self, *, model_path, max_input_tokens, max_new_tokens):
-            constructed.append((model_path, max_input_tokens, max_new_tokens))
+        def __init__(
+            self,
+            *,
+            model_path,
+            fallback_model_path,
+            max_input_tokens,
+            max_new_tokens,
+        ):
+            constructed.append(
+                (
+                    model_path,
+                    fallback_model_path,
+                    max_input_tokens,
+                    max_new_tokens,
+                )
+            )
             self.name = "qwen3"
             self.metadata = {
                 "provider": "qwen3",
-                "model": "Qwen3-0.6B",
+                "model": "Qwen3-4B",
+                "model_selection": "not_loaded",
                 "runtime_mode": "local",
             }
 
@@ -26,6 +41,7 @@ def test_core_composition_registers_qwen3_without_loading_rag_or_model(
     monkeypatch.setattr(composition, "RAGPipeline", forbidden)
     monkeypatch.setenv("MODEL_PROVIDER", "qwen3")
     monkeypatch.setenv("QWEN3_MODEL_PATH", str(tmp_path / "snapshot"))
+    monkeypatch.setenv("QWEN3_FALLBACK_MODEL_PATH", str(tmp_path / "fallback"))
     monkeypatch.setenv("QWEN3_MAX_INPUT_TOKENS", "512")
     monkeypatch.setenv("QWEN3_MAX_NEW_TOKENS", "64")
     monkeypatch.setenv("NEO4J_URI", "")
@@ -37,11 +53,14 @@ def test_core_composition_registers_qwen3_without_loading_rag_or_model(
     config = load_config_from_env()
     agent = composition.create_agent(enable_rag=False)
 
-    assert constructed == [(str(tmp_path / "snapshot"), 512, 64)]
+    assert constructed == [
+        (str(tmp_path / "snapshot"), str(tmp_path / "fallback"), 512, 64)
+    ]
     assert agent.execution_manager.retrieval is None
     assert agent.execution_manager.model_gateway.provider_metadata() == {
         "provider": "qwen3",
-        "model": "Qwen3-0.6B",
+        "model": "Qwen3-4B",
+        "model_selection": "not_loaded",
         "runtime_mode": "local",
     }
-    assert provider_diagnostic(config)["model"] == "Qwen3-0.6B"
+    assert provider_diagnostic(config)["model"] == "Qwen3-4B"

@@ -1,7 +1,9 @@
 from dataclasses import dataclass
+from types import SimpleNamespace
 
 from core.contracts.response import AgentResponse
 from core.contracts.observation import Observation
+from core.model_gateway.gateway import ModelGateway
 from evaluation.benchmark import (
     BenchmarkConfig,
     BenchmarkScenario,
@@ -79,6 +81,52 @@ def test_benchmark_records_provider_model_workflow_and_execution_outcome():
     assert all(metric.model == "phi3:latest" for metric in report.metrics)
     assert all(metric.selected_workflow == "fraud_investigation" for metric in report.metrics)
     assert all(metric.execution_success for metric in report.metrics)
+
+
+def test_benchmark_reports_the_actual_qwen3_fallback_model():
+    class SelectedProvider:
+        name = "qwen3"
+
+        def __init__(self):
+            self.model = "Qwen3-4B"
+            self.selection = "not_loaded"
+
+        @property
+        def metadata(self):
+            return {
+                "provider": self.name,
+                "model": self.model,
+                "model_selection": self.selection,
+                "runtime_mode": "local",
+            }
+
+        def generate(self, prompt, **_kwargs):
+            self.model = "Qwen3-0.6B"
+            self.selection = "fallback"
+            return "answer"
+
+    class ModelAgent:
+        def __init__(self):
+            self.execution_manager = SimpleNamespace(
+                model_gateway=ModelGateway(SelectedProvider())
+            )
+
+        def run(self, query, user_id=None):
+            self.execution_manager.model_gateway.generate(query)
+            return AgentResponse(success=True, trace=[], metadata={})
+
+    report = run_benchmark(
+        ModelAgent,
+        [BenchmarkScenario("fallback", "test", "model fallback")],
+        benchmark_config=BenchmarkConfig("qwen3", "Qwen3-4B"),
+    )
+
+    assert report.provider == {
+        "provider": "qwen3",
+        "model": "Qwen3-0.6B",
+        "model_selection": "fallback",
+    }
+    assert report.metrics[0].model == "Qwen3-0.6B"
 
 
 def test_benchmark_marks_intermittent_failures():
