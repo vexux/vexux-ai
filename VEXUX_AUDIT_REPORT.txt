@@ -572,3 +572,133 @@ RECOMMENDATION
   download model weights, modify system Python, or install into Python 3.13.
 - No installation, download, model load, inference, or repository source change
   occurred in this readiness investigation.
+
+
+SUPPLEMENT — MODELSCOPE LLAMA ARTIFACT SOURCE INVESTIGATION
+Updated: 2026-11-25
+Scope: Read-only public catalog/documentation research and local installed
+package/configuration checks. No SDK installation, authentication, download,
+configuration change, or model load was attempted.
+
+Evidence labels
+---------------
+VERIFIED    Directly observed in official/public metadata, docs, or local state.
+INFERENCE   Reasoned from the cited facts; not direct evidence.
+UNKNOWN     Not established by available evidence.
+BLOCKED     Do not proceed until company approval/source is verified.
+
+1. Identified ModelScope model repository
+----------------------------------------
+VERIFIED
+- Repository URL:
+  https://www.modelscope.cn/models/LLM-Research/Llama-3.2-3B-Instruct
+- The ModelScope model metadata identifies the repository as
+  `LLM-Research/Llama-3.2-3B-Instruct`, 3.2B parameters, Llama architecture,
+  text-generation task, BF16 tensor type, with `pytorch`, `transformer`, and
+  `safetensors` library labels.
+- Its current repository listing includes `.safetensors` shards and an
+  `original/` directory. Two listed Safetensors files are
+  `model-00001-of-00002.safetensors` (4,965,799,096 bytes) and
+  `model-00002-of-00002.safetensors` (1,459,729,952 bytes). The listing also
+  includes tokenizer/config files.
+- The same API file listing for `Root=GGUF` returned an empty file list for
+  this repository. No `.gguf` file or Q4_K_M quantization was listed there.
+- The model metadata reports license label `llama3.2`, organization
+  `LLM-Research`, creator `Cherrytest`, and `ModelSource: USER_UPLOAD`.
+  The file listing returned revisions including
+  `e443548a5da3c59ed14484f4bf4a3c61cccd7cab` and
+  `4e7231b81c151c73632184994ac9a0149fcb22fd` for listed repository entries.
+- Candidate URL
+  https://www.modelscope.cn/models/AI-ModelScope/Llama-3.2-3B-Instruct-GGUF
+  returns a ModelScope page shell, but the corresponding model API lookup
+  returned 404. This candidate repository and any contents were therefore
+  NOT verified.
+
+UNKNOWN
+- The `LLM-Research` listing's name and `llama3.2` license label do not by
+  themselves prove that its uploaded weights are an original Meta publication
+  or that their provenance/checksums are independently verified against Meta.
+- No exact ModelScope Q4_K_M GGUF filename, size, uploader, revision, or
+  provenance was verified. The API check establishes absence only for the
+  inspected `LLM-Research` repository, not all of ModelScope.
+- No community GGUF repository was confirmed as suitable. Do not equate
+  similarly named community quantizations or fine-tunes with the original
+  Meta model.
+
+2. ModelScope download tooling and Python
+-----------------------------------------
+VERIFIED — PUBLIC DOCUMENTATION
+- ModelScope's model download guide documents three mechanisms: CLI,
+  Python SDK, and Git. The CLI is named `modelscope download`; SDK examples
+  use `modelscope.hub.snapshot_download.snapshot_download`. The documentation
+  supports selecting a model revision and filtering repository files with
+  patterns, including GGUF examples for other repositories. These are
+  documented capabilities, not authorization to use them on the company
+  laptop.
+- Public package metadata/documentation advertises Python 3.12 support for
+  ModelScope. The generic project documentation describes Python 3.7+.
+  This does not certify every ModelScope release/dependency combination on
+  CPython 3.12.4 x64 Windows.
+- The ModelScope package declares hub-related dependencies including
+  `modelscope-hub>=0.7.0`, `packaging`, `requests>=2.25`, `setuptools`, and
+  `tqdm>=4.64.0` in its repository dependency metadata.
+
+VERIFIED — EXISTING VEXUX ENVIRONMENT
+- The existing Vexux `.venv` is CPython 3.12.4 x64.
+- The ModelScope package, ModelScope Hub package, and ModelScope-related
+  command-line entry point were not present in the inspected environment.
+  `requests` and `modelscope-hub` were also not installed; `packaging`,
+  `tqdm`, and `filelock` were present.
+- No ModelScope SDK or CLI was installed or run during this investigation.
+
+INFERENCE
+- CPython 3.12.4 meets the public project's stated version range in principle,
+  but actual SDK use would require an approved compatible package release and
+  its complete dependency set. This audit did not install or validate them.
+
+3. Company policy, network, and approval
+----------------------------------------
+VERIFIED — LIMITED LOCAL INSPECTION
+- Earlier read-only checks found no `index-url`, `extra-index-url`, or
+  `trusted-host` entry in inspected standard pip configuration locations and
+  no process `PIP_INDEX_URL` / `PIP_EXTRA_INDEX_URL` value. Values were
+  sanitized and no credentials were exposed.
+- No ModelScope package/CLI was found in the Vexux `.venv`; no matching local
+  Q4_K_M GGUF was found in the previously inspected company training workspace
+  or Downloads. The inspected machine showed only C: as a mounted filesystem
+  drive.
+- During public-source research, a request to Meta's Llama license page was
+  blocked by the company's web filter under a Gen AI category. The notice
+  directed business users to request an exception and said public GenAI
+  services are restricted. This is a relevant policy signal, not a definitive
+  ModelScope-specific authorization decision.
+
+UNKNOWN / BLOCKED
+- Whether ModelScope itself, the specific `LLM-Research` uploaded repository,
+  any separate GGUF repository, the `llama3.2` license, and local use of this
+  model are permitted by company policy remains UNKNOWN.
+- No approved company package source, internal ModelScope mirror, model
+  artifact store, exact GGUF, or artifact-specific authorization was verified.
+- Public availability and public download documentation must not be treated
+  as company approval.
+
+4. Conclusion and exact next action
+-----------------------------------
+BLOCKED — DO NOT INSTALL, AUTHENTICATE, OR DOWNLOAD
+- The inspected `LLM-Research/Llama-3.2-3B-Instruct` repository is a BF16
+  Safetensors/Transformers distribution, not the Q4_K_M GGUF required by
+  Vexux's `llama_cpp` provider.
+- A ModelScope-hosted exact Q4_K_M GGUF and its provenance were not verified.
+  The expected local GGUF remains unverified/absent based on previous local
+  checks.
+
+RECOMMENDATION
+- Ask company IT/security or the package/model artifact owner whether
+  ModelScope is permitted, and whether the specific ModelScope repository and
+  `llama3.2` license are acceptable for this business use.
+- Ask for an approved exact Q4_K_M GGUF source or local artifact, with owner,
+  immutable revision, file size, checksum, license/provenance, and usage
+  authorization. Also request the approved ModelScope client version/source
+  if a client is needed.
+- Resume only after those approvals and artifact details are provided. Do not
+  add package indexes, authenticate, install, or download as a workaround.
