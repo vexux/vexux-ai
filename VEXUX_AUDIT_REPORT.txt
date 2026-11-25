@@ -233,3 +233,186 @@ the local Q4_K_M GGUF. Only then install into the existing `.venv`, run the
 focused mock tests, and separately validate offline inference against the
 approved local model. No package install, model download, source change beyond
 the nine files listed above, or Git-history change was performed here.
+
+
+SUPPLEMENT — LLAMA 3.2 3B WINDOWS COMPATIBILITY AUDIT
+Updated: 2026-11-25
+Scope: Read-only inspection of the `prod` branch for Llama 3.2 3B Instruct
+Q4_K_M compatibility on the specified Windows 11 / Ryzen 5 PRO 230 laptop.
+No packages or models were installed/downloaded, and no source, dependency,
+configuration, or lockfile was changed. The audit was not an inference test.
+
+Evidence labels for this supplement
+-----------------------------------
+SOURCE-CONFIRMED  Verified in this checkout's source, tests, manifests, or docs.
+UPSTREAM-CONFIRMED Verified in upstream llama-cpp-python project metadata/docs
+                   retrieved during this audit; not a compatibility test for a
+                   specific release or company wheel.
+INFERENCE         Estimate or conclusion from source/hardware description.
+UNKNOWN           Not established in this inspection.
+RECOMMENDATION    Future action, not completed.
+
+1. Current implementation status
+--------------------------------
+SOURCE-CONFIRMED
+- `prod` was checked; the worktree was clean before and after the read-only
+  audit.
+- `models/providers/llama_cpp.py` implements a lazy local GGUF provider.
+  Initialization specifies `n_gpu_layers=0`, `n_ctx=2048` by default, and
+  `n_threads=4` by default. It calls `create_chat_completion` with a user
+  message, bounds output tokens by the configured maximum (256 by default),
+  and serializes model initialization and generation with separate locks.
+- The provider accepts context sizes up to 8192, thread counts up to 16, and
+  output limits up to 1024. It wraps load/generation errors, but does not
+  measure or enforce prompt-token fit against context remaining for output.
+- `core/config.py` supports provider `llama_cpp` and reads
+  `LLAMA_CPP_MODEL_PATH`, `LLAMA_CPP_N_CTX`, `LLAMA_CPP_N_THREADS`, and
+  `LLAMA_CPP_MAX_NEW_TOKENS`. The default path is
+  `models/weights/Llama-3.2-3B-Instruct-Q4_K_M.gguf`.
+- `core/composition.py` constructs the provider from these config values and
+  passes it to `ModelGateway`. The gateway forwards keyword arguments and
+  re-raises provider errors.
+
+INFERENCE / UNKNOWN
+- This implementation is configured for CPU-only inference. The integrated
+  Radeon 760M will not be used by this provider as currently initialized.
+- Actual loading, inference, output quality, memory use, and speed on the
+  target laptop were not tested. No success claim is made.
+
+2. Confirmed compatibility issues and limitations
+--------------------------------------------------
+SOURCE-CONFIRMED
+- `llama-cpp-python` is absent from both `requirements.txt` and
+  `requirements-dev.txt`; it is an optional runtime dependency. Provider
+  selection can succeed without loading it, but generation then fails if the
+  package is missing.
+- No package version or tested Windows/Python combination is pinned in the
+  repository.
+- `response_format="json"` appends a natural-language instruction; it does not
+  configure constrained/grammar-based JSON output. Valid JSON is not
+  guaranteed.
+- No pre-generation check verifies that prompt tokens plus requested output
+  fit `n_ctx`; context overflow may surface as a runtime error.
+- Planner/synthesis callers can pass `do_sample=False`. The provider forwards
+  remaining keyword arguments to `create_chat_completion`; because no package
+  version is pinned and no runtime test was performed, compatibility and
+  behavior for this argument are UNKNOWN.
+- `tests/unit/test_llama_cpp_provider.py` substitutes a mock `llama_cpp`
+  module and a dummy GGUF file. It validates provider logic but not the native
+  runtime or a real model.
+
+3. Python and llama-cpp-python constraints
+------------------------------------------
+SOURCE-CONFIRMED
+- Repository CI selects Python 3.11 on Ubuntu. `docs/SETUP.md` targets 3.11;
+  `docs/DEVELOPMENT.md` recommends 3.10 or 3.11. No project-level
+  `requires-python` constraint was found.
+- No `llama-cpp-python` pin appears in either requirements file.
+
+UPSTREAM-CONFIRMED
+- The upstream project metadata retrieved during this audit declares
+  `requires-python >=3.8`. Its installation guide lists Python 3.8+ and says
+  a normal source install builds llama.cpp; Windows requires a C compiler
+  (Visual Studio or MinGW).
+- The upstream installation guide advertises prebuilt CPU wheels. Upstream
+  minimum Python support does not prove that a particular wheel exists for
+  each Windows Python ABI, architecture, and release.
+
+UNKNOWN
+- The exact interpreter and architecture on the target laptop, and the
+  availability of an approved matching wheel/version, were not checked in this
+  audit. A previous report recorded Python 3.12.4 in a local environment;
+  that environment observation was not independently reverified here.
+
+4. Windows wheel and setup-documentation assessment
+---------------------------------------------------
+INFERENCE
+- A compatible company-approved Windows wheel is needed for the planned
+  CPU-only install unless the company explicitly approves and supports an
+  equivalent source-build route. The correct wheel must match the actual
+  Python implementation/version and architecture.
+
+SOURCE-CONFIRMED
+- `docs/SETUP.md` correctly treats the package and GGUF as optional, asks for
+  a company-approved package source/wheel, warns against unapproved indexes or
+  build workarounds, documents the local model path and provider settings,
+  and states that mocked tests do not validate inference or performance.
+- Its generic `pip install llama-cpp-python` command alone does not establish
+  that pip will select an approved compatible wheel instead of attempting a
+  source build. No specific wheel or version is named.
+- The documentation is directionally compatible with this implementation,
+  but should record the actual tested interpreter/package/wheel after an
+  approved Windows smoke test.
+
+5. Memory and CPU considerations
+-------------------------------
+INFERENCE (planning estimate; not measured)
+- A 3B Q4_K_M GGUF is typically on the order of 2 GB on disk; exact size for
+  the target file is UNKNOWN because the file was not inspected.
+- Assuming the usual Llama 3.2 3B architecture and FP16 KV cache, approximate
+  KV-cache use is about 0.22 GB at 2048 tokens and 0.9 GB at 8192 tokens.
+  Runtime buffers, application memory, Windows, and concurrent workloads add
+  to this. The target's approximately 15.28 GB usable RAM appears plausible
+  for CPU inference, but peak use must be measured with the approved model.
+- Four threads is the configured baseline on the stated 6-core/12-thread CPU.
+  The provider allows up to 16, but neither an optimal setting nor inference
+  throughput can be concluded without measurement.
+- The integrated GPU shares system memory, but it does not provide inference
+  acceleration while `n_gpu_layers=0`.
+
+6. Existing and missing tests
+-----------------------------
+SOURCE-CONFIRMED
+- Mocked tests cover lazy load, CPU-only initialization arguments, output
+  defaults/bounds, JSON prompt guidance, validation, errors, serialized
+  concurrent generation, and safe ModelGateway metadata.
+- Configuration/diagnostic tests cover environment parsing, defaults,
+  provider reporting, and validation bounds.
+- Repository CI runs on Ubuntu, not Windows.
+
+MISSING COVERAGE
+- No genuine `llama-cpp-python` inference test or real GGUF integration test
+  was found. There is no verified Windows wheel/import/load smoke test, real
+  Llama chat-template test, prompt/context-overflow test, measured peak-memory
+  test, or CPU performance benchmark for the target device.
+- Tests were inspected but not run as part of this read-only audit.
+
+7. Required changes ranked by priority
+--------------------------------------
+RECOMMENDATION
+1. Before deployment, confirm the approved package source and exact
+   Windows/Python-ABI-compatible CPU wheel, and pin the approved
+   `llama-cpp-python` version through the company's dependency process.
+2. Validate the approved wheel with an opt-in Windows smoke test using the
+   approved local GGUF; exercise one short chat completion and verify actual
+   load/inference errors are surfaced.
+3. Add prompt/output context budgeting and tests for over-context requests.
+4. Verify the pinned package's handling of forwarded `do_sample=False`;
+   normalize provider-specific generation options if needed.
+5. If structured planning depends on valid JSON, implement and test
+   constrained JSON generation rather than relying on prompt wording.
+6. Record measured memory and performance and update setup docs with the
+   tested Python/package/wheel combination.
+
+8. Safe implementation sequence
+-------------------------------
+RECOMMENDATION
+1. Establish the laptop's actual Python implementation/version and
+   architecture without changing the environment.
+2. Obtain approval for a compatible Windows CPU wheel and its source/version;
+   do not add unapproved indexes or build/install workarounds.
+3. Obtain the target GGUF independently through an approved source and verify
+   its path and provenance locally.
+4. In an approved test environment, install only that approved wheel, run the
+   focused mocked tests, then run one short real-model smoke test at the
+   2048-context/four-thread defaults.
+5. Test context boundaries, JSON expectations, memory, and thread settings;
+   retain measured results and document the exact validated combination.
+
+Audit conclusion
+----------------
+The provider's structure supports CPU-only local GGUF inference, and the
+documented installation cautions are appropriate. Compatibility with the
+specified Windows laptop and target model remains UNVERIFIED until an approved
+wheel and the actual GGUF are tested together. No source changes, package
+installation, model download, or inference execution occurred in this audit.
