@@ -416,3 +416,159 @@ documented installation cautions are appropriate. Compatibility with the
 specified Windows laptop and target model remains UNVERIFIED until an approved
 wheel and the actual GGUF are tested together. No source changes, package
 installation, model download, or inference execution occurred in this audit.
+
+
+SUPPLEMENT — WINDOWS ENVIRONMENT, MEMORY, AND ARTIFACT READINESS
+Updated: 2026-11-25
+Scope: Read-only Windows environment, system memory, and local artifact checks
+performed before any Llama runtime installation or model acquisition.
+No inference was run. No package, model, configuration, environment variable,
+system setting, or source file was changed during those checks.
+
+Evidence labels
+---------------
+VERIFIED    Directly observed in PowerShell, local files, or repository state.
+ESTIMATE    Approximation; not a direct measurement of model/runtime use.
+UNKNOWN     Not established by inspected evidence.
+BLOCKED     Work must stop until the stated approval/artifact information exists.
+
+1. Python environments
+----------------------
+VERIFIED — EXISTING REPOSITORY VIRTUAL ENVIRONMENT
+- Executable:
+  `C:\Users\varpundl\Documents\NatWest Training\vexux-ai\.venv\Scripts\python.exe`
+- CPython 3.12.4, 64-bit AMD64; the interpreter reports the Vexux `.venv`
+  prefix and `is_venv=True`.
+- pip 24.0; pytest 9.2.0.
+- `llama-cpp-python` is NOT installed.
+- The package inventory also reported NumPy 2.5.4, PyTorch 2.15.0,
+  Transformers 5.22.2, and FAISS CPU 1.15.0. `sentence-transformers` was
+  reported not installed. These are point-in-time environment facts.
+
+VERIFIED — SYSTEM/LAUNCHER INTERPRETERS
+- The `python` command resolved to
+  `C:\Program Files\Python312\python.exe`, CPython 3.12.4 x64, outside a venv;
+  it had pip 24.0. The inspected package query reported no pytest,
+  llama-cpp-python, NumPy, PyTorch, Transformers, or FAISS CPU in that
+  interpreter.
+- `py` without an explicit version selected Python 3.13.3 x64 at
+  `C:\Program Files\Python313\python.exe`. Do not use this interpreter for
+  the target setup. It had pip 25.0.1, NumPy 2.4.2, and no
+  llama-cpp-python or pytest in the inspected package query.
+- `VIRTUAL_ENV` was not set in the shell used for inspection; the explicit
+  repository interpreter nevertheless confirmed that `.venv` itself exists
+  and is a virtual environment.
+
+2. Hardware and memory snapshots
+--------------------------------
+VERIFIED
+- Windows 11 Pro x64, version 10.0.26200, build 26200.
+- AMD Ryzen 5 PRO 230 w/ Radeon 760M Graphics: 6 physical cores and 12 logical
+  processors.
+- Installed physical RAM: 15.28 GiB.
+- Default target GGUF at `models/weights/Llama-3.2-3B-Instruct-Q4_K_M.gguf`
+  was absent when checked.
+
+VERIFIED — POINT-IN-TIME MEMORY VARIATION
+- Separate read-only snapshots during this investigation observed available
+  RAM ranging from 1.86 to 2.27 GiB; the latest readiness preflight observed
+  1.91 GiB available and approximately 13.37 GiB in use.
+- A later process investigation snapshot observed 2.27 GiB available and
+  approximately 13.01 GiB used. These values vary over time and are not a
+  model-load measurement.
+- In that process snapshot, Windows reported 20.59 GiB committed of a
+  27.28 GiB commit limit (75.5%). The system-managed `C:\pagefile.sys` was
+  allocated at 12,288 MiB, with 1,367 MiB current and 1,634 MiB peak use.
+- A ranked process working-set snapshot listed 20 processes. The top entries
+  were nine `Code` processes (about 3,301 MiB working set combined), three
+  `msedge` processes (about 845 MiB), Memory Compression (524 MiB),
+  `copilot-runtime` (287 MiB), two `msedgewebview2` processes (261 MiB),
+  Explorer (189 MiB), Java (159 MiB), Oracle (126 MiB), and SearchHost
+  (124 MiB). This is a partial top-20 process snapshot, not an exact accounting
+  of system RAM; process working sets must not be summed and represented as
+  exact system-wide memory use.
+- The 0.73 GiB available value in an earlier snapshot is not the latest value;
+  all these samples are transient.
+
+ESTIMATE — MODEL READINESS
+- A 3B Q4_K_M GGUF was estimated in the prior audit at roughly 2 GiB on disk;
+  exact target-file size is unknown because the file was absent.
+- At low available RAM (about 1.9–2.3 GiB in recent snapshots), loading model
+  weights plus native runtime buffers and the application would have little
+  or no comfortable physical-memory headroom. Memory mapping and the pagefile
+  may permit the process to start, but could cause heavy paging, slowdowns,
+  or load failure. Whether it actually fails cannot be established without a
+  real load, which remains blocked.
+- This memory evidence is a reason to defer inference until the model and
+  package gates are satisfied and a fresh preflight shows adequate headroom.
+  Do not increase pagefile settings or repeatedly retry under pressure.
+
+3. Package and model artifact search
+------------------------------------
+VERIFIED — INSPECTED LOCAL CONFIGURATION AND SEARCH SCOPE
+- Inspected standard user/system/repository pip config locations and process
+  `PIP_INDEX_URL` / `PIP_EXTRA_INDEX_URL` settings. No `index-url` or
+  `extra-index-url` was configured in the inspected locations. Any configured
+  URL values would have been sanitized; no credentials or tokens were printed.
+- No matching `llama-cpp-python` wheel was found in the inspected local pip
+  wheel cache, repository `wheelhouse`/`dist`, or user Downloads locations.
+- No matching Llama 3.2 3B Q4_K_M GGUF was found under the inspected
+  `Documents\NatWest Training` workspace tree or Downloads.
+- Only C: was listed as a mounted filesystem drive in that check.
+- `llama-cpp-python` remains absent in the existing Vexux `.venv`.
+
+UNKNOWN / BLOCKED
+- The local inspection does not establish company-approved package indexes,
+  internal artifact repositories, network shares, managed software portals,
+  model repositories, or whether the search scope included every approved
+  storage location. No package source or artifact provenance was verified.
+- No exact approved `llama-cpp-python` version or CPython 3.12 x64 Windows CPU
+  wheel filename/location is known.
+- No approved GGUF source, local file, file size, checksum, license/provenance,
+  or usage permission was verified.
+- User confirmed approval generally, then explicitly stated the exact approved
+  wheel artifact/version and GGUF location were not currently known and asked
+  to keep work paused. This does not substitute for artifact-specific
+  provenance and compatibility evidence.
+
+4. Runtime configuration and unresolved integration points
+-----------------------------------------------------------
+VERIFIED FROM SOURCE (NO CODE CHANGE)
+- Existing `LlamaCppProvider` defaults to `n_ctx=2048`,
+  `n_threads=4`, `max_new_tokens=256`, and `n_gpu_layers=0`. The
+  `llama-cpp-python` constructor's default memory mapping is not overridden
+  by the provider.
+- The user's requested first-run settings are more conservative:
+  `n_ctx=1024`, `n_threads=4`, `n_gpu_layers=0`, output cap 128,
+  `temperature=0.0`, and `top_p=1.0`. The provider can receive context,
+  thread, and output limits through its existing config/constructor, but the
+  current provider default remains 2048/256; no change was made.
+- Context token budgeting and guaranteed grammar-constrained JSON remain
+  unresolved, as recorded in the previous supplement.
+- Generic callers forward `do_sample=False`. Handling of that argument by the
+  eventual approved runtime remains UNKNOWN until a concrete package version
+  can be checked and safely tested.
+- Fraud risk scoring remains outside this runtime-readiness investigation;
+  no fraud code was changed.
+
+5. Exact approval request and next action
+-----------------------------------------
+BLOCKED — DO NOT INSTALL OR DOWNLOAD
+Provide or obtain from the company package owner / IT / security:
+1. Approved internal package source or wheel file, exact
+   `llama-cpp-python` version, and confirmation the wheel is for CPython 3.12
+   x64 on Windows with CPU-only support.
+2. Approved model source or accessible local GGUF path, target artifact
+   provenance, and authorization to use the model.
+3. Confirmation that the user is authorized to install the approved package
+   into the existing Vexux `.venv`.
+
+RECOMMENDATION
+- Once those details are available, verify wheel ABI/platform tags and
+  provenance before any installation or model placement. Then recheck fresh
+  memory headroom. Only if the approval, artifact, compatibility, and memory
+  gates pass should a single bounded CPU inference be considered.
+- Do not add package indexes, use unapproved sources, build a native runtime,
+  download model weights, modify system Python, or install into Python 3.13.
+- No installation, download, model load, inference, or repository source change
+  occurred in this readiness investigation.
