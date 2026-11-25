@@ -702,3 +702,90 @@ RECOMMENDATION
   if a client is needed.
 - Resume only after those approvals and artifact details are provided. Do not
   add package indexes, authenticate, install, or download as a workaround.
+
+
+Qwen2.5-3B-Instruct Q4_K_M integration readiness
+================================================
+Status: APPROVAL / RUNTIME BLOCKED - NO IMPLEMENTATION OR INFERENCE
+
+1. ModelScope artifact
+----------------------
+VERIFIED — PUBLIC MODEL METADATA
+- Repository: https://www.modelscope.cn/models/Qwen/Qwen2.5-3B-Instruct-GGUF
+- ModelScope repository API identifies the base model as
+  `Qwen/Qwen2.5-3B-Instruct`, relation `quantized`, and the repository namespace
+  is `Qwen`. The model card describes this as the instruction-tuned 3B model
+  in GGUF format. It is not identified as a community fine-tune.
+- Exact Q4_K_M filename (case-sensitive):
+  `qwen2.5-3b-instruct-q4_k_m.gguf`
+- File size: 2,104,932,768 bytes (about 1.96 GiB).
+- File revision: `4f524e37fc494cea95ce8868029df33b64b0f67b`
+  (commit message `upload weights`; committer `ai-modelscope`).
+- ModelScope metadata SHA-256:
+  `626b4a6678b86442240e33df819e00132d3ba7dddfe1cdc4fbb18e0a9615c62d`
+  This is repository metadata only; the file was not downloaded and the hash
+  was not independently verified against local bytes.
+- Model card/API lists the other repository quantizations as Q2_K, Q3_K_M,
+  Q4_0, Q5_0, Q5_K_M, Q6_K, and Q8_0. The model card also describes an FP16
+  GGUF distribution.
+- Repository metadata exposes GGUF architecture `qwen2` and a Qwen2 chat
+  template. This confirms the public model metadata contains a template, not
+  that an installed llama.cpp runtime loads or uses it correctly.
+- The repository metadata license is `other`, with no specific license name or
+  license link. Exact applicable license terms and business-use authorization
+  remain UNKNOWN. The repository/model-card claims establish the stated base
+  model, but do not independently verify artifact contents or conversion
+  provenance.
+
+2. Local runtime and artifact readiness
+---------------------------------------
+ACTUALLY CHECKED — READ-ONLY
+- Existing `.venv`: CPython 3.12.4, AMD64, 64-bit.
+- `llama-cpp-python`, `modelscope`, and `modelscope-hub` are not installed.
+  Pytest 9.2.0 is installed.
+- The exact lowercase artifact filename is absent from
+  `models/weights/`.
+- Point-in-time available physical RAM was about 3.17 GiB. This is less than
+  the model file size and leaves little headroom for runtime allocations and
+  the context/KV cache; this is a memory-pressure warning, not a measured
+  inference requirement or result.
+- No approved Windows CPython 3.12 x64 CPU wheel/source or exact compatible
+  `llama-cpp-python` version has been verified. Python compatibility alone does
+  not establish that a native Windows wheel is available or approved.
+
+3. Integration findings and remaining unknowns
+-----------------------------------------------
+VERIFIED FROM CURRENT VEXUX CALL SITES / PRIOR PROVIDER INSPECTION
+- The existing `LlamaCppProvider` is the intended reusable provider and
+  `MODEL_PROVIDER=llama_cpp` already selects it through the existing
+  composition and ModelGateway. `LLAMA_CPP_MODEL_PATH` supplies its local GGUF
+  path. Qwen3, Ollama, and fake providers already have separate provider
+  selections; no duplicate provider or ModelGateway is needed.
+- Existing planner/synthesis call sites pass `do_sample=False`. The provider's
+  llama.cpp argument compatibility cannot be runtime-verified because
+  `llama-cpp-python` is absent. JSON response guidance is not guaranteed
+  constrained JSON; actual JSON validity remains untested.
+- No actual model inference, provider integration test, or chat-template
+  runtime test was run.
+
+UNKNOWN / BLOCKED
+- Company permission to access/use this specific ModelScope repository and
+  artifact, and authorization to install the approved runtime, have not been
+  established. Public availability is not approval.
+- Exact license terms, approved artifact provenance, approved package source,
+  compatible wheel provenance, actual model file presence, runtime behavior,
+  memory use, load time, and generation speed remain unverified.
+
+4. Decision and safe next step
+------------------------------
+BLOCKED - DO NOT INSTALL, AUTHENTICATE, OR DOWNLOAD
+- Stop before integration changes, setup instructions, package installation,
+  model download, or inference until the company package/model owner confirms
+  authorization and provides an approved source/runtime version.
+- After approval, verify the approved artifact against the immutable revision
+  and SHA-256 above; obtain the approved CPython 3.12 x64 CPU wheel; recheck
+  free RAM; then make minimal configuration changes and run mocked tests
+  before any short, separate-process inference test.
+- Do not describe the model as integrated or working until it has generated
+  through the existing ModelGateway. Deterministic fraud scoring must remain
+  authoritative.
