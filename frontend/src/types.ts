@@ -12,6 +12,11 @@ export interface InvestigationSummary {
 
 export interface InvestigationReport {
   summary: InvestigationSummary
+  sqlite?: {
+    transactions: Record<string, unknown>[]
+    fraud_alerts: Record<string, unknown>[]
+    investigation_records: Record<string, unknown>[]
+  }
   mysql: {
     transactions: Record<string, unknown>[]
     fraud_alerts: Record<string, unknown>[]

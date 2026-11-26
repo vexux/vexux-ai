@@ -1,4 +1,5 @@
 import ast
+from contextlib import asynccontextmanager
 import json
 import logging
 import inspect
@@ -22,7 +23,7 @@ from core.contracts.response import AgentResponse
 from core.security.redaction import redact_sensitive_data
 from core.contracts.execution import AgentContext
 from core.contracts.workflow import WorkflowExecutionError
-from apps.fraud.real import create_real_agent
+from apps.fraud.real import close_real_agent, create_real_agent
 
 logger = logging.getLogger(__name__)
 
@@ -116,10 +117,24 @@ def _serialize_response(response: AgentResponse) -> AgentRunResponse:
     )
 
 
+@asynccontextmanager
+async def lifespan(_application):
+    yield
+    if get_real_agent.cache_info().currsize:
+        try:
+            close_real_agent(get_real_agent())
+        except Exception:
+            logger.exception("api.fraud.resource_cleanup_error")
+        finally:
+            get_real_agent.cache_clear()
+
+
 app = FastAPI(
     title="Vexux-AI Agent API",
     version="1.0.0",
+    lifespan=lifespan,
 )
+
 
 app.add_middleware(
     CORSMiddleware,
@@ -265,6 +280,11 @@ def _build_investigation_payload(result, request_id: str, rag_references: list[d
                     if isinstance(node, dict):
                         graph_nodes.append(node)
 
+    relational_evidence = {
+        "transactions": transactions,
+        "fraud_alerts": alerts,
+        "investigation_records": investigations,
+    }
     return {
         "summary": {
             "customer_id": payload["subject"]["customer_id"],
@@ -275,11 +295,8 @@ def _build_investigation_payload(result, request_id: str, rag_references: list[d
             "resources_consulted": payload["resources_consulted"],
             "metadata": payload["metadata"],
         },
-        "mysql": {
-            "transactions": transactions,
-            "fraud_alerts": alerts,
-            "investigation_records": investigations,
-        },
+        "sqlite": relational_evidence,
+        "mysql": relational_evidence,
         "neo4j": {
             "nodes": graph_nodes,
             "relationships": graph_relationships,
@@ -352,7 +369,7 @@ def investigate_fraud(payload: FraudInvestigationRequest):
     except Exception as exc:
         logger.exception("api.fraud.composition_error")
         emit_audit(make_event("request_completed", request_id=request_id, session_id=session_id, status="failed", metadata={"endpoint": "fraud_investigate", "failure_category": "configuration"}))
-        return FraudInvestigationResponse(request_id=request_id, session_id=session_id, user_id=actor, success=False, error="Real fraud composition is unavailable. Configure the Neo4j and MySQL resources.", trace=_serialize_trace(request_id), metadata={"failure_category": "configuration", "authoritative": True, "retryable": False})
+        return FraudInvestigationResponse(request_id=request_id, session_id=session_id, user_id=actor, success=False, error="Real fraud composition is unavailable. Initialize the SQLite fraud dataset and configure the Neo4j resources.", trace=_serialize_trace(request_id), metadata={"failure_category": "configuration", "authoritative": True, "retryable": False})
     customer_id = _extract_customer_id(payload.query, payload.customer_id)
     if customer_id is None and payload.session_id:
         customer_id = _session_customer_ids.get(payload.session_id)
@@ -414,17 +431,22 @@ def system_status():
         real_agent = None
 
     if real_agent is None:
+        components["sqlite"] = {"state": "unavailable", "detail": "Real fraud configuration is not available"}
         components["mysql"] = {"state": "unavailable", "detail": "Real fraud configuration is not available"}
         components["neo4j"] = {"state": "unavailable", "detail": "Real fraud configuration is not available"}
         components["rag"] = {"state": "unknown", "detail": "RAG status could not be determined"}
         return {"status": "ok", "components": components}
 
     try:
-        mysql_source = real_agent.execution_manager.knowledge_source_registry.get("business_db")
-        mysql_source.schema_metadata()
-        components["mysql"] = {"state": "available", "detail": "Read-only fraud source responded"}
+        sqlite_source = real_agent.execution_manager.knowledge_source_registry.get("business_db")
+        sqlite_source.schema_metadata()
+        components["sqlite"] = {"state": "available", "detail": "Read-only fraud source responded"}
     except Exception:
-        components["mysql"] = {"state": "unavailable", "detail": "Could not reach MySQL"}
+        components["sqlite"] = {"state": "unavailable", "detail": "Could not reach SQLite"}
+    components["mysql"] = {
+        **components["sqlite"],
+        "detail": "Legacy status alias; use the SQLite component.",
+    }
 
     try:
         graph = real_agent.knowledge_graph_registry.get("customer_graph")

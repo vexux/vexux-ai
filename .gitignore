@@ -8,6 +8,7 @@ __pycache__/
 
 # Local runtime observability store; fraud SQLite fixtures remain tracked.
 /data/observability/vexux_observability.db
+/apps/fraud/data/generated/
 
 models/checkpoints/
 models/base/

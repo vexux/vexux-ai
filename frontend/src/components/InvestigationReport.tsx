@@ -19,6 +19,7 @@ const riskStyles = {
 
 export default function InvestigationReport({ report }: Props) {
   const { summary, mysql, neo4j } = report
+  const relational = report.sqlite ?? mysql
   return (
     <div className="mt-3 space-y-3">
       <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
@@ -44,10 +45,10 @@ export default function InvestigationReport({ report }: Props) {
         )}
       </section>
 
-      <EvidencePanel title="MySQL evidence" count={mysql.transactions.length + mysql.fraud_alerts.length + mysql.investigation_records.length} defaultOpen>
+      <EvidencePanel title="SQLite evidence" count={relational.transactions.length + relational.fraud_alerts.length + relational.investigation_records.length} defaultOpen>
         <div className="space-y-4">
           {(['transactions', 'fraud_alerts', 'investigation_records'] as const).map((key) => {
-            const rows = mysql[key]
+            const rows = relational[key]
             const label = key === 'transactions' ? 'Transactions' : key === 'fraud_alerts' ? 'Fraud alerts' : 'Investigations'
             return (
               <div key={key}>

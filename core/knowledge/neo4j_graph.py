@@ -50,6 +50,10 @@ class Neo4jKnowledgeGraph:
         kwargs = {"database": self.database} if self.database else {}
         return self._driver.session(**kwargs)
 
+    def close(self) -> None:
+        """Close the underlying Neo4j driver."""
+        self._driver.close()
+
     @staticmethod
     def _record_value(record: Any, key: str) -> Any:
         if isinstance(record, dict):
@@ -218,4 +222,3 @@ class Neo4jKnowledgeGraph:
                 "direction": actual_direction,
             })
         return results
-

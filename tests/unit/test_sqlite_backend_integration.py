@@ -118,3 +118,6 @@ def test_sqlite_backend_accepts_mysql_style_positional_placeholders(tmp_path):
         ("C1001",),
     )
     assert rows == [{"customer_id": "C1001"}]
+    assert SQLiteBackend(str(database)).execute("PRAGMA foreign_keys") == [
+        {"foreign_keys": 1}
+    ]

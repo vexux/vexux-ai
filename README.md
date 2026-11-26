@@ -12,7 +12,7 @@ Agent -> Planner -> ResourceRouter -> Authorization -> ExecutionManager
 ```
 
 The fraud application adds its domain entities, deterministic investigation
-service, bounded workflow, fraud policy, Neo4j graph resources, and MySQL
+service, bounded workflow, fraud policy, Neo4j graph resources, and SQLite
 business-data resource without moving factual signals into the model.
 
 ## Architecture
@@ -146,10 +146,9 @@ $env:NEO4J_GRAPH_NAME = "customer_graph"
 ```
 
 Each graph database backend requires its own adapter implementing the contract;
-the core does not expose arbitrary Cypher execution. The real fraud
-composition registers both `customer_graph` and `fraud_graph` against local
-Neo4j. Its reproducible schema and seed are in `apps/fraud/data/neo4j/`.
-The repeatable schema and seed commands are documented in [docs/SETUP.md](docs/SETUP.md).
+the core does not expose arbitrary Cypher execution. The real fraud composition registers both `customer_graph` and `fraud_graph`
+against local Neo4j. Its canonical schema and seed commands are documented in
+[docs/SETUP.md](docs/SETUP.md).
 
 The heterogeneous investigation proof uses the same registry and execution
 path for both backends:
@@ -167,12 +166,13 @@ the real-backend portion is unavailable rather than claiming a successful run.
 ## SQL knowledge source
 
 `SQLKnowledgeSource` provides a contract-level adapter to relational data.
-`SQLiteBackend` remains the lightweight test backend, while `MySQLBackend`
-uses `mysql-connector-python` for the real fraud application. Only a single
-`SELECT` statement is accepted and values are passed as DB-API parameters.
-The fraud schema and deterministic seed are in `apps/fraud/data/mysql/`.
-Authorization, audit events, and `structured_data` evidence use the existing
-knowledge-source flow.
+`SQLiteBackend` serves both the deterministic demo and the real fraud
+application. The fraud-specific schema and canonical generator live under
+`apps/fraud/data/`; generated SQLite files are ignored by Git. `MySQLBackend`
+and `mysql-connector-python` remain available to other shared consumers.
+Only a single `SELECT` statement is accepted and values are passed as DB-API
+parameters. Authorization, audit events, and `structured_data` evidence use
+the existing knowledge-source flow.
 
 The repeatable real-resource bootstrap and verification commands are in
 [docs/SETUP.md](docs/SETUP.md). Historical demonstrations are retained under
@@ -180,8 +180,9 @@ The repeatable real-resource bootstrap and verification commands are in
 
 ## Real local fraud platform
 
-The real application requires local Neo4j and MySQL; it never falls back to
-the synthetic demo. Set these variables without committing credentials:
+The real application requires local Neo4j and the initialized SQLite fraud
+database; it never falls back to the synthetic demo. Set these variables
+without committing credentials:
 
 ```powershell
 $env:MODEL_PROVIDER = "ollama"
@@ -190,14 +191,12 @@ $env:NEO4J_URI = "bolt://localhost:7687"
 $env:NEO4J_USERNAME = "neo4j"
 $env:NEO4J_PASSWORD = "<local Neo4j password>"
 $env:NEO4J_DATABASE = "neo4j"
-$env:MYSQL_HOST = "127.0.0.1"
-$env:MYSQL_PORT = "3306"
-$env:MYSQL_USER = "vexux_app"
-$env:MYSQL_PASSWORD = "<local MySQL password>"
-$env:MYSQL_DATABASE = "vexux_fraud"
 ```
 
-Run the schema and seed files using the commands in [docs/SETUP.md](docs/SETUP.md).
+Initialize and seed both real fraud stores using the commands in
+[docs/SETUP.md](docs/SETUP.md). The default SQLite file is
+`apps\fraud\data\generated\vexux_fraud.db`; set `SQL_DATABASE_PATH` only to
+choose another dedicated database file.
 Start the real interactive application with:
 
 ```powershell
@@ -266,7 +265,7 @@ It records structured planning, routing, authorization, and latency metrics.
 Provider/model failures are reported separately from deterministic
 authorization failures. The Phase 2 local comparison uses the deterministic
 fraud demo composition; use `--composition real` only when local Neo4j and
-MySQL are available.
+the seeded SQLite fraud database are available.
 
 ## Running the Agent
 
@@ -274,8 +273,9 @@ MySQL are available.
 python -m scripts.manual.run_agent
 ```
 
-This starts the fraud application's real Neo4j/MySQL composition. It requires
-the local database variables above and a configured Mistral key by default.
+This starts the fraud application's real Neo4j/SQLite composition. It requires
+the local Neo4j variables above, a seeded SQLite fraud database, and a
+configured model provider.
 
 For the direct RAG demonstration:
 

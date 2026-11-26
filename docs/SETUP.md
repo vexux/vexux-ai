@@ -1,8 +1,9 @@
 # Local setup and reproducibility
 
 This is the authoritative zero-budget setup path for Vexux-AI. It targets
-Python 3.11, local Neo4j and local MySQL. Deterministic tests do not require
-either database or any model provider service.
+Python 3.11+, local Neo4j Desktop, and a fraud-specific SQLite database.
+Deterministic tests do not require either database or any model provider
+service.
 
 ## 1. Create an environment and install dependencies
 
@@ -66,71 +67,57 @@ python -m pytest tests/live/test_mistral_recovery.py -q
 
 Do not set that flag for normal offline validation.
 
-## 3. Bootstrap local fraud databases
+## 3. Initialize the local fraud databases
 
-The real fraud composition expects Neo4j database `neo4j` (or the configured
-`NEO4J_DATABASE`) and a MySQL database explicitly selected with
-`MYSQL_DATABASE`. The setup commands below use `vexux_fraud` as the fraud
-application's local database name; core does not provide a domain-specific
-database default.
-Create the MySQL database and application user using local administrative
-credentials, then grant that user access:
+Real fraud mode uses Neo4j database `neo4j` (or `NEO4J_DATABASE`) for graph
+relationships and SQLite for transactions, alerts, investigations, and event
+records. The default generated SQLite path is
+`apps\fraud\data\generated\vexux_fraud.db`; it is ignored by Git. Set
+`SQL_DATABASE_PATH` only when you want a different dedicated fraud database
+file. The initializer refuses to use a non-empty SQLite file that is not
+marked as Vexux fraud data.
 
-```sql
-CREATE DATABASE vexux_fraud;
-CREATE USER 'vexux_app'@'localhost' IDENTIFIED BY '<local-password>';
-GRANT ALL PRIVILEGES ON vexux_fraud.* TO 'vexux_app'@'localhost';
-FLUSH PRIVILEGES;
-```
-
-Run the repeatable MySQL schema and seed from the repository root:
+Start Neo4j Desktop and configure its Bolt connection without placing a real
+password in source control:
 
 ```powershell
-mysql -h 127.0.0.1 -P 3306 -u vexux_app -p vexux_fraud `
-  < apps\fraud\data\mysql\schema.sql
-mysql -h 127.0.0.1 -P 3306 -u vexux_app -p vexux_fraud `
-  < apps\fraud\data\mysql\seed.sql
+$env:NEO4J_URI = "bolt://127.0.0.1:7687"
+$env:NEO4J_USERNAME = "neo4j"
+$env:NEO4J_PASSWORD = "<local Neo4j password>"
+$env:NEO4J_DATABASE = "neo4j"
 ```
 
-In Neo4j Browser or with `cypher-shell`, run these files against the configured
-Neo4j database in order:
+The CLI uses the configured local Neo4j connection and the same canonical
+generator for both stores. First create the SQLite schema, then initialize the
+Neo4j constraints and seed the dataset:
 
-```text
-apps/fraud/data/neo4j/schema.cypher
-apps/fraud/data/neo4j/seed.cypher
+```powershell
+python -m apps.fraud.data.cli init-sqlite
+python -m apps.fraud.data.cli seed
 ```
 
-The scripts are repeatable for the seeded records. The MySQL seed includes
-10 customers, 16 accounts, 50 transactions, 12 alerts, and 6 investigation
-records. The graph seed provides matching customer/account identities and
-representative device, address, merchant, case, and alert nodes with 40
-relationships declared by the seed. Existing records are preserved, so an
-already-populated Neo4j database can contain more relationships than the seed
-declares.
-The SQLite demo fixture is maintained separately at
-`apps/fraud/data/sqlite/demo.sql`; it is intentionally small and is not a
-replacement for the Neo4j/MySQL seed.
+The seed is idempotent and uses parameterized Neo4j writes. It contains
+10 customers, 16 accounts, 50 transactions, 12 alerts, 6 investigations, and
+the graph entities/relationships generated from the same records. The C1001 /
+C1002 scenario is intentionally stable: Alice Smith has five transactions and
+two open high-severity alerts; Bob Jones has four transactions and one closed
+low-severity alert; both customers use the same device.
 
-Verify the expected C1001 and C1002 states with:
+Reset is destructive only to Vexux fraud rows in the selected SQLite database
+and graph relationships tagged by this application. It removes tagged graph
+nodes only when no untagged relationships remain attached, preserving
+unrelated graph data. It is intentionally separate from normal seeding and
+requires an explicit confirmation flag:
 
-```sql
-SELECT customer_id, full_name, risk_level
-FROM customers WHERE customer_id = 'C1001';
-SELECT COUNT(*) AS transaction_count
-FROM transactions WHERE customer_id = 'C1001';
-SELECT alert_id, alert_type, severity, status
-FROM fraud_alerts WHERE customer_id = 'C1001';
-SELECT customer_id, COUNT(*) AS transaction_count
-FROM transactions WHERE customer_id IN ('C1001', 'C1002')
-GROUP BY customer_id;
+```powershell
+python -m apps.fraud.data.cli reset --confirm-reset
 ```
 
-Expected facts include Alice Smith, five seeded transactions, and two open
-high-severity alerts for C1001. C1002 has four transactions and a closed
-low-severity alert; Neo4j links C1001 and C1002 through a shared device. The
-deterministic investigation should therefore retain C1001 as high risk and
-C1002 as medium risk. Apply the updated seed files after the schemas are
-present to add the expanded fixture records to an existing local dataset.
+The two stores cannot participate in one atomic transaction. If a command
+reports partial cross-store work, fix the reported store issue and rerun the
+same `seed` or confirmed `reset` command; both operations are designed to be
+safe to repeat. The small tracked demo SQL fixture at
+`apps\fraud\data\sqlite\demo.sql` remains separate from real fraud data.
 
 ## 4. Run deterministic validation
 
@@ -154,7 +141,8 @@ python -m evaluation.benchmark --models phi3:latest qwen3:4b `
 
 The deterministic demo composition supplies synthetic graph and SQLite
 fixtures and uses the same RAG pipeline with the fraud reference corpus.
-Use `--composition real` only when local Neo4j and MySQL are running.
+Use `--composition real` only after the local Neo4j and SQLite stores are
+initialized and seeded.
 
 The live database tests are separate and are skipped unless their local
 credentials are configured:
@@ -203,7 +191,7 @@ downloading a model. It does not replace the production BGE smoke test.
 General policy questions may use RAG, with the retrieved document and section
 shown as source attribution. Queries for a customer's transactions, alerts,
 accounts, connections, investigations, or comparisons are routed to the
-fraud workflow and its authoritative MySQL/Neo4j sources. RAG is not used to
+fraud workflow and its authoritative SQLite/Neo4j sources. RAG is not used to
 create customer-specific evidence or determine a risk assessment. A mixed
 request that explicitly asks for customer records runs the deterministic
 operational workflow first, followed by policy retrieval only when a separate
@@ -249,7 +237,7 @@ npm run dev
 
 Open `http://localhost:5173`. The AI Investigator sends customer investigations to
 `POST /api/v1/fraud/investigate`, which executes the registered
-`fraud_investigation` workflow through the real Neo4j/MySQL composition.
+`fraud_investigation` workflow through the real Neo4j/SQLite composition.
 Set `VITE_API_URL` to another FastAPI origin if the backend is not served at
 `http://127.0.0.1:8000`.
 
@@ -262,17 +250,17 @@ npm run preview
 ```
 
 For the real fraud application after both databases are bootstrapped, set the
-Neo4j/MySQL variables and run:
+Neo4j variables and run:
 
 ```powershell
 python -m scripts.manual.run_agent
 ```
 
-The interactive runner uses the real Neo4j/MySQL composition and has no
+The interactive runner uses the real Neo4j/SQLite composition and has no
 synthetic database fallback.
 
 The same terminal also supports the bundled synthetic SQLite/in-memory
-fixtures. Synthetic mode disables Neo4j, MySQL composition, persistent memory,
+fixtures. Synthetic mode disables real SQLite and Neo4j composition, persistent memory,
 autonomous delegation, and generic RAG retrieval:
 
 ```powershell

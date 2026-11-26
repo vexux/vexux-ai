@@ -19,7 +19,9 @@ class SQLiteBackend:
 
     def _connect(self) -> sqlite3.Connection:
         uri = f"file:{Path(self.database_path).resolve().as_posix()}?mode=ro"
-        return sqlite3.connect(uri, uri=True)
+        connection = sqlite3.connect(uri, uri=True)
+        connection.execute("PRAGMA foreign_keys=ON")
+        return connection
 
     def execute(self, query: str, parameters: Dict[str, Any] | Iterable[Any] | None = None):
         connection = self._connect()

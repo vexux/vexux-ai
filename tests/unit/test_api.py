@@ -295,6 +295,21 @@ def test_get_real_agent_calls_real_composition(monkeypatch):
         main_module.get_real_agent.cache_clear()
 
 
+def test_fraud_payload_adds_sqlite_evidence_and_keeps_mysql_compatibility():
+    from apps.fraud.domain import Customer, InvestigationResult
+    import api.main as main_module
+
+    result = InvestigationResult(Customer("C1001", "Alice Smith"), risk_assessment="high")
+    payload = main_module._build_investigation_payload(result, "request-1")
+
+    assert payload["sqlite"] == {
+        "transactions": [],
+        "fraud_alerts": [],
+        "investigation_records": [],
+    }
+    assert payload["mysql"] == payload["sqlite"]
+
+
 def test_missing_customer_id_is_rejected_for_investigation(monkeypatch):
     class StubRealAgent:
         workflow_registry = object()

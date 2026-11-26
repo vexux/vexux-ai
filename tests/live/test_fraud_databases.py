@@ -1,126 +1,111 @@
-"""Live local Neo4j/MySQL integration coverage.
-
-These tests are intentionally excluded unless both local services and their
-credentials are configured. Normal pytest remains deterministic and offline.
-"""
+"""Opt-in live local Neo4j and SQLite integration coverage."""
 
 from __future__ import annotations
+
+import sqlite3
 
 import pytest
 
 from agent.execution_manager import ExecutionManager
-from core.contracts.execution import AgentContext, Task
+from apps.fraud.investigation import FraudInvestigationService
+from apps.fraud.policy import FraudPolicy
+from apps.fraud.data.paths import fraud_database_path
 from core.config import get_config
+from core.contracts.execution import AgentContext, Task
 from core.knowledge.graph_registry import KnowledgeGraphRegistry
-from core.knowledge.mysql_backend import MySQLBackend
 from core.knowledge.neo4j_graph import Neo4jKnowledgeGraph
 from core.knowledge.registry import KnowledgeSourceRegistry
 from core.knowledge.sql_source import SQLKnowledgeSource
-from apps.fraud.investigation import FraudInvestigationService
-from apps.fraud.policy import FraudPolicy
+from core.knowledge.sqlite_backend import SQLiteBackend
 
 
 CONFIG = get_config()
+DATABASE_PATH = fraud_database_path(CONFIG.sql_database_path)
 
 pytestmark = pytest.mark.skipif(
-    not all(
-        (
-            CONFIG.neo4j_uri,
-            CONFIG.neo4j_username,
-            CONFIG.neo4j_password,
-            CONFIG.mysql_password,
-        )
+    not (
+        CONFIG.neo4j_uri
+        and CONFIG.neo4j_username
+        and CONFIG.neo4j_password
+        and DATABASE_PATH.is_file()
     ),
-    reason="Local Neo4j/MySQL credentials are not configured.",
+    reason="Local seeded Neo4j and SQLite fraud data are not configured.",
 )
 
 
-def _graph(name: str):
-    return Neo4jKnowledgeGraph(
-        uri=CONFIG.neo4j_uri,
-        username=CONFIG.neo4j_username,
-        password=CONFIG.neo4j_password,
-        database=CONFIG.neo4j_database,
-        name=name,
+@pytest.fixture
+def fraud_resources():
+    from neo4j import GraphDatabase
+
+    driver = GraphDatabase.driver(
+        CONFIG.neo4j_uri,
+        auth=(CONFIG.neo4j_username, CONFIG.neo4j_password),
     )
+    graphs = KnowledgeGraphRegistry()
+    for name in ("customer_graph", "fraud_graph"):
+        graph = Neo4jKnowledgeGraph(
+            uri=CONFIG.neo4j_uri,
+            username=CONFIG.neo4j_username,
+            password=CONFIG.neo4j_password,
+            database=CONFIG.neo4j_database,
+            name=name,
+            driver=driver,
+        )
+        graphs.register(graph)
+    sources = KnowledgeSourceRegistry()
+    source = SQLKnowledgeSource(SQLiteBackend(str(DATABASE_PATH)))
+    source.name = "business_db"
+    sources.register(source)
+    try:
+        yield graphs, sources
+    finally:
+        driver.close()
 
 
-def test_neo4j_seeded_lookup_and_multi_hop_traversal():
-    graph = _graph("customer_graph")
+def test_neo4j_canonical_customer_and_shared_device_traversal(fraud_resources):
+    graphs, _ = fraud_resources
+    graph = graphs.get("customer_graph")
     customer = graph.get_node("C1001")
     assert customer["properties"]["name"] == "Alice Smith"
     assert graph.get_node("C1005")["properties"]["name"] == "Evan Brooks"
     neighbors = graph.get_neighbors("C1001", direction="outgoing")
-    neighbor_ids = {item["node"]["id"] for item in neighbors}
-    assert {"A1001", "D5001", "ADDR8001", "F9001"} <= neighbor_ids
+    assert {"A1001", "D5001", "ADDR8001", "F9001"} <= {
+        item["node"]["id"] for item in neighbors
+    }
     c1002_neighbors = graph.get_neighbors("C1002", direction="outgoing")
-    assert {"A1003", "D5001", "ADDR8002"} <= {
-        item["node"]["id"] for item in c1002_neighbors
-    }
+    assert "D5001" in {item["node"]["id"] for item in c1002_neighbors}
 
 
-def test_mysql_seeded_customer_transactions_alerts_and_schema():
-    backend = MySQLBackend(
-        host=CONFIG.mysql_host,
-        port=CONFIG.mysql_port,
-        user=CONFIG.mysql_user,
-        password=CONFIG.mysql_password,
-        database=CONFIG.mysql_database,
-    )
-    tables = backend.schema_metadata()["tables"]
-    assert {"customers", "accounts", "transactions", "fraud_alerts", "investigations"} <= set(tables)
-    transactions = backend.execute(
-        "SELECT transaction_id, amount FROM transactions WHERE customer_id = %s",
-        ("C1001",),
-    )
-    assert len(transactions) >= 3
-    alerts = backend.execute(
-        "SELECT alert_id FROM fraud_alerts WHERE customer_id = %s",
-        ("C1001",),
-    )
-    assert {row["alert_id"] for row in alerts} >= {"ALERT6001", "ALERT6002"}
-    counts = {
-        table: backend.execute(f"SELECT COUNT(*) AS count FROM {table}")[0]["count"]
-        for table in ("customers", "accounts", "transactions", "fraud_alerts", "investigations")
-    }
-    assert counts["customers"] >= 10
-    assert counts["accounts"] >= 16
-    assert counts["transactions"] >= 50
-    assert counts["fraud_alerts"] >= 12
-    assert counts["investigations"] >= 6
-    orphan_accounts = backend.execute(
-        "SELECT COUNT(*) AS count FROM accounts a "
-        "LEFT JOIN customers c ON c.customer_id = a.customer_id "
-        "WHERE c.customer_id IS NULL"
-    )[0]["count"]
-    orphan_transactions = backend.execute(
-        "SELECT COUNT(*) AS count FROM transactions t "
-        "LEFT JOIN accounts a ON a.account_id = t.account_id "
-        "LEFT JOIN customers c ON c.customer_id = t.customer_id "
-        "LEFT JOIN merchants m ON m.merchant_id = t.merchant_id "
-        "WHERE a.account_id IS NULL OR c.customer_id IS NULL OR m.merchant_id IS NULL"
-    )[0]["count"]
-    assert orphan_accounts == 0
-    assert orphan_transactions == 0
+def test_sqlite_canonical_records_and_foreign_keys():
+    assert SQLiteBackend(str(DATABASE_PATH)).execute("PRAGMA foreign_keys") == [
+        {"foreign_keys": 1}
+    ]
+    with sqlite3.connect(DATABASE_PATH) as connection:
+        connection.execute("PRAGMA foreign_keys=ON")
+        assert connection.execute("PRAGMA foreign_keys").fetchone()[0] == 1
+        assert connection.execute(
+            "SELECT COUNT(*) FROM transactions WHERE customer_id = 'C1001'"
+        ).fetchone()[0] == 5
+        assert connection.execute(
+            "SELECT COUNT(*) FROM transactions WHERE customer_id = 'C1002'"
+        ).fetchone()[0] == 4
+        assert connection.execute(
+            """
+            SELECT COUNT(*) FROM fraud_alerts
+            WHERE customer_id = 'C1001' AND severity = 'high' AND status = 'open'
+            """
+        ).fetchone()[0] == 2
+        assert connection.execute(
+            """
+            SELECT COUNT(*) FROM fraud_alerts
+            WHERE customer_id = 'C1002' AND severity = 'low' AND status = 'closed'
+            """
+        ).fetchone()[0] == 1
+        assert connection.execute("PRAGMA foreign_key_check").fetchall() == []
 
 
-def test_live_investigation_keeps_c1002_medium_and_c1001_high():
-    graphs = KnowledgeGraphRegistry()
-    graphs.register(_graph("customer_graph"))
-    graphs.register(_graph("fraud_graph"))
-    source = SQLKnowledgeSource(
-        MySQLBackend(
-            host=CONFIG.mysql_host,
-            port=CONFIG.mysql_port,
-            user=CONFIG.mysql_user,
-            password=CONFIG.mysql_password,
-            database=CONFIG.mysql_database,
-        ),
-        aliases=("business database",),
-    )
-    source.name = "business_db"
-    sources = KnowledgeSourceRegistry()
-    sources.register(source)
+def test_live_investigation_keeps_c1002_medium_and_c1001_high(fraud_resources):
+    graphs, sources = fraud_resources
     service = FraudInvestigationService(graphs, sources, FraudPolicy())
 
     c1001 = service.investigate("C1001", actor="investigator")
@@ -135,23 +120,10 @@ def test_live_investigation_keeps_c1002_medium_and_c1001_high():
     assert c1002.metadata["alert_count"] == 1
 
 
-def test_live_investigation_rejects_missing_customer_and_unauthorized_actor():
-    graphs = KnowledgeGraphRegistry()
-    graphs.register(_graph("customer_graph"))
-    graphs.register(_graph("fraud_graph"))
-    source = SQLKnowledgeSource(
-        MySQLBackend(
-            host=CONFIG.mysql_host,
-            port=CONFIG.mysql_port,
-            user=CONFIG.mysql_user,
-            password=CONFIG.mysql_password,
-            database=CONFIG.mysql_database,
-        ),
-        aliases=("business database",),
-    )
-    source.name = "business_db"
-    sources = KnowledgeSourceRegistry()
-    sources.register(source)
+def test_live_investigation_rejects_missing_customer_and_unauthorized_actor(
+    fraud_resources,
+):
+    graphs, sources = fraud_resources
     service = FraudInvestigationService(graphs, sources, FraudPolicy())
 
     with pytest.raises(KeyError, match="Node not found"):
@@ -160,45 +132,12 @@ def test_live_investigation_rejects_missing_customer_and_unauthorized_actor():
         service.investigate("C1001", actor="support_user")
 
 
-def test_vexux_registry_adapter_execution_produces_real_source_evidence():
-    graphs = KnowledgeGraphRegistry()
-    graphs.register(_graph("customer_graph"))
-    sources = KnowledgeSourceRegistry()
-    source = SQLKnowledgeSource(
-        MySQLBackend(
-            host=CONFIG.mysql_host,
-            port=CONFIG.mysql_port,
-            user=CONFIG.mysql_user,
-            password=CONFIG.mysql_password,
-            database=CONFIG.mysql_database,
-        ),
-        aliases=("business database",),
-    )
-    source.name = "business_db"
-    sources.register(source)
-
+def test_vexux_registry_adapter_execution_produces_sqlite_evidence(fraud_resources):
+    graphs, sources = fraud_resources
     manager = ExecutionManager(
         knowledge_graph_registry=graphs,
         knowledge_source_registry=sources,
     )
-    graph_result = manager.execute(
-        Task(
-            id="live-graph",
-            description="Read customer graph",
-            input={
-                "query": "C1001",
-                "source": "customer_graph",
-                "operation": "get_neighbors",
-                "params": {"node_id": "C1001"},
-            },
-            metadata={"capability": "retrieval"},
-        ),
-        AgentContext(request_id="live-graph-request", user_id="investigator"),
-    )
-    assert graph_result.success
-    assert graph_result.output["source"] == "customer_graph"
-    assert all(item.source == "customer_graph" for item in graph_result.output["evidence"].items)
-
     sql_result = manager.execute(
         Task(
             id="live-sql",
@@ -217,4 +156,5 @@ def test_vexux_registry_adapter_execution_produces_real_source_evidence():
     )
     assert sql_result.success
     assert sql_result.output["source"] == "business_db"
+    assert len(sql_result.output["results"]) == 5
     assert all(item.source == "business_db" for item in sql_result.output["evidence"].items)

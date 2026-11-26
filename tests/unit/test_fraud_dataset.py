@@ -1,150 +1,197 @@
-from __future__ import annotations
+import json
+import sqlite3
 
-import re
-from pathlib import Path
+import pytest
 
-
-FRAUD_DATA = Path(__file__).parents[2] / "apps" / "fraud" / "data"
-MYSQL_SEED = (FRAUD_DATA / "mysql" / "seed.sql").read_text(encoding="utf-8")
-NEO4J_SEED = (FRAUD_DATA / "neo4j" / "seed.cypher").read_text(encoding="utf-8")
-
-
-def _insert_block(table: str) -> str:
-    match = re.search(
-        rf"INSERT INTO {table}\b.*?VALUES(.*?)(?:ON DUPLICATE KEY UPDATE|;)",
-        MYSQL_SEED,
-        re.DOTALL,
-    )
-    assert match is not None, f"Missing fixture inserts for {table}"
-    return match.group(1)
+from apps.fraud.data.dataset import generate_fraud_dataset
+from apps.fraud.data.sqlite_store import SQLiteFraudRepository
+from apps.fraud.investigation import FraudInvestigationService
+from apps.fraud.policy import FraudPolicy
+from core.knowledge.graph_registry import KnowledgeGraphRegistry
+from core.knowledge.inmemory_graph import InMemoryKnowledgeGraph
+from core.knowledge.registry import KnowledgeSourceRegistry
+from core.knowledge.sql_source import SQLKnowledgeSource
+from core.knowledge.sqlite_backend import SQLiteBackend
 
 
-def _ids(block: str, prefix: str) -> list[str]:
-    return re.findall(rf"'({prefix}\d+)'", block)
+def test_canonical_dataset_is_reproducible_and_preserves_required_scenarios():
+    dataset = generate_fraud_dataset()
+    assert dataset == generate_fraud_dataset()
+    assert len(dataset["customers"]) == 10
+    assert len(dataset["accounts"]) == 16
+    assert len(dataset["transactions"]) == 50
+    assert len(dataset["fraud_alerts"]) == 12
+    assert len(dataset["investigations"]) == 6
 
+    transactions_by_customer = {}
+    for transaction in dataset["transactions"]:
+        transactions_by_customer.setdefault(transaction["customer_id"], []).append(transaction)
+    assert len(transactions_by_customer["C1001"]) == 5
+    assert len(transactions_by_customer["C1002"]) == 4
 
-def test_mysql_fraud_seed_has_expected_entity_counts_and_unique_ids():
-    expected_counts = {
-        "customers": ("C", 10),
-        "merchants": ("M", 6),
-        "accounts": ("A", 16),
-        "transactions": ("T", 50),
-        "fraud_alerts": ("ALERT", 12),
-        "investigations": ("INV", 6),
-    }
-    blocks = {}
-    for table, (prefix, expected_count) in expected_counts.items():
-        block = _insert_block(table)
-        entity_ids = _ids(block, prefix)
-        assert len(entity_ids) == expected_count
-        assert len(entity_ids) == len(set(entity_ids))
-        blocks[table] = block
-
-    customer_ids = set(_ids(blocks["customers"], "C"))
-    merchant_ids = set(_ids(blocks["merchants"], "M"))
-    account_rows = re.findall(r"\('(A\d+)', '(C\d+)'", blocks["accounts"])
-    transaction_rows = re.findall(
-        r"\('(T\d+)', '(A\d+)', '(C\d+)', '(M\d+)'",
-        blocks["transactions"],
-    )
-    account_owners = {account_id: customer_id for account_id, customer_id in account_rows}
-    assert len(account_rows) == 16
-    assert all(customer_id in customer_ids for _, customer_id in account_rows)
-    assert len(transaction_rows) == 50
+    alice_alerts = [
+        alert for alert in dataset["fraud_alerts"]
+        if alert["customer_id"] == "C1001"
+    ]
+    assert len(alice_alerts) == 2
     assert all(
-        account_id in {row[0] for row in account_rows}
-        and account_owners[account_id] == customer_id
-        and customer_id in customer_ids
-        and merchant_id in merchant_ids
-        for _, account_id, customer_id, merchant_id in transaction_rows
+        alert["severity"] == "high" and alert["status"] == "open"
+        for alert in alice_alerts
     )
+    bob_alerts = [
+        alert for alert in dataset["fraud_alerts"]
+        if alert["customer_id"] == "C1002"
+    ]
+    assert len(bob_alerts) == 1
+    assert bob_alerts[0]["severity"] == "low"
+    assert bob_alerts[0]["status"] == "closed"
+    assert {
+        relationship["type"]
+        for relationship in dataset["graph_relationships"]
+        if relationship["source"] == "C1001" and relationship["target"] == "C1002"
+    } == {"SHARES_DEVICE_WITH"}
 
-    alert_rows = re.findall(
-        r"\('(ALERT\d+)', '(C\d+)', (?:NULL|'(T\d+)')",
-        blocks["fraud_alerts"],
-    )
-    assert len(alert_rows) == 12
-    transactions_by_id = {
-        transaction_id: (account_id, customer_id)
-        for transaction_id, account_id, customer_id, _ in transaction_rows
+
+def test_canonical_dataset_references_are_consistent():
+    dataset = generate_fraud_dataset()
+    customers = {row["customer_id"] for row in dataset["customers"]}
+    merchants = {row["merchant_id"] for row in dataset["merchants"]}
+    accounts = {
+        row["account_id"]: row["customer_id"] for row in dataset["accounts"]
+    }
+    transactions = {
+        row["transaction_id"]: row for row in dataset["transactions"]
     }
     assert all(
-        customer_id in customer_ids
-        and (
-            not transaction_id
-            or (
-                transaction_id in transactions_by_id
-                and transactions_by_id[transaction_id][1] == customer_id
-                and account_owners[transactions_by_id[transaction_id][0]] == customer_id
+        transaction["customer_id"] in customers
+        and transaction["merchant_id"] in merchants
+        and accounts[transaction["account_id"]] == transaction["customer_id"]
+        for transaction in dataset["transactions"]
+    )
+    assert all(
+        alert["customer_id"] in customers
+        and transactions[alert["transaction_id"]]["customer_id"] == alert["customer_id"]
+        for alert in dataset["fraud_alerts"]
+    )
+    assert all(
+        investigation["customer_id"] in customers
+        for investigation in dataset["investigations"]
+    )
+
+
+def test_sqlite_seed_is_idempotent_enforces_foreign_keys_and_serializes_events(tmp_path):
+    database = tmp_path / "fraud.db"
+    repository = SQLiteFraudRepository(database)
+    repository.initialize()
+    repository.require_initialized()
+    dataset = generate_fraud_dataset()
+
+    repository.seed(dataset)
+    first_counts = repository.counts()
+    repository.seed(dataset)
+
+    assert repository.counts() == first_counts
+    assert first_counts["customers"] == 10
+    assert first_counts["transactions"] == 50
+    with repository.connect() as connection:
+        assert connection.execute("PRAGMA foreign_keys").fetchone()[0] == 1
+    with sqlite3.connect(database) as connection:
+        connection.execute("PRAGMA foreign_keys=ON")
+        events = connection.execute(
+            "SELECT event_payload FROM investigation_events"
+        ).fetchall()
+        assert json.loads(events[0][0])["actor"] == "investigator"
+        with pytest.raises(sqlite3.IntegrityError):
+            connection.execute(
+                "INSERT INTO accounts VALUES ('A9999', 'C9999', 'active', '2025-01-01')"
             )
-        )
-        for _, customer_id, transaction_id in alert_rows
-    )
-    investigation_rows = re.findall(
-        r"\('(INV\d+)', '(C\d+)', '(F\d+)'",
-        blocks["investigations"],
-    )
-    case_node_block = re.search(
-        r"UNWIND \[(.*?)\] AS row\s+MERGE \(n:FraudCase ",
-        NEO4J_SEED,
-        re.DOTALL,
-    )
-    assert len(investigation_rows) == 6
-    assert case_node_block is not None
-    case_ids = set(re.findall(r"\{id: '(F\d+)'", case_node_block.group(1)))
-    assert all(
-        customer_id in customer_ids and case_id in case_ids
-        for _, customer_id, case_id in investigation_rows
-    )
+
+    repository.require_seeded()
 
 
-def test_neo4j_seed_has_valid_entity_ranges_and_bounded_relationships():
-    expected_ranges = {
-        "Customer": (8, 12),
-        "Account": (15, 25),
-        "Device": (8, 15),
-        "Merchant": (6, 10),
-        "Address": (6, 10),
-        "FraudCase": (4, 8),
-        "FraudAlert": (12, 25),
-    }
-    node_blocks = {
-        label: block
-        for block, label in re.findall(
-            r"UNWIND \[(.*?)\] AS row\s+MERGE \(n:(\w+) ",
-            NEO4J_SEED,
-            re.DOTALL,
-        )
-    }
-    for label, (minimum, maximum) in expected_ranges.items():
-        assert label in node_blocks, f"Missing {label} graph fixtures"
-        node_ids = re.findall(r"\{id: '([^']+)'", node_blocks[label])
-        assert minimum <= len(node_ids) <= maximum
-        assert len(node_ids) == len(set(node_ids))
+def test_sqlite_reset_only_deletes_fraud_owned_tables(tmp_path):
+    database = tmp_path / "fraud.db"
+    repository = SQLiteFraudRepository(database)
+    repository.initialize()
+    repository.seed(generate_fraud_dataset())
+    with sqlite3.connect(database) as connection:
+        connection.execute("CREATE TABLE unrelated_records (value TEXT)")
+        connection.execute("INSERT INTO unrelated_records VALUES ('preserve me')")
 
-    relationship_merges = re.findall(
-        r"MERGE \((\w+)\)-\[:[A-Z_]+\]->\((\w+)\)", NEO4J_SEED
-    )
-    assert len(relationship_merges) == 40
-    for statement in NEO4J_SEED.split(";"):
-        matched_variables = set(re.findall(r"\((\w+):\w+ \{id:", statement))
-        relationship_variables = {
-            variable
-            for relationship in re.findall(
-                r"MERGE \((\w+)\)-\[:[A-Z_]+\]->\((\w+)\)", statement
+    repository.reset()
+
+    assert all(count == 0 for count in repository.counts().values())
+    with sqlite3.connect(database) as connection:
+        assert connection.execute(
+            "SELECT value FROM unrelated_records"
+        ).fetchone()[0] == "preserve me"
+
+
+def test_sqlite_store_reports_missing_schema_and_seed(tmp_path):
+    repository = SQLiteFraudRepository(tmp_path / "fraud.db")
+    with pytest.raises(FileNotFoundError, match="init-sqlite"):
+        repository.require_initialized()
+
+    repository.initialize()
+    with pytest.raises(RuntimeError, match="canonical SQLite fraud dataset"):
+        repository.require_seeded()
+
+
+def test_sqlite_initialization_refuses_a_non_fraud_database(tmp_path):
+    database = tmp_path / "existing.db"
+    with sqlite3.connect(database) as connection:
+        connection.execute("CREATE TABLE business_records (id INTEGER PRIMARY KEY)")
+
+    with pytest.raises(RuntimeError, match="non-empty SQLite file"):
+        SQLiteFraudRepository(database).initialize()
+
+
+def test_generated_sqlite_and_graph_fixtures_preserve_deterministic_risk(tmp_path):
+    dataset = generate_fraud_dataset()
+    repository = SQLiteFraudRepository(tmp_path / "fraud.db")
+    repository.initialize()
+    repository.seed(dataset)
+
+    graphs = KnowledgeGraphRegistry()
+    for name in ("customer_graph", "fraud_graph"):
+        graph = InMemoryKnowledgeGraph()
+        graph.name = name
+        for node in dataset["graph_nodes"]:
+            graph.add_node(
+                node["id"],
+                label=node["label"],
+                properties=node["properties"],
             )
-            for variable in relationship
-        }
-        assert relationship_variables <= matched_variables
-    assert "MERGE (c1)-[:SHARES_DEVICE_WITH]->(c2)" in NEO4J_SEED
-    assert "MERGE (c7)-[:USES]->(d6)" in NEO4J_SEED
-    assert "MERGE (c2)-[:SHARES_ADDRESS_WITH]->(c3)" in NEO4J_SEED
+        for relationship in dataset["graph_relationships"]:
+            graph.add_relationship(
+                relationship["source"],
+                relationship["target"],
+                relationship["type"],
+                properties=relationship["properties"],
+                rel_id=relationship["id"],
+            )
+        graphs.register(graph)
+
+    sources = KnowledgeSourceRegistry()
+    source = SQLKnowledgeSource(SQLiteBackend(str(repository.database_path)))
+    source.name = "business_db"
+    sources.register(source)
+    service = FraudInvestigationService(graphs, sources, FraudPolicy())
+
+    alice = service.investigate("C1001", actor="investigator")
+    bob = service.investigate("C1002", actor="investigator")
+
+    assert alice.risk_assessment == "high"
+    assert alice.metadata["transaction_count"] == 5
+    assert alice.metadata["alert_count"] == 2
+    assert bob.risk_assessment == "medium"
+    assert bob.metadata["transaction_count"] == 4
+    assert bob.metadata["alert_count"] == 1
+    assert "shared_device_relationship" in bob.contributing_signals
 
 
-def test_demo_sql_fixture_has_valid_references():
-    demo_sql = (FRAUD_DATA / "sqlite" / "demo.sql").read_text(encoding="utf-8")
-    connection_ids = set(re.findall(r"'(A\d+)'", demo_sql))
-    transaction_ids = set(re.findall(r"'(T\d+)'", demo_sql))
-    assert "A100" in connection_ids
-    assert "T1001" in transaction_ids
-    assert "'C1001'" in demo_sql
+def test_dataset_rejects_invalid_size_and_seed_type():
+    with pytest.raises(ValueError, match="at least 10"):
+        generate_fraud_dataset(customer_count=9)
+    with pytest.raises(TypeError, match="seed must be an integer"):
+        generate_fraud_dataset(seed="not-an-integer")

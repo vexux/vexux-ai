@@ -9,7 +9,7 @@ import threading
 import time
 
 from apps.fraud.demo import create_demo_agent
-from apps.fraud.real import create_real_agent
+from apps.fraud.real import close_real_agent, create_real_agent
 from apps.fraud.identity import DEFAULT_ACTOR, validate_actor
 from core.config import get_config, provider_diagnostic
 from core.observability_store import get_observability_store
@@ -371,7 +371,11 @@ def _selected_agent(args):
             )
         ):
             raise ValueError("Provider options require synthetic composition.")
-        yield create_real_agent()
+        agent = create_real_agent()
+        try:
+            yield agent
+        finally:
+            close_real_agent(agent)
         return
 
     provider = args.provider or "fake"
@@ -406,7 +410,7 @@ def _terminal_arguments(argv=None):
         "--composition",
         choices=("real", "synthetic"),
         default="real",
-        help="Select real Neo4j/MySQL resources or the bundled synthetic fixtures.",
+        help="Select real Neo4j/SQLite resources or the bundled synthetic fixtures.",
     )
     parser.add_argument(
         "--provider",
@@ -466,7 +470,7 @@ def _run_terminal(agent, composition_name):
     if composition_name == "synthetic":
         print("Synthetic mode: C1001, C1002, and C2001 use temporary SQLite and in-memory graphs; RAG is disabled.")
     else:
-        print("Resource-aware fraud queries use the real Neo4j and MySQL resources.")
+        print("Resource-aware fraud queries use the real Neo4j and SQLite resources.")
     gateway = getattr(getattr(agent, "execution_manager", None), "model_gateway", None)
     runtime = (
         gateway.provider_metadata()

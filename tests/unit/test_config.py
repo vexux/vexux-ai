@@ -54,7 +54,7 @@ def test_core_sql_registration_uses_generic_resource_configuration(monkeypatch, 
     }
 
 
-def test_fraud_composition_requires_explicit_mysql_database(monkeypatch, tmp_path):
+def test_fraud_composition_uses_sqlite_without_mysql_configuration(monkeypatch, tmp_path):
     from apps.fraud.real import create_real_agent
 
     env_file = tmp_path / ".env"
@@ -65,12 +65,19 @@ def test_fraud_composition_requires_explicit_mysql_database(monkeypatch, tmp_pat
         "NEO4J_URI": "bolt://localhost:7687",
         "NEO4J_USERNAME": "neo4j",
         "NEO4J_PASSWORD": "test-password",
-        "MYSQL_PASSWORD": "test-password",
+        "SQL_DATABASE_PATH": str(tmp_path / "not-seeded.db"),
     }.items():
         monkeypatch.setenv(name, value)
-    monkeypatch.delenv("MYSQL_DATABASE", raising=False)
+    for name in (
+        "MYSQL_HOST",
+        "MYSQL_PORT",
+        "MYSQL_USER",
+        "MYSQL_PASSWORD",
+        "MYSQL_DATABASE",
+    ):
+        monkeypatch.delenv(name, raising=False)
 
-    with pytest.raises(ValueError, match="MYSQL_DATABASE must be configured"):
+    with pytest.raises(FileNotFoundError, match="init-sqlite"):
         create_real_agent()
 
 
@@ -192,7 +199,6 @@ def test_missing_real_credentials_are_reported_by_real_composition(monkeypatch):
         "NEO4J_URI",
         "NEO4J_USERNAME",
         "NEO4J_PASSWORD",
-        "MYSQL_PASSWORD",
     ):
         monkeypatch.setenv(name, "")
 

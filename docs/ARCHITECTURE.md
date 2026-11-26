@@ -59,14 +59,18 @@ Structured outputs may provide an optional follow-up formatter that receives a
 generic follow-up kind and the previous response, keeping deterministic
 continuation presentation with the result-owning application.
 
-Neo4j owns relationship-oriented entities and traversal. MySQL owns
-operational records such as transactions, alerts, investigations, and event
-metadata. SQLite and in-memory graphs remain available for deterministic tests
-and lightweight demos only.
+Neo4j owns relationship-oriented entities and traversal. SQLite owns the real
+fraud application's operational records such as transactions, alerts,
+investigations, and event metadata. The shared MySQL backend remains available
+for other consumers; SQLite and in-memory graphs also support deterministic
+tests and lightweight demos.
 
 ```text
-SQLKnowledgeSource -> backend contract -> MySQLBackend
-                   -> mysql-connector-python -> MySQL
+Fraud Dataset Generator -> SQLiteFraudRepository -> fraud SQLite database
+                         -> Neo4jFraudStore -> Neo4j
+
+SQLKnowledgeSource -> SQLiteBackend -> SQLite
+                   -> MySQLBackend -> mysql-connector-python -> MySQL
 
 Agent -> ResourceRouter -> authorization -> ExecutionManager
       -> registries -> adapters -> database -> evidence/audit
@@ -87,6 +91,8 @@ move factual correlation into a model.
 The generic multi-graph executor returns registered graph results and evidence.
 Application-specific result correlation and presentation are injected by the
 application composition; core does not infer domain schemas or entity meanings.
+The fraud API exposes relational evidence under `sqlite`; its former `mysql`
+response field remains as a compatibility alias for existing clients.
 
 ## 2. The Three Conceptual Layers
 

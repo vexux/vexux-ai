@@ -48,7 +48,7 @@ governance remain outside this phase.
 - Offline regression, evaluation, security, identity, authorization, and
   deterministic fraud workflow validation are complete.
 - Local Ollama with `phi3:latest` is the manual development runtime.
-- Live Neo4j/MySQL checks remain dependent on the corresponding local services.
+- Live Neo4j/SQLite checks remain dependent on the corresponding local stores.
 - Authentication remains outside the Vexux application boundary.
 
 ## 2. Completed Capabilities
@@ -152,12 +152,18 @@ Key points:
 ## 3. In-Progress Capabilities
 
 ### 3.0 Phase 2 - Real local fraud data platform (Completed)
-- Added deterministic Neo4j schema/seed resources under `apps/fraud/data/neo4j/`.
-- Added deterministic MySQL schema/seed resources under `apps/fraud/data/mysql/`.
-- Added the generic read-only `MySQLBackend` behind `SQLKnowledgeSource`; the existing SQLite backend remains available.
-- Added `apps/fraud/real.py`, which composes real `customer_graph`, `fraud_graph`, and `business_db` resources without fake fallback.
-- Added live local integration tests that skip unless Neo4j/MySQL credentials are configured.
-- Updated the interactive runner and local setup documentation for real provider/resource modes.
+- The real fraud application uses `SQLiteBackend` for operational records and
+  Neo4j for graph relationships; the shared `MySQLBackend` remains available to
+  other consumers.
+- One deterministic generator in `apps/fraud/data/` supplies both stores.
+  SQLite schema initialization, idempotent seeding, and explicit scoped reset
+  use the standard library; Neo4j applies constraints before writes.
+- `apps/fraud/real.py` composes `customer_graph`, `fraud_graph`, and
+  `business_db` without a fake or in-memory fallback.
+- Live local integration tests skip unless Neo4j credentials and a generated
+  SQLite fraud database are configured.
+- The interactive runner and local setup documentation describe the real
+  Neo4j/SQLite data path.
 
 ### 3.1 RAG and Model Gateway Decoupling
 - Route all answer generation through the central `ModelGateway`.
