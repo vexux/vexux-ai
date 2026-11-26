@@ -1038,3 +1038,64 @@ Commit assessment and operational commands
   `MODEL_PROVIDER=fake` only selects the model provider; the real investigation
   still reads SQLite/Neo4j evidence and computes risk through the deterministic
   fraud service.
+
+
+Final resource-lifecycle cleanup
+================================
+Date: 2026-11-26
+
+Changes
+-------
+- The SQLite ownership guard and ignore rules recorded in the preceding audit
+  supplement were present at the start of this task and remain unchanged.
+- Added `managed_real_investigation_service()` and
+  `managed_real_investigation_workflow()` in `apps/fraud/real.py` and exported
+  them from `apps.fraud`. These are additive context-manager APIs; existing
+  `create_real_investigation_service()` and
+  `create_real_investigation_workflow()` signatures and return values remain
+  unchanged for compatibility.
+- Each managed helper creates one real agent, yields the service or registered
+  workflow, and calls `close_real_agent()` in `finally`. That close function
+  deduplicates the two graph adapters' shared Neo4j driver, so it is closed
+  once on normal context exit, caller exceptions, and resource-construction
+  errors.
+- `docs/SETUP.md` now shows the managed API and marks the existing un-managed
+  convenience helpers as compatibility-only for callers that manage driver
+  lifetime themselves.
+- The API lifespan and interactive terminal lifecycle were inspected; both
+  already close the real agent on shutdown/exit and were not changed.
+
+Verification actually run
+-------------------------
+ACTUALLY-RUN
+- Focused helper lifecycle tests:
+  `.\.venv\Scripts\python.exe -m pytest -q tests\unit\test_fraud_real_composition.py`
+  Result: 8 passed. Tests cover normal exit, exceptions in the managed block,
+  resource-construction/lookup errors, and closing the shared driver once.
+- Focused migration, composition, and API regression tests:
+  `.\.venv\Scripts\python.exe -m pytest -q tests\unit\test_fraud_dataset.py tests\unit\test_fraud_neo4j_store.py tests\unit\test_fraud_real_composition.py tests\unit\test_api.py tests\unit\test_config.py tests\unit\test_sqlite_backend_integration.py -k "not test_dotenv_mistral_configuration_selects_mistral_provider"`
+  Result: 53 passed, 1 deselected. The deselected Mistral configuration test
+  needs the unavailable optional `mistralai` package; no dependency was
+  installed. The passing suite emitted existing `datetime.utcnow()`
+  deprecation warnings.
+- Terminal lifecycle regression tests:
+  `.\.venv\Scripts\python.exe -m pytest -q tests\unit\test_synthetic_terminal.py`
+  Result: 9 passed. The existing real terminal agent context still closes on
+  exit; its implementation was not changed.
+- No frontend files changed, so the frontend build was not rerun.
+- `git diff --check`: passed.
+
+Final uncommitted files
+-----------------------
+- `VEXUX_AUDIT_REPORT.txt`
+- `apps/fraud/__init__.py`
+- `apps/fraud/real.py`
+- `docs/SETUP.md`
+- `tests/unit/test_fraud_real_composition.py`
+
+Remaining note
+--------------
+- The two legacy `create_real_investigation_*` helper functions are retained
+  to avoid breaking their public interfaces. New callers should use the
+  managed context-manager APIs. Existing external callers using the legacy
+  helpers must manage the driver's lifetime themselves.

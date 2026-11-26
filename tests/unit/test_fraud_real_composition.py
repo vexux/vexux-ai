@@ -1,8 +1,16 @@
 from types import SimpleNamespace
 
+import pytest
+
 from apps.fraud.data.dataset import generate_fraud_dataset
 from apps.fraud.data.sqlite_store import SQLiteFraudRepository
-from apps.fraud.real import close_real_agent, create_real_agent
+from apps.fraud.investigation import FraudInvestigationService
+from apps.fraud.real import (
+    close_real_agent,
+    create_real_agent,
+    managed_real_investigation_service,
+    managed_real_investigation_workflow,
+)
 from core.knowledge.registry import KnowledgeSourceRegistry
 
 
@@ -64,6 +72,31 @@ def _agent_with_core_graph(driver):
         ),
         workflow_registry=SimpleNamespace(register=lambda workflow: None),
         policy=None,
+    )
+
+
+def _agent_with_real_graphs(driver, workflow=None):
+    class _Graph:
+        _driver = driver
+
+        def close(self):
+            driver.close()
+
+    graph = _Graph()
+    graphs = SimpleNamespace(
+        get=lambda name: graph if name in {"customer_graph", "fraud_graph"} else None
+    )
+    return SimpleNamespace(
+        knowledge_graph_registry=graphs,
+        execution_manager=SimpleNamespace(
+            knowledge_source_registry=KnowledgeSourceRegistry()
+        ),
+        policy=object(),
+        workflow_registry=SimpleNamespace(
+            get=lambda name: workflow
+            if name == "fraud_investigation"
+            else (_ for _ in ()).throw(KeyError(name))
+        ),
     )
 
 
@@ -133,3 +166,73 @@ def test_real_composition_refuses_unseeded_sqlite_without_creating_data(
         raise AssertionError("Expected real composition to reject an unseeded database.")
 
     assert repository.counts()["customers"] == 0
+
+
+@pytest.mark.parametrize(
+    ("managed_helper", "expected_type"),
+    [
+        (managed_real_investigation_service, "service"),
+        (managed_real_investigation_workflow, "workflow"),
+    ],
+)
+@pytest.mark.parametrize("raise_in_body", [False, True])
+def test_managed_real_helpers_close_shared_driver_once(
+    monkeypatch, managed_helper, expected_type, raise_in_body
+):
+    from apps.fraud import real
+
+    driver = _Driver()
+    workflow = object()
+    agent = _agent_with_real_graphs(driver, workflow=workflow)
+    monkeypatch.setattr(real, "create_real_agent", lambda: agent)
+
+    if raise_in_body:
+        with pytest.raises(RuntimeError, match="caller failed"):
+            with managed_helper() as resource:
+                if expected_type == "workflow":
+                    assert resource is workflow
+                else:
+                    assert isinstance(resource, FraudInvestigationService)
+                raise RuntimeError("caller failed")
+    else:
+        with managed_helper() as resource:
+            if expected_type == "workflow":
+                assert resource is workflow
+            else:
+                assert isinstance(resource, FraudInvestigationService)
+
+    assert driver.close_calls == 1
+
+
+@pytest.mark.parametrize(
+    ("managed_helper", "patch_target"),
+    [
+        (managed_real_investigation_service, "FraudInvestigationService"),
+        (managed_real_investigation_workflow, "workflow_registry"),
+    ],
+)
+def test_managed_real_helpers_close_driver_when_resource_construction_fails(
+    monkeypatch, managed_helper, patch_target
+):
+    from apps.fraud import real
+
+    driver = _Driver()
+    agent = _agent_with_real_graphs(driver, workflow=object())
+    monkeypatch.setattr(real, "create_real_agent", lambda: agent)
+
+    if patch_target == "FraudInvestigationService":
+        monkeypatch.setattr(
+            real,
+            patch_target,
+            lambda **kwargs: (_ for _ in ()).throw(RuntimeError("construction failed")),
+        )
+    else:
+        agent.workflow_registry.get = lambda name: (_ for _ in ()).throw(
+            RuntimeError("workflow lookup failed")
+        )
+
+    with pytest.raises(RuntimeError):
+        with managed_helper():
+            pytest.fail("resource construction unexpectedly succeeded")
+
+    assert driver.close_calls == 1

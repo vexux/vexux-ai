@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+from contextlib import contextmanager
 from pathlib import Path
+from typing import Iterator
 
 import core.composition as core_composition
 from core.config import get_config
@@ -136,7 +138,7 @@ def create_real_agent():
 
 
 def create_real_investigation_service() -> FraudInvestigationService:
-    """Compose the deterministic investigation service with real resources."""
+    """Compose the deterministic service; prefer the managed helper for cleanup."""
     agent = create_real_agent()
     return FraudInvestigationService(
         graph_registry=agent.knowledge_graph_registry,
@@ -146,9 +148,33 @@ def create_real_investigation_service() -> FraudInvestigationService:
 
 
 def create_real_investigation_workflow():
-    """Compose the bounded workflow with the real registered resources."""
+    """Compose the workflow; prefer the managed helper for cleanup."""
     agent = create_real_agent()
     return agent.workflow_registry.get("fraud_investigation")
+
+
+@contextmanager
+def managed_real_investigation_service() -> Iterator[FraudInvestigationService]:
+    """Yield the real investigation service and close its Neo4j driver on exit."""
+    agent = create_real_agent()
+    try:
+        yield FraudInvestigationService(
+            graph_registry=agent.knowledge_graph_registry,
+            source_registry=agent.execution_manager.knowledge_source_registry,
+            policy=agent.policy,
+        )
+    finally:
+        close_real_agent(agent)
+
+
+@contextmanager
+def managed_real_investigation_workflow() -> Iterator[FraudInvestigationWorkflow]:
+    """Yield the registered real workflow and close its Neo4j driver on exit."""
+    agent = create_real_agent()
+    try:
+        yield agent.workflow_registry.get("fraud_investigation")
+    finally:
+        close_real_agent(agent)
 
 
 __all__ = [
@@ -156,4 +182,6 @@ __all__ = [
     "create_real_agent",
     "create_real_investigation_service",
     "create_real_investigation_workflow",
+    "managed_real_investigation_service",
+    "managed_real_investigation_workflow",
 ]
