@@ -259,6 +259,23 @@ python -m scripts.manual.run_agent
 The interactive runner uses the real Neo4j/SQLite composition and has no
 synthetic database fallback.
 
+Code that needs only the deterministic service or the registered workflow
+should use the managed helpers so the shared Neo4j driver is closed when the
+resource is no longer needed, including when the caller raises an exception:
+
+```python
+from apps.fraud import managed_real_investigation_service
+
+with managed_real_investigation_service() as service:
+    result = service.investigate("C1001", actor="investigator")
+```
+
+Use `managed_real_investigation_workflow()` in the same way when direct access
+to the workflow is needed. The existing `create_real_investigation_service()`
+and `create_real_investigation_workflow()` functions remain available for
+compatibility, but they do not manage the Neo4j driver's lifetime; prefer the
+managed context-manager helpers for new callers.
+
 The same terminal also supports the bundled synthetic SQLite/in-memory
 fixtures. Synthetic mode disables real SQLite and Neo4j composition, persistent memory,
 autonomous delegation, and generic RAG retrieval:

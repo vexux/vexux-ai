@@ -12,6 +12,8 @@ from apps.fraud.real import (
     create_real_agent,
     create_real_investigation_service,
     create_real_investigation_workflow,
+    managed_real_investigation_service,
+    managed_real_investigation_workflow,
 )
 from apps.fraud.domain import (
     Account,
@@ -41,6 +43,8 @@ __all__ = [
     "create_real_agent",
     "create_real_investigation_service",
     "create_real_investigation_workflow",
+    "managed_real_investigation_service",
+    "managed_real_investigation_workflow",
     "Account",
     "Address",
     "Customer",
