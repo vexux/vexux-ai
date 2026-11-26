@@ -10,6 +10,18 @@ __pycache__/
 /data/observability/vexux_observability.db
 /apps/fraud/data/generated/
 
+# Local database files and SQLite sidecars.
+*.db
+*.sqlite
+*.sqlite3
+*-wal
+*-shm
+
+# Local Neo4j database files.
+/neo4j-data/
+/data/neo4j/
+neo4j/data/
+
 models/checkpoints/
 models/base/
 

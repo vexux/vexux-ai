@@ -196,8 +196,7 @@ class SQLiteFraudRepository:
                         "SELECT name FROM sqlite_master WHERE type = 'table'"
                     ).fetchall()
                 }
-                unknown_tables = existing_tables - _REQUIRED_TABLES - {"sqlite_sequence"}
-                if application_id == 0 and unknown_tables:
+                if application_id == 0 and existing_tables - {"sqlite_sequence"}:
                     raise RuntimeError(
                         "Refusing to initialize fraud data in a non-empty SQLite file "
                         "that is not owned by the fraud application."

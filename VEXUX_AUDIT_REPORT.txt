@@ -890,3 +890,151 @@ NOT ACTUALLY-RUN
 - `tests/unit/test_synthetic_terminal.py`
 - `docs/SETUP.md`
 - `VEXUX_AUDIT_REPORT.txt`
+
+
+SQLite + Neo4j fraud migration post-implementation audit
+========================================================
+Date: 2026-11-26
+
+Scope and evidence
+------------------
+INSPECTED
+- Audited migration commit `41adbdc` (`Migrate fraud data layer to SQLite and
+  Neo4j`) on branch `feature/sqlite-neo4j-migration`; its parent commit is
+  `2e6f83b` (`prod`). Reviewed all 31 changed paths, including all four deleted
+  legacy MySQL/Neo4j schema and seed files.
+- The migration commit was already committed at audit start. No commit or push
+  was made during this audit. Findings below distinguish repository inspection
+  and mocked/unit evidence from behavior requiring live database execution.
+- Existing setup documentation describes the SQLite + Neo4j migration. This
+  audit supplement records the post-implementation findings and test results.
+
+Verified migration behavior
+---------------------------
+- `apps/fraud/real.py` composes `SQLiteBackend` as the `business_db` relational
+  source and the shared Neo4j driver for `customer_graph` and `fraud_graph`.
+  The composition requires Neo4j configuration and a seeded SQLite fraud
+  database, but does not instantiate MySQL or require MySQL credentials.
+- The API's `mysql` investigation-response field and status component are
+  compatibility aliases populated from SQLite; they do not select a MySQL
+  backend. The frontend prefers SQLite evidence and suppresses the duplicate
+  MySQL status card when SQLite status is available.
+- Both SQLite connection factories (`SQLiteFraudRepository.connect()` and
+  `SQLiteBackend._connect()`) execute `PRAGMA foreign_keys=ON`.
+- `generate_fraud_dataset()` supplies canonical rows and graph entities and
+  relationships with shared identifiers. Unit coverage checks references and
+  deterministic graph relationships. SQLite writes use upserts; Neo4j seeding
+  uses constraints and `MERGE`. Repeated canonical seeding does not duplicate
+  records. SQLite metadata `generated_at` is refreshed when seeding repeats.
+- Baselines are preserved: C1001 has five transactions and two open
+  high-severity alerts, and deterministic investigation returns high risk.
+  C1002 has four transactions and one closed low-severity alert, and returns
+  medium risk. The cases share device D5001.
+- SQLite initialization/reset is scoped to the marked Vexux fraud database and
+  its fraud tables. Neo4j reset filters by the `vexux_fraud` dataset marker;
+  it deletes marked relationships and removes marked nodes only if no
+  unmarked relationships remain attached.
+- The seed CLI distinguishes failures before SQLite seeding, SQLite partial
+  completion, and SQLite-success/Neo4j-failure partial completion. It advises
+  safe re-seeding and closes its Neo4j driver in `finally`.
+- Neo4j sessions use context managers. The API lifespan and interactive
+  runner close the shared Neo4j driver; `close_real_agent()` deduplicates the
+  graph adapters sharing that driver.
+- The deleted static SQL/Cypher seed content is replaced by the canonical
+  generator and store implementations. Migration changes to API/frontend
+  evidence/status are deliberate SQLite compatibility changes. No fraud
+  scoring, Qwen3 implementation, or RAG implementation source was changed in
+  the migration diff.
+
+Defects found and audit fixes
+-----------------------------
+FIXED IN WORKTREE (not committed)
+- SQLite initialization previously rejected an unmarked database only when it
+  had table names outside the fraud schema. An unmarked non-empty database
+  containing fraud-named tables could therefore be adopted and modified. The
+  guard now rejects any unmarked user tables. A regression test creates an
+  unmarked `customers` table, checks initialization fails, and verifies its
+  existing row is preserved.
+- The migration `.gitignore` ignored the default generated fraud directory and
+  observability database, but not arbitrary SQLite database files and WAL/SHM
+  sidecars or common local Neo4j data locations. Added patterns for `*.db`,
+  `*.sqlite`, `*.sqlite3`, `*-wal`, `*-shm`, and common Neo4j data directories.
+  Representative paths were checked with `git check-ignore`.
+
+REMAINING RISK
+- Exported `create_real_investigation_service()` and
+  `create_real_investigation_workflow()` create a real agent, return a
+  resource-backed service/workflow, and do not expose an explicit close path
+  for the agent's Neo4j driver. No in-repository callers were found; external
+  callers using these helpers should account for driver lifetime. This was not
+  changed during the audit.
+- SQLite and Neo4j do not share an atomic transaction. The CLI reports partial
+  state and supports safe repeat operations, but operators must follow the
+  displayed recovery guidance.
+- Live Neo4j behavior was not verified in this environment.
+
+Verification actually run
+-------------------------
+ACTUALLY-RUN
+- Existing repository `.venv`: CPython 3.12.4.
+- After the SQLite guard and ignore fixes:
+  `.\.venv\Scripts\python.exe -m pytest -q tests\unit\test_fraud_dataset.py tests\unit\test_fraud_neo4j_store.py tests\unit\test_fraud_real_composition.py tests\unit\test_api.py tests\unit\test_config.py tests\unit\test_sqlite_backend_integration.py -k "not test_dotenv_mistral_configuration_selects_mistral_provider"`
+  Result: 47 passed, 1 deselected. The excluded test requires the missing
+  optional `mistralai` package; no dependencies were installed.
+- Qwen3 and fraud investigation regressions:
+  `.\.venv\Scripts\python.exe -m pytest -q tests\unit\test_qwen3_provider.py tests\unit\test_qwen3_composition.py tests\unit\test_fraud_investigation.py`
+  Result: 19 passed.
+- `npm --prefix frontend run build`: passed (`tsc -b` and Vite production
+  build).
+- `.\.venv\Scripts\python.exe -m pytest -q tests\live\test_fraud_databases.py`:
+  5 skipped because local seeded SQLite and configured Neo4j connection
+  settings were unavailable. All five live tests require a reachable/running
+  Neo4j DBMS with valid credentials and a seeded SQLite fraud database.
+- `git diff --check`: passed. `git check-ignore` verified example SQLite,
+  sidecar, and Neo4j data paths.
+- `tests/unit/test_llama_cpp_provider.py`: 1 failed, 10 passed. The test
+  expects the optional `llama-cpp-python` import error text, but provider
+  generation wraps it in a generic local-generation RuntimeError. The provider
+  and test Git blob IDs are identical at `HEAD^` and `HEAD`; this assertion
+  failure is pre-existing and unrelated to the SQLite/Neo4j migration.
+
+Commit assessment and operational commands
+-------------------------------------------
+- The migration commit should not be approved unchanged because of the SQLite
+  ownership guard and database-ignore gaps above. Both are fixed in the
+  current worktree. Focused migration tests and the frontend build pass with
+  those changes. The helper lifecycle caveat and unverified live DB behavior
+  remain for reviewers/operators to consider.
+- Worktree changes from this audit are limited to `.gitignore`,
+  `apps/fraud/data/sqlite_store.py`, `tests/unit/test_fraud_dataset.py`, and
+  this report. Nothing was committed or pushed.
+- From the repository root in PowerShell, with Neo4j Desktop running and
+  `NEO4J_PASSWORD` supplied securely in the shell:
+
+  ```powershell
+  $env:MODEL_PROVIDER = 'fake'
+  $env:NEO4J_URI = 'bolt://127.0.0.1:7687'
+  $env:NEO4J_USERNAME = 'neo4j'
+  $env:NEO4J_DATABASE = 'neo4j'
+  # Set NEO4J_PASSWORD securely before continuing.
+  & .\.venv\Scripts\python.exe -m apps.fraud.data.cli init-sqlite
+  & .\.venv\Scripts\python.exe -m apps.fraud.data.cli seed
+  ```
+
+- To perform a real C1001 investigation after initialization, start the API
+  in a terminal with the same environment:
+
+  ```powershell
+  & .\.venv\Scripts\python.exe -m uvicorn api.main:app --host 127.0.0.1 --port 8000
+  ```
+
+  Then submit from another terminal:
+
+  ```powershell
+  $body = @{ query = 'Investigate customer C1001'; customer_id = 'C1001'; user_id = 'investigator' } | ConvertTo-Json
+  Invoke-RestMethod -Uri 'http://127.0.0.1:8000/api/v1/fraud/investigate' -Method Post -ContentType 'application/json' -Body $body
+  ```
+
+  `MODEL_PROVIDER=fake` only selects the model provider; the real investigation
+  still reads SQLite/Neo4j evidence and computes risk through the deterministic
+  fraud service.

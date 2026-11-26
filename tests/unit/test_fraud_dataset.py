@@ -146,6 +146,25 @@ def test_sqlite_initialization_refuses_a_non_fraud_database(tmp_path):
         SQLiteFraudRepository(database).initialize()
 
 
+def test_sqlite_initialization_refuses_unmarked_fraud_named_tables(tmp_path):
+    database = tmp_path / "unmarked-fraud.db"
+    with sqlite3.connect(database) as connection:
+        connection.execute(
+            "CREATE TABLE customers (customer_id TEXT PRIMARY KEY, full_name TEXT)"
+        )
+        connection.execute(
+            "INSERT INTO customers VALUES ('C1001', 'Existing customer')"
+        )
+
+    with pytest.raises(RuntimeError, match="non-empty SQLite file"):
+        SQLiteFraudRepository(database).initialize()
+
+    with sqlite3.connect(database) as connection:
+        assert connection.execute(
+            "SELECT full_name FROM customers WHERE customer_id = 'C1001'"
+        ).fetchone()[0] == "Existing customer"
+
+
 def test_generated_sqlite_and_graph_fixtures_preserve_deterministic_risk(tmp_path):
     dataset = generate_fraud_dataset()
     repository = SQLiteFraudRepository(tmp_path / "fraud.db")
