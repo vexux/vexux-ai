@@ -1099,3 +1099,160 @@ Remaining note
   to avoid breaking their public interfaces. New callers should use the
   managed context-manager APIs. Existing external callers using the legacy
   helpers must manage the driver's lifetime themselves.
+
+
+Qwen3-4B BF16 to GGUF conversion preparation
+===========================================
+Date: 2026-11-26
+
+Scope and safety
+----------------
+- Prepared, but did not run, conversion of the existing ModelScope Qwen3-4B
+  BF16 checkpoint to BF16 GGUF and Q4_K_M GGUF.
+- Did not download the checkpoint again, use Hugging Face Hub/CLI for model
+  downloads, modify the original checkpoint, or modify the Qwen3 provider.
+- Did not run conversion or quantization because the available RAM was
+  insufficient. Neither expected GGUF output was created.
+
+Verified environment
+--------------------
+- Existing project interpreter: `.venv\Scripts\python.exe`, CPython 3.12.4,
+  64-bit. No additional virtual environment was created.
+- ModelScope snapshot exists at
+  `C:\Users\varpundl\.cache\modelscope\models\Qwen--Qwen3-4B\snapshots\master`.
+  The three expected Safetensors shards exist and total 8,044,982,000 bytes
+  (about 7.49 GiB). `config.json` identifies `Qwen3ForCausalLM`, `model_type`
+  `qwen3`, and BF16 dtype. The tokenizer, generation config, and
+  `model.safetensors.index.json` are present. The snapshot was left unchanged.
+- No `tools\llama.cpp\convert_hf_to_gguf.py` or `tools\llama.cpp` source tree
+  exists in the repository.
+- `llama-quantize.exe` was found at:
+  `C:\Users\varpundl\AppData\Local\Microsoft\WinGet\Packages\ggml.llamacpp_Microsoft.Winget.Source_8wekyb3d8bbwe\llama-quantize.exe`.
+  `llama-cli --version` reports llama.cpp `1.0.0-dev`, build 12721, commit
+  `79c69f4b0`. `winget list` reports package `ggml.llamacpp` version `b12721`.
+  Quantizer help lists `Q4_K_M`, `--max-buffer-size`, and positional syntax
+  `model-f32.gguf [model-quant.gguf] type [nthreads]`; its documented default
+  buffer is 8192 MiB.
+- The llama.cpp converter source at the matching build revision registers
+  `Qwen3ForCausalLM`; its runtime source implements Qwen3 and identifies the
+  36-layer, hidden-size-2560 model shape as Qwen3-4B. This confirms
+  source-level architecture support, not successful conversion or inference.
+- At inspection, total physical memory was 15.28 GiB; available physical RAM
+  was 2.14 GiB at the final check. The repository/model drive had 303.10 GiB
+  free.
+
+Conversion dependencies
+-----------------------
+- `gguf` was absent initially. Installed `gguf>=0.1.0` into the existing
+  `.venv` only, as requested, and verified installed version 0.19.0. No
+  dependency manifest or lockfile was changed.
+- The matching llama.cpp conversion requirements list `gguf>=0.1.0`,
+  `sentencepiece>=0.1.98,<0.3.0`, `protobuf>=4.21.0,<5.0.0`,
+  `transformers==4.57.6`, and `numpy~=2.2.6` for Python below 3.14; the
+  converter requirements also pin `torch==2.11.0`.
+- Current `.venv` inspection found Torch 2.15.0, Transformers 5.22.2, NumPy
+  2.5.4, and no `sentencepiece` or `protobuf`. The project runtime
+  requirements separately pin Torch 2.7.1. These version differences and
+  absent packages are unresolved conversion-compatibility risks. The full
+  converter requirements were not installed because doing so could alter
+  existing environment packages; no PyTorch, CUDA, or GPU dependencies were
+  installed as part of this preparation.
+
+Resource assessment and decision
+--------------------------------
+NO-GO - DO NOT START CONVERSION OR QUANTIZATION WITH CURRENT HEADROOM
+- Available physical RAM was about 2.14 GiB, substantially below the 7.49 GiB
+  checkpoint size, before Python, tensor conversion, and quantizer working
+  memory. This is sufficient evidence not to start either memory-intensive
+  stage. Do not retry repeatedly or change pagefile settings.
+- The 303.10 GiB free disk space is adequate by estimate. Budget approximately
+  8-9 GB for BF16 GGUF, 2-3 GB for Q4_K_M, and temporary conversion space;
+  retaining original checkpoint plus both outputs should fit comfortably.
+  These output sizes are planning estimates, not measured artifacts.
+- A 12 GiB free-RAM threshold in the prepared command below is a conservative
+  operational gate, not a measured minimum guaranteed by llama.cpp. Recheck
+  actual free RAM immediately before each stage and do not proceed unless
+  adequate headroom is available.
+- The only conversion-preparation worktree change is the Git ignore addition
+  below. It was verified with `git check-ignore` to cover both desired output
+  names, split `.gguf` outputs, and other files under `models\gguf\`.
+
+Prepared commands (not executed)
+-------------------------------
+Source acquisition: if approved and needed, clone official llama.cpp source
+outside the Vexux worktree at the exact installed build revision. Do not use
+the converter's `--remote` mode:
+
+```powershell
+$LlamaSource = Join-Path $env:LOCALAPPDATA 'llama.cpp-b12721'
+git clone https://github.com/ggml-org/llama.cpp.git $LlamaSource
+if ($LASTEXITCODE -ne 0) { throw 'llama.cpp clone failed' }
+git -C $LlamaSource checkout --detach 79c69f4b06805fe53c91596de6c958f86dbbdf41
+if ($LASTEXITCODE -ne 0) { throw 'Could not select the installed llama.cpp source revision' }
+```
+
+Set paths and prepare output directory, without overwriting existing files:
+
+```powershell
+$ErrorActionPreference = 'Stop'
+$Repo = 'C:\Users\varpundl\Documents\NatWest Training\vexux-ai'
+$Model = 'C:\Users\varpundl\.cache\modelscope\models\Qwen--Qwen3-4B\snapshots\master'
+$LlamaSource = Join-Path $env:LOCALAPPDATA 'llama.cpp-b12721'
+$Python = Join-Path $Repo '.venv\Scripts\python.exe'
+$Converter = Join-Path $LlamaSource 'convert_hf_to_gguf.py'
+$Quantizer = 'C:\Users\varpundl\AppData\Local\Microsoft\WinGet\Packages\ggml.llamacpp_Microsoft.Winget.Source_8wekyb3d8bbwe\llama-quantize.exe'
+$OutDir = Join-Path $Repo 'models\gguf'
+$BF16 = Join-Path $OutDir 'Qwen3-4B-BF16.gguf'
+$Q4 = Join-Path $OutDir 'Qwen3-4B-Q4_K_M.gguf'
+New-Item -ItemType Directory -Force -Path $OutDir | Out-Null
+$Shards = Get-ChildItem -LiteralPath $Model -Filter 'model-*-of-*.safetensors' -File
+if ($Shards.Count -ne 3) { throw "Expected 3 model shards; found $($Shards.Count)" }
+if ((Test-Path -LiteralPath $BF16) -or (Test-Path -LiteralPath $Q4)) {
+    throw 'Output already exists; preserve it and choose a new output name.'
+}
+```
+
+After resolving dependency compatibility and receiving explicit approval,
+conversion CLI options verified from `convert_hf_to_gguf.py` are positional
+local model directory, `--outfile`, `--outtype bf16`, and `--use-temp-file`:
+
+```powershell
+$FreeGiB = (Get-CimInstance Win32_OperatingSystem).FreePhysicalMemory / 1MB
+if ($FreeGiB -lt 12) { throw "Conversion blocked: only $([math]::Round($FreeGiB, 2)) GiB RAM is available." }
+if (-not (Test-Path -LiteralPath $Converter)) { throw "Converter missing: $Converter" }
+& $Python $Converter $Model --outfile $BF16 --outtype bf16 --use-temp-file
+if ($LASTEXITCODE -ne 0) { throw 'BF16 conversion failed' }
+```
+
+The verified quantizer CLI accepts input, output, quantization type, and
+thread-count positionally. The smaller buffer is intended to limit its
+quantization buffer; it does not eliminate the need for sufficient system RAM:
+
+```powershell
+$FreeGiB = (Get-CimInstance Win32_OperatingSystem).FreePhysicalMemory / 1MB
+if ($FreeGiB -lt 12) { throw "Quantization blocked: only $([math]::Round($FreeGiB, 2)) GiB RAM is available." }
+& $Quantizer --max-buffer-size 512 $BF16 $Q4 Q4_K_M 4
+if ($LASTEXITCODE -ne 0) { throw 'Q4_K_M quantization failed' }
+```
+
+Verify output without loading model weights:
+
+```powershell
+$Stream = [System.IO.File]::OpenRead($Q4)
+try {
+    $Header = New-Object byte[] 4
+    $Read = $Stream.Read($Header, 0, 4)
+} finally { $Stream.Dispose() }
+if ($Read -ne 4 -or [System.Text.Encoding]::ASCII.GetString($Header) -ne 'GGUF') {
+    throw 'Output is missing a valid GGUF header'
+}
+Get-Item -LiteralPath $Q4 | Select-Object FullName, Length
+Get-FileHash -LiteralPath $Q4 -Algorithm SHA256
+```
+
+Git safety
+----------
+- Added `*.gguf` and `/models/gguf/` to `.gitignore`; representative BF16,
+  Q4_K_M, split-GGUF, and intermediate paths are ignored.
+- Final preparation state before this report update: only `.gitignore` was
+  modified in the worktree. No model files or binaries were added to Git.

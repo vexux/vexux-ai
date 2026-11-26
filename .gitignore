@@ -25,6 +25,10 @@ neo4j/data/
 models/checkpoints/
 models/base/
 
+# Local llama.cpp conversion outputs.
+*.gguf
+/models/gguf/
+
 frontend/node_modules/
 frontend/dist/
 
